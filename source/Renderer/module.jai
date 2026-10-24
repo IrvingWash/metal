@@ -12,13 +12,19 @@ Renderer :: struct {
     window:                Window_Type;
     get_window_pixel_size: Window_Pixel_Size_Getter;
 
-    instance:        VK.Instance;
-    surface:         VK.Surface_Khr;
-    physical_device: VK.Physical_Device;
+    instance:            VK.Instance;
+    surface:             VK.Surface_Khr;
+    physical_device:     VK.Physical_Device;
+    graphics_queue_info: Queue_Info;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
     }
+}
+
+Queue_Info :: struct {
+    family_index: u32;
+    queue:        VK.Queue;
 }
 
 init :: (
@@ -41,12 +47,24 @@ init :: (
         renderer.debug_utils_messenger = create_debug_utils_messenger(renderer.instance);
     }
 
-    error, renderer.surface = create_surface(renderer.instance, renderer.window, create_window_surface);
+    error, renderer.physical_device = find_physical_device(renderer.instance);
     if error {
         return error, renderer;
     }
 
-    error, renderer.physical_device = find_physical_device(renderer.instance);
+    error, renderer.surface = create_surface(
+        renderer.instance,
+        renderer.window,
+        create_window_surface,
+    );
+    if error {
+        return error, renderer;
+    }
+
+    error, renderer.graphics_queue_info.family_index = find_graphics_queue_family_index(
+        renderer.physical_device,
+        renderer.surface,
+    );
     if error {
         return error, renderer;
     }
@@ -86,6 +104,39 @@ VULKAN_API_VERSION :: #run VK.make_version(1, 4, 350);
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+find_graphics_queue_family_index :: (physical_device: VK.Physical_Device, surface: VK.Surface_Khr) -> error: string, u32 {
+    found: bool;
+    graphics_queue_family_index: u32;
+
+    queue_family_properties_list := VK.get_physical_device_queue_family_properties_2(physical_device,, temp);
+
+    for queue_family_properties: queue_family_properties_list {
+        result, has_present_support := VK.get_physical_device_surface_support_khr(
+            physical_device,
+            cast(u32, it_index),
+            surface,
+        );
+        if result != .SUCCESS {
+            continue;
+        }
+
+        if (
+            has_present_support
+            && queue_family_properties.queue_family_properties.queue_flags & .GRAPHICS
+        ) {
+            found = true;
+            graphics_queue_family_index = cast(u32, it_index);
+            break;
+        }
+    }
+
+    if !found {
+        return "No suitable queue family", graphics_queue_family_index;
+    }
+
+    return "", graphics_queue_family_index;
 }
 
 find_physical_device :: (instance: VK.Instance) -> error: string, VK.Physical_Device {
