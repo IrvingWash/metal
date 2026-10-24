@@ -2,7 +2,9 @@
     "roots": [
         "source/main.jai",
         "install_tools.jai",
-        "build.jai"
+        "build.jai",
+        "modules/Vulkan_Memory_Allocator/generate.jai",
+        "modules/Vulkan_Memory_Allocator/module.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",

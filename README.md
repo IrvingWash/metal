@@ -8,6 +8,12 @@ git clone --recurse-submodules <repo-url>
 ```bash
 jai ./install_tools.jai
 ```
+
+3. Build and generate modules for the first time
+```bash
+jai ./build.jai - --very-debug --generate-modules
+```
+
 Currently the "tools" are only a pre-commit hook which:
 - Builds the program every on every commit
 - Checks for "@ no_commit" (there should not be a space between "@" and "n") occurances in current diff

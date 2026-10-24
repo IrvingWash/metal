@@ -5,20 +5,23 @@
 #import "String";
 #import "Metaprogram_Plugins";
 #import "File";
+#import "Process";
 
 Config :: struct {
-    should_help:       bool;
-    optimization_type: Optimization_Type;
-    plugins_to_create: [..]Plugin_To_Create;
+    should_help:             bool;
+    should_generate_modules: bool;
+    optimization_type:       Optimization_Type;
+    plugins_to_create:       [..]Plugin_To_Create;
 }
 
 Flags :: struct {
-    VERY_DEBUG     :: "--very-debug";
-    DEBUG          :: "--debug";
-    OPTIMIZED      :: "--optimized";
-    VERY_OPTIMIZED :: "--very-optimized";
-    HELP           :: "--help";
-    HELP_SHORT     :: "-h";
+    VERY_DEBUG       :: "--very-debug";
+    DEBUG            :: "--debug";
+    OPTIMIZED        :: "--optimized";
+    VERY_OPTIMIZED   :: "--very-optimized";
+    HELP             :: "--help";
+    HELP_SHORT       :: "-h";
+    GENERATE_MODULES :: "--generate-modules";
 }
 
 DEFAULT_PLUGINS_TO_CREATE :: Plugin_To_Create.[
@@ -28,6 +31,13 @@ DEFAULT_PLUGINS_TO_CREATE :: Plugin_To_Create.[
 EXECUTABLE_NAME :: "metal";
 
 BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
+
+MODULES_TO_GENERATE :: struct { name: string; relative_path: string; }.[
+    {
+        name = "Vulkan_Memory_Allocator",
+        relative_path = "modules/Vulkan_Memory_Allocator/generate.jai",
+    },
+];
 
 #run,stallable {
     defer reset_temporary_storage();
@@ -47,6 +57,10 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
         return;
     }
 
+    if config.should_generate_modules {
+        generate_modules();
+    }
+
     output_path := tprint("%bin/%", #filepath, config.optimization_type);
 
     print("Building...\n");
@@ -55,6 +69,20 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
         fail_compilation_with_message("Failed to build: %", error);
         return;
     }
+}
+
+generate_modules :: () -> error: string {
+    for module_metainfo: MODULES_TO_GENERATE {
+        print("Generating %\n", module_metainfo.name);
+
+        result := run_command(
+            "jai",
+            module_metainfo.relative_path,
+            working_directory = #filepath,
+        );
+    }
+
+    return "";
 }
 
 build :: (
@@ -205,6 +233,8 @@ create_config :: (arguments: []string) -> error: string, Config {
             case Flags.HELP; #through;
             case Flags.HELP_SHORT;
                 config.should_help = true;
+            case Flags.GENERATE_MODULES;
+                config.should_generate_modules = true;
             case;
                 PLUGIN_ARGUMENT_PREFIX ::  "+";
 
@@ -230,18 +260,20 @@ create_config :: (arguments: []string) -> error: string, Config {
 help :: () {
     HELP_TEXT :: #string DONE
 Usage:
-    jai ./build.jai - <optimization-type-flag> [+plugin-name ...]
+    jai ./build.jai - [flag ...] [+plugin-name ...]
 
 Example:
     jai ./build.jai - --very-optimized +Autorun +Iprof
 
 Available flags:
-    --very-debug     - build in very-debug mode
-    --debug          - build in debug mode
-    --optimized      - build in optimized mode
-    --very-optimized - build in very optimized mode
+    --very-debug       - build in very-debug mode
+    --debug            - build in debug mode
+    --optimized        - build in optimized mode
+    --very-optimized   - build in very optimized mode
 
-    --help, -h       - show this help
+    --generate_modules - build binaries/generate bindings for modules
+
+    --help, -h         - show this help
     DONE
 
     print(HELP_TEXT);
