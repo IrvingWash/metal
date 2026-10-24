@@ -11,9 +11,9 @@ Window_Surface_Creator :: #type (
 Renderer :: struct {
     window:                Window_Type;
     get_window_pixel_size: Window_Pixel_Size_Getter;
-    create_window_surface:        Window_Surface_Creator;
 
     instance: VK.Instance;
+    surface:  VK.Surface_Khr;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -24,20 +24,23 @@ init :: (
     window:                                Window_Type,
     additional_instance_extensions_getter: Additional_Instance_Extensions_Getter,
     window_pixel_size_getter:              Window_Pixel_Size_Getter,
-    window_surface_creator:                Window_Surface_Creator,
-) -> Renderer {
+    create_window_surface:                 Window_Surface_Creator,
+) -> error: string, Renderer {
     renderer: Renderer;
 
     renderer.window = window;
     renderer.get_window_pixel_size = window_pixel_size_getter;
-    renderer.create_window_surface = window_surface_creator;
 
-    renderer.instance = create_instance(additional_instance_extensions_getter);
+    error:, renderer.instance = create_instance(additional_instance_extensions_getter);
+    if error return error, renderer;
+
     #if DEBUG {
         renderer.debug_utils_messenger = create_debug_utils_messenger(renderer.instance);
     }
 
-    return renderer;
+    renderer.surface = create_window_surface(renderer.window, renderer.instance);
+
+    return "", renderer;
 }
 
 deinit :: (renderer: *Renderer) {
@@ -72,7 +75,7 @@ VULKAN_API_VERSION :: #run VK.make_version(1, 4, 350);
     };
 }
 
-create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Getter) -> VK.Instance {
+create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Getter) -> error: string, VK.Instance {
     application_info := VK.Application_Info.{
         p_application_name = APPLICATION_NAME,
         api_version        = VULKAN_API_VERSION,
@@ -115,9 +118,11 @@ create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Ge
     }
 
     result, instance := VK.create_instance(*instance_create_info);
-    assert(result == .SUCCESS);
+    if result != .SUCCESS return
+        tprint("Failed to create instance: %", result),
+        instance;
 
-    return instance;
+    return "",instance;
 }
 
 #if DEBUG {

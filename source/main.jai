@@ -58,12 +58,13 @@ init :: () {
 
     Input.init();
 
-    state.renderer = Renderer.init(
+    error:, state.renderer = Renderer.init(
         state.window,
         Windowing.get_vulkan_instance_extensions,
         Windowing.get_renderable_size,
         Windowing.create_vulkan_surface,
     );
+    assert(error == "", "Failed to initialize Renderer: %", error);
 }
 
 deinit :: () {
