@@ -1,29 +1,30 @@
-Instance              :: #type *Instance_T;
-Surface_Khr           :: #type *Surface_Khr_T;
-Physical_Device       :: #type *Physical_Device_T;
-Device                :: #type *Device_T;
-Queue                 :: #type *Queue_T;
-Device_Memory         :: #type *Device_Memory_T;
-Swapchain_Khr         :: #type *Swapchain_Khr_T;
-Image                 :: #type *Image_T;
-Image_View            :: #type *Image_View_T;
-Semaphore             :: #type *Semaphore_T;
-Shader_Module         :: #type *Shader_Module_T;
-Descriptor_Set_Layout :: #type *Descriptor_Set_Layout_T;
-Pipeline              :: #type *Pipeline_T;
-Pipeline_Layout       :: #type *Pipeline_Layout_T;
-Sample_Mask           :: #type *Sample_Mask_T;
-Render_Pass           :: #type *Render_Pass_T;
-Pipeline_Cache        :: #type *Pipeline_Cache_T;
-Command_Pool          :: #type *Command_Pool_T;
-Command_Buffer        :: #type *Command_Buffer_T;
-Fence                 :: #type *Fence_T;
-Framebuffer           :: #type *Framebuffer_T;
-Buffer                :: #type *Buffer_T;
-Sampler               :: #type *Sampler_T;
-Descriptor_Set        :: #type *Descriptor_Set_T;
-Buffer_View           :: #type *Buffer_View_T;
-Descriptor_Pool       :: #type *Descriptor_Pool_T;
+Instance                  :: #type *Instance_T;
+Surface_Khr               :: #type *Surface_Khr_T;
+Physical_Device           :: #type *Physical_Device_T;
+Device                    :: #type *Device_T;
+Queue                     :: #type *Queue_T;
+Device_Memory             :: #type *Device_Memory_T;
+Swapchain_Khr             :: #type *Swapchain_Khr_T;
+Image                     :: #type *Image_T;
+Image_View                :: #type *Image_View_T;
+Semaphore                 :: #type *Semaphore_T;
+Shader_Module             :: #type *Shader_Module_T;
+Descriptor_Set_Layout     :: #type *Descriptor_Set_Layout_T;
+Pipeline                  :: #type *Pipeline_T;
+Pipeline_Layout           :: #type *Pipeline_Layout_T;
+Sample_Mask               :: #type *Sample_Mask_T;
+Render_Pass               :: #type *Render_Pass_T;
+Pipeline_Cache            :: #type *Pipeline_Cache_T;
+Command_Pool              :: #type *Command_Pool_T;
+Command_Buffer            :: #type *Command_Buffer_T;
+Fence                     :: #type *Fence_T;
+Framebuffer               :: #type *Framebuffer_T;
+Buffer                    :: #type *Buffer_T;
+Sampler                   :: #type *Sampler_T;
+Descriptor_Set            :: #type *Descriptor_Set_T;
+Buffer_View               :: #type *Buffer_View_T;
+Descriptor_Pool           :: #type *Descriptor_Pool_T;
+Debug_Utils_Messenger_Ext :: #type *Debug_Utils_Messenger_Ext_T;
 
 Device_Address :: #type u64;
 
@@ -47,6 +48,19 @@ Pfn_Reallocation_Function :: #type (
     alignment:        u64,
     allocation_scope: System_Allocation_Scope,
 ) -> *void #c_call;
+
+Pfn_Create_Debug_Utils_Messenger_Ext :: #type (
+    instance:      Instance,
+    p_create_info: *Debug_Utils_Messenger_Create_Info_Ext,
+    p_allocator:   *Allocation_Callbacks,
+    p_messenger:   *Debug_Utils_Messenger_Ext,
+) -> Result #c_call;
+
+Pfn_Destroy_Debug_Utils_Messenger_Ext :: #type (
+    instance:    Instance,
+    messenger:   Debug_Utils_Messenger_Ext,
+    p_allocator: *Allocation_Callbacks,
+) #c_call;
 
 Extension_Names :: struct {
     DEBUG_UTILS   :: "VK_EXT_debug_utils";
@@ -5047,36 +5061,42 @@ cmd_draw_indexed_indirect :: (
     stride:         u32,
 ) -> void #foreign libvulkan "vkCmdDrawIndexedIndirect";
 
+get_instance_proc_addr :: (
+    instance: Instance,
+    p_name: *u8,
+) -> *void #foreign libvulkan "vkGetInstanceProcAddr";
+
 
 
 #scope_file
 
-Instance_T              :: struct {}
-Surface_Khr_T           :: struct {}
-Physical_Device_T       :: struct {}
-Device_T                :: struct {}
-Queue_T                 :: struct {}
-Device_Memory_T         :: struct {}
-Swapchain_Khr_T         :: struct {}
-Image_T                 :: struct {}
-Image_View_T            :: struct {}
-Semaphore_T             :: struct {}
-Shader_Module_T         :: struct {}
-Descriptor_Set_Layout_T :: struct {}
-Pipeline_T              :: struct {}
-Pipeline_Layout_T       :: struct {}
-Sample_Mask_T           :: struct {}
-Render_Pass_T           :: struct {}
-Pipeline_Cache_T        :: struct {}
-Command_Pool_T          :: struct {}
-Command_Buffer_T        :: struct {}
-Fence_T                 :: struct {}
-Framebuffer_T           :: struct {}
-Buffer_T                :: struct {}
-Sampler_T               :: struct {}
-Descriptor_Set_T        :: struct {}
-Buffer_View_T           :: struct {}
-Descriptor_Pool_T       :: struct {}
+Instance_T                  :: struct {}
+Surface_Khr_T               :: struct {}
+Physical_Device_T           :: struct {}
+Device_T                    :: struct {}
+Queue_T                     :: struct {}
+Device_Memory_T             :: struct {}
+Swapchain_Khr_T             :: struct {}
+Image_T                     :: struct {}
+Image_View_T                :: struct {}
+Semaphore_T                 :: struct {}
+Shader_Module_T             :: struct {}
+Descriptor_Set_Layout_T     :: struct {}
+Pipeline_T                  :: struct {}
+Pipeline_Layout_T           :: struct {}
+Sample_Mask_T               :: struct {}
+Render_Pass_T               :: struct {}
+Pipeline_Cache_T            :: struct {}
+Command_Pool_T              :: struct {}
+Command_Buffer_T            :: struct {}
+Fence_T                     :: struct {}
+Framebuffer_T               :: struct {}
+Buffer_T                    :: struct {}
+Sampler_T                   :: struct {}
+Descriptor_Set_T            :: struct {}
+Buffer_View_T               :: struct {}
+Descriptor_Pool_T           :: struct {}
+Debug_Utils_Messenger_Ext_T :: struct {}
 
 vkCreateInstance :: (
     p_create_info: *Instance_Create_Info,

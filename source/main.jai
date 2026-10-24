@@ -7,7 +7,7 @@
 
 Windowing :: #import,dir "Windowing";
 Input     :: #import,dir "Input";
-Renderer  :: #import,dir "Renderer"()(Window_Type = *Windowing.Window, DEBUG = DEBUG);
+Renderer  :: #import,dir "Renderer"()(Window_Type = *Windowing.Window, APPLICATION_NAME = "metal", DEBUG = DEBUG);
 
 State :: struct {
     window:   *Windowing.Window;
@@ -38,7 +38,7 @@ main :: () {
 }
 
 process_input :: () {
-    events := Input.get_events();
+    events := Input.get_events(,, temp);
 
     for event: events {
         if #complete event.kind == {

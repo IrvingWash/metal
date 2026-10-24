@@ -20,7 +20,6 @@ deinit :: () {}
 
 get_events :: () -> []Event {
     result: [..]Event;
-    result.allocator = temp;
 
     sdl_event: SDL.Event;
     while SDL.poll_event(*sdl_event) {
