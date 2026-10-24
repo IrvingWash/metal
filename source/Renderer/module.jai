@@ -102,6 +102,11 @@ init :: (
         renderer.physical_device,
         renderer.device,
     );
+    if error {
+        return
+            error,
+            renderer;
+    }
 
     return
         "",
