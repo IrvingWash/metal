@@ -1,7 +1,9 @@
 #module_parameters()(Window_Type: Type, APPLICATION_NAME: string, DEBUG: bool = false);
 
 Additional_Instance_Extensions_Getter :: #type () -> [..]*u8;
-Window_Pixel_Size_Getter              :: #type (window: Window_Type) -> width: u32, height: u32;
+
+Window_Render_Size_Getter             :: #type (window: Window_Type) -> width: u32, height: u32;
+
 Window_Surface_Creator :: #type (
     window: Window_Type,
     instance: VK.Instance,
@@ -10,7 +12,7 @@ Window_Surface_Creator :: #type (
 
 Renderer :: struct {
     window:                Window_Type;
-    get_window_pixel_size: Window_Pixel_Size_Getter;
+    get_window_render_size: Window_Render_Size_Getter;
 
     instance:            VK.Instance;
     surface:             VK.Surface_Khr;
@@ -18,6 +20,8 @@ Renderer :: struct {
     graphics_queue_info: Queue_Info;
     device:              VK.Device;
     allocator:           VMA.Allocator;
+
+    swapchain_info:      Swapchain_Info;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -29,16 +33,25 @@ Queue_Info :: struct {
     queue:        VK.Queue;
 }
 
+Swapchain_Info :: struct {
+    swapchain:                  VK.Swapchain_Khr;
+    config:                     VK.Swapchain_Create_Info_Khr;
+
+    images:                     [..]VK.Image;
+    image_views:                [..]VK.Image_View;
+    render_complete_semaphores: [..]VK.Semaphore;
+}
+
 init :: (
     window:                                Window_Type,
     additional_instance_extensions_getter: Additional_Instance_Extensions_Getter,
-    window_pixel_size_getter:              Window_Pixel_Size_Getter,
+    window_renderer_size_getter:              Window_Render_Size_Getter,
     create_window_surface:                 Window_Surface_Creator,
 ) -> error: string, Renderer {
     renderer: Renderer;
 
     renderer.window = window;
-    renderer.get_window_pixel_size = window_pixel_size_getter;
+    renderer.get_window_render_size = window_renderer_size_getter;
 
     error:, renderer.instance = create_instance(additional_instance_extensions_getter);
     if error {
@@ -51,18 +64,18 @@ init :: (
         renderer.debug_utils_messenger = create_debug_utils_messenger(renderer.instance);
     }
 
-    error, renderer.physical_device = find_physical_device(renderer.instance);
+    error, renderer.surface = create_surface(
+        renderer.instance,
+        renderer.window,
+        create_window_surface,
+    );
     if error {
         return
             error,
             renderer;
     }
 
-    error, renderer.surface = create_surface(
-        renderer.instance,
-        renderer.window,
-        create_window_surface,
-    );
+    error, renderer.physical_device = find_physical_device(renderer.instance, renderer.surface);
     if error {
         return
             error,
@@ -103,12 +116,27 @@ init :: (
             renderer;
     }
 
+    error, renderer.swapchain_info = create_swapchain(
+        renderer.physical_device,
+        renderer.surface,
+        renderer.device,
+        renderer.window,
+        renderer.get_window_render_size,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     return
         "",
         renderer;
 }
 
 deinit :: (renderer: *Renderer) {
+    destroy_swapchain(renderer.device, *renderer.swapchain_info);
+
     VMA.destroy_allocator(renderer.allocator);
 
     VK.destroy_device(renderer.device);
@@ -130,6 +158,13 @@ deinit :: (renderer: *Renderer) {
 
 VULKAN_API_VERSION :: #run VK.make_version(1, 4, 0);
 
+SURFACE_FORMAT :: VK.Surface_Format_Khr.{
+    format      = .B8G8R8A8_SRGB,
+    color_space = .SRGB_NONLINEAR_KHR,
+};
+
+DEFAULT_PRESENT_MODE :: VK.Present_Mode_Khr.FIFO_KHR;
+
 DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
 ];
@@ -148,6 +183,38 @@ DEVICE_EXTENSIONS :: *u8.[
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+create_swapchain :: (
+    physical_device:          VK.Physical_Device,
+    surface:                  VK.Surface_Khr,
+    device:                   VK.Device,
+    window:                   Window_Type,
+    get_window_renderer_size: Window_Render_Size_Getter,
+) -> error: string, Swapchain_Info {
+    swapchain_info: Swapchain_Info;
+
+    // @Todo: incomplete
+
+    return "", swapchain_info;
+}
+
+destroy_swapchain :: (device: VK.Device, swapchain_info: *Swapchain_Info) {
+    for semaphore: swapchain_info.render_complete_semaphores {
+        VK.destroy_semaphore(device, semaphore);
+    }
+    array_free(swapchain_info.render_complete_semaphores);
+
+    for image_view: swapchain_info.image_views {
+        VK.destroy_image_view(device, image_view);
+    }
+    array_free(swapchain_info.image_views);
+
+    array_free(swapchain_info.images);
+
+    VK.destroy_swapchain_khr(device, swapchain_info.swapchain);
+
+    swapchain_info.* = {};
 }
 
 create_allocator :: (
@@ -301,7 +368,7 @@ find_graphics_queue_family_index :: (physical_device: VK.Physical_Device, surfac
         graphics_queue_family_index;
 }
 
-find_physical_device :: (instance: VK.Instance) -> error: string, VK.Physical_Device {
+find_physical_device :: (instance: VK.Instance, surface: VK.Surface_Khr) -> error: string, VK.Physical_Device {
     the_suitable_device: VK.Physical_Device;
 
     result, physical_devices := VK.enumerate_physical_devices(instance,, temp);
@@ -314,9 +381,44 @@ find_physical_device :: (instance: VK.Instance) -> error: string, VK.Physical_De
     for candidate: physical_devices {
         candidate_props := VK.get_physical_device_properties(candidate);
 
+        supports_needed_surface_format: bool;
+        {
+            result, supported_formats := VK.get_physical_device_surface_formats_khr(candidate, surface,, temp);
+            if result != .SUCCESS {
+                continue;
+            }
+
+            for format: supported_formats {
+                if (
+                    format.format == SURFACE_FORMAT.format
+                    && format.color_space == SURFACE_FORMAT.color_space
+                ) {
+                    supports_needed_surface_format = true;
+                    break;
+                }
+            }
+        }
+
+        supports_default_present_mode: bool;
+        {
+            result, supported_present_modes := VK.get_physical_device_surface_present_modes_khr(candidate, surface,, temp);
+            if result != .SUCCESS {
+                continue;
+            }
+
+            for supported_present_mode: supported_present_modes {
+                if supported_present_mode == DEFAULT_PRESENT_MODE {
+                    supports_default_present_mode = true;
+                    break;
+                }
+            }
+        }
+
         if (
             candidate_props.device_type == .DISCRETE_GPU
             && candidate_props.api_version >= VULKAN_API_VERSION
+            && supports_needed_surface_format
+            && supports_default_present_mode
         ) {
             the_suitable_device = candidate;
             break;
@@ -333,10 +435,9 @@ find_physical_device :: (instance: VK.Instance) -> error: string, VK.Physical_De
         the_suitable_device;
 }
 
-
 create_surface :: (
     instance: VK.Instance,
-    window: Window_Type,
+    window:   Window_Type,
     create_window_surface: Window_Surface_Creator,
 ) -> error: string, VK.Surface_Khr {
     surface := create_window_surface(window, instance);

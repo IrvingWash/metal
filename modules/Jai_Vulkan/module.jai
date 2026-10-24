@@ -5066,6 +5066,35 @@ get_instance_proc_addr :: (
     p_name: *u8,
 ) -> *void #foreign libvulkan "vkGetInstanceProcAddr";
 
+get_physical_device_surface_present_modes_khr :: (
+    physical_device: Physical_Device,
+    surface: Surface_Khr
+) -> Result, [..]Present_Mode_Khr {
+    present_modes: [..]Present_Mode_Khr;
+
+    count: u32;
+    result := vkGetPhysicalDeviceSurfacePresentModesKHR(
+        physical_device,
+        surface,
+        *count,
+        null
+    );
+    if result != .SUCCESS {
+        return result, present_modes;
+    }
+
+    array_resize(*present_modes, count);
+
+    result = vkGetPhysicalDeviceSurfacePresentModesKHR(
+        physical_device,
+        surface,
+        *count,
+        present_modes.data,
+    );
+
+    return result, present_modes;
+}
+
 
 
 #scope_file
@@ -5337,6 +5366,13 @@ vkCmdBindDescriptorSets :: (
     dynamic_offset_count: u32,
     p_dynamic_offsets: *u32,
 ) -> void #foreign libvulkan;
+
+vkGetPhysicalDeviceSurfacePresentModesKHR :: (
+    physical_device:      Physical_Device,
+    surface:              Surface_Khr,
+    p_present_mode_count: *u32,
+    p_present_modes:      *Present_Mode_Khr,
+) -> Result #foreign libvulkan;
 
 #if OS == {
     case .LINUX;
