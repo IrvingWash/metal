@@ -91,11 +91,6 @@ init :: (
         renderer.graphics_queue_info.family_index,
         queue_index = 0,
     );
-    if error {
-        return
-            error,
-            renderer;
-    }
 
     error, renderer.allocator = create_allocator(
         renderer.instance,
@@ -133,7 +128,7 @@ deinit :: (renderer: *Renderer) {
 
 #scope_file
 
-VULKAN_API_VERSION :: #run VK.make_version(1, 4, 350);
+VULKAN_API_VERSION :: #run VK.make_version(1, 4, 0);
 
 DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
@@ -231,19 +226,16 @@ create_device :: (physical_device: VK.Physical_Device, queues_to_create: []Queue
 
     device_queue_create_infos: [..]VK.Device_Queue_Create_Info;
     device_queue_create_infos.allocator = temp;
-    {
-        queue_priorities := float.[1];
-
-        for queue_info: queues_to_create {
-            array_add(
-                *device_queue_create_infos,
-                {
-                    queue_family_index = queue_info.family_index,
-                    queue_count        = 1,
-                    p_queue_priorities = queue_priorities.data,
-                },
-            );
-        }
+    queue_priorities := float.[1];
+    for queue_info: queues_to_create {
+        array_add(
+            *device_queue_create_infos,
+            {
+                queue_family_index = queue_info.family_index,
+                queue_count        = 1,
+                p_queue_priorities = queue_priorities.data,
+            },
+        );
     }
 
     extensions: [..]*u8;
