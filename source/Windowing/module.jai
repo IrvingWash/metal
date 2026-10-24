@@ -1,3 +1,5 @@
+// It's just a wrapper around SDL. Maybe later we should change this to a custom module
+
 Window :: #type SDL.Window;
 
 Create_Window_Flags :: enum_flags {

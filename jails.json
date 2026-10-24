@@ -9,11 +9,17 @@
         "modules/SDL3/generate.jai",
         "modules/SDL3/module.jai",
         "source/Renderer/module.jai",
-        "source/Windowing/module.jai"
+        "source/Windowing/module.jai",
+        "source/Input/module.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",
-    "local_modules": ["modules", "source/Renderer", "source/Windowing"],
+    "local_modules": [
+        "modules",
+        "source/Renderer",
+        "source/Windowing",
+        "source/Input"
+    ],
     "auto_insert_parentheses": false,
     "use_symbols_from_local_modules": true
 }

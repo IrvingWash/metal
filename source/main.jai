@@ -6,10 +6,13 @@
 );
 
 Windowing :: #import,dir "Windowing";
-Renderer :: #import,dir "Renderer"()(DEBUG = DEBUG);
+Input     :: #import,dir "Input";
+Renderer  :: #import,dir "Renderer"()(DEBUG = DEBUG);
 
 State :: struct {
     window: *Windowing.Window;
+
+    should_quit: bool;
 }
 
 state: State;
@@ -26,7 +29,24 @@ main :: () {
     init();
     defer deinit();
 
-    reset_temporary_storage();
+    while !state.should_quit {
+        process_input();
+
+        reset_temporary_storage();
+    }
+}
+
+process_input :: () {
+    events := Input.get_events();
+
+    for event: events {
+        if #complete event.kind == {
+            case .QUIT;
+                state.should_quit = true;
+            case .WINDOW_PIXEL_SIZE_CHANGED;
+                // Do nothing
+        }
+    }
 }
 
 init :: () {
@@ -34,9 +54,13 @@ init :: () {
     assert(ok, "Failed to create window");
     state.window = Windowing.create_window("metal", 800, 600, .RESIZABLE | .VULKAN);
     assert(state.window != null, "Failed to create window");
+
+    Input.init();
 }
 
 deinit :: () {
+    Input.deinit();
+
     Windowing.destroy_window(state.window);
     Windowing.deinit();
 }
