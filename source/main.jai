@@ -10,7 +10,8 @@ Input     :: #import,dir "Input";
 Renderer  :: #import,dir "Renderer"()(DEBUG = DEBUG);
 
 State :: struct {
-    window: *Windowing.Window;
+    window:   *Windowing.Window;
+    renderer: Renderer.Renderer;
 
     should_quit: bool;
 }
@@ -56,9 +57,13 @@ init :: () {
     assert(state.window != null, "Failed to create window");
 
     Input.init();
+
+    state.renderer = Renderer.init();
 }
 
 deinit :: () {
+    Renderer.deinit(*state.renderer);
+
     Input.deinit();
 
     Windowing.destroy_window(state.window);
