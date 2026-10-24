@@ -17,6 +17,7 @@ Renderer :: struct {
     physical_device:     VK.Physical_Device;
     graphics_queue_info: Queue_Info;
     device:              VK.Device;
+    allocator:           VMA.Allocator;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -85,12 +86,31 @@ init :: (
             renderer;
     }
 
+    renderer.graphics_queue_info.queue = VK.get_device_queue(
+        renderer.device,
+        renderer.graphics_queue_info.family_index,
+        queue_index = 0,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
+    error, renderer.allocator = create_allocator(
+        renderer.instance,
+        renderer.physical_device,
+        renderer.device,
+    );
+
     return
         "",
         renderer;
 }
 
 deinit :: (renderer: *Renderer) {
+    VMA.destroy_allocator(renderer.allocator);
+
     VK.destroy_device(renderer.device);
 
     VK.destroy_surface_khr(renderer.instance, renderer.surface);
@@ -128,6 +148,29 @@ DEVICE_EXTENSIONS :: *u8.[
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+create_allocator :: (
+    instance: VK.Instance,
+    physical_device: VK.Physical_Device,
+    device: VK.Device,
+) -> error: string, VMA.Allocator {
+    allocator_create_info := VMA.Allocator_Create_Info.{
+        flags              = .BUFFER_DEVICE_ADDRESS,
+        physical_device    = physical_device,
+        device             = device,
+        instance           = instance,
+        vulkan_api_version = VULKAN_API_VERSION,
+    };
+
+    result, allocator := VMA.create_allocator(*allocator_create_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create VMA allocator: %", result),
+            allocator;
+    }
+
+    return "", allocator;
 }
 
 create_device :: (physical_device: VK.Physical_Device, queues_to_create: []Queue_Info) -> error: string, VK.Device {
@@ -418,3 +461,7 @@ create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Ge
 #import "Basic";
 VK  :: #import "Jai_Vulkan";
 VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
+
+#if DEBUG {
+    #import "Print_Vars";
+}
