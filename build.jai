@@ -58,7 +58,11 @@ MODULES_TO_GENERATE :: struct { name: string; relative_path: string; }.[
     }
 
     if config.should_generate_modules {
-        generate_modules();
+        error := generate_modules();
+        if error {
+            fail_compilation_with_message("Failed to generate modules: %", error);
+            return;
+        }
     }
 
     output_path := tprint("%bin/%", #filepath, config.optimization_type);
@@ -80,6 +84,10 @@ generate_modules :: () -> error: string {
             module_metainfo.relative_path,
             working_directory = #filepath,
         );
+
+        if result.exit_code != 0 {
+            return tprint("Failed to generate %", module_metainfo.name);
+        }
     }
 
     return "";
