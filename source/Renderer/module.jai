@@ -32,18 +32,25 @@ init :: (
     renderer.get_window_pixel_size = window_pixel_size_getter;
 
     error:, renderer.instance = create_instance(additional_instance_extensions_getter);
-    if error return error, renderer;
+    if error {
+        return error, renderer;
+    }
 
     #if DEBUG {
         renderer.debug_utils_messenger = create_debug_utils_messenger(renderer.instance);
     }
 
-    renderer.surface = create_window_surface(renderer.window, renderer.instance);
+    error, renderer.surface = create_surface(renderer.instance, renderer.window, create_window_surface);
+    if error {
+        return error, renderer;
+    }
 
     return "", renderer;
 }
 
 deinit :: (renderer: *Renderer) {
+    VK.destroy_surface_khr(renderer.instance, renderer.surface);
+
     #if DEBUG {
         destroy_debug_utils_messenger(renderer.instance, renderer.debug_utils_messenger);
     }
@@ -73,6 +80,19 @@ VULKAN_API_VERSION :: #run VK.make_version(1, 4, 350);
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+create_surface :: (
+    instance: VK.Instance,
+    window: Window_Type,
+    create_window_surface: Window_Surface_Creator,
+) -> error: string, VK.Surface_Khr {
+    surface := create_window_surface(window, instance);
+    if !surface {
+        return "Failed to create surface", surface;
+    }
+
+    return "", surface;
 }
 
 create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Getter) -> error: string, VK.Instance {
@@ -118,9 +138,11 @@ create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Ge
     }
 
     result, instance := VK.create_instance(*instance_create_info);
-    if result != .SUCCESS return
-        tprint("Failed to create instance: %", result),
-        instance;
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create instance: %", result),
+            instance;
+    }
 
     return "",instance;
 }
