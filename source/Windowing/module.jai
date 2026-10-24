@@ -41,7 +41,7 @@ destroy_window :: (window: *Window) {
     SDL.destroy_window(window);
 }
 
-get_window_size_in_pixels :: (window: *Window) -> width: u32, height: u32 {
+get_renderable_size :: (window: *Window) -> width: u32, height: u32 {
     width, height := SDL.get_window_size_in_pixels(window);
 
     return cast(u32, width), cast(u32, height);
@@ -61,7 +61,7 @@ create_vulkan_surface :: (
     return surface;
 }
 
-get_vulkan_instance_extensinos :: () -> [..]*u8 {
+get_vulkan_instance_extensions :: () -> [..]*u8 {
     extensions: [..]*u8;
 
     count: u32;

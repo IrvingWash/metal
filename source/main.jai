@@ -7,7 +7,7 @@
 
 Windowing :: #import,dir "Windowing";
 Input     :: #import,dir "Input";
-Renderer  :: #import,dir "Renderer"()(DEBUG = DEBUG);
+Renderer  :: #import,dir "Renderer"()(Window_Type = *Windowing.Window, DEBUG = DEBUG);
 
 State :: struct {
     window:   *Windowing.Window;
@@ -58,7 +58,12 @@ init :: () {
 
     Input.init();
 
-    state.renderer = Renderer.init();
+    state.renderer = Renderer.init(
+        state.window,
+        Windowing.get_vulkan_instance_extensions,
+        Windowing.get_renderable_size,
+        Windowing.create_vulkan_surface,
+    );
 }
 
 deinit :: () {

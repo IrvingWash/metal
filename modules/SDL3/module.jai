@@ -1007,7 +1007,7 @@ get_window_size_in_pixels :: (window: *Window) -> width: s32, height: s32 {
     return w, h;
 }
 
-get_vulkan_instance_extensions :: (count: *u32) -> **u8 #foreign libsdl3 "SDL_Vulkan_GetInstanceExtensions";
+vulkan_get_instance_extensions :: (count: *u32) -> **u8 #foreign libsdl3 "SDL_Vulkan_GetInstanceExtensions";
 
 create_vulkan_surface :: (
     window: *Window,
