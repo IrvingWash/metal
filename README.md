@@ -23,3 +23,5 @@ To check other options:
 ```bash
 jai ./build.jai - --help
 ```
+
+The build artefacts are placed into `./bin/<OPTIMIZATION_TYPE>` directory

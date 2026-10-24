@@ -7,6 +7,7 @@
 #import "File";
 
 Config :: struct {
+    should_help:       bool;
     optimization_type: Optimization_Type;
     plugins_to_create: [..]Plugin_To_Create;
 }
@@ -16,6 +17,8 @@ Flags :: struct {
     DEBUG          :: "--debug";
     OPTIMIZED      :: "--optimized";
     VERY_OPTIMIZED :: "--very-optimized";
+    HELP           :: "--help";
+    HELP_SHORT     :: "-h";
 }
 
 DEFAULT_PLUGINS_TO_CREATE :: Plugin_To_Create.[
@@ -36,6 +39,11 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
     error, config := create_config(build_options_dc.compile_time_command_line);
     if error {
         fail_compilation_with_message("Failed to create config: %", error);
+        return;
+    }
+
+    if config.should_help {
+        help();
         return;
     }
 
@@ -194,6 +202,9 @@ create_config :: (arguments: []string) -> error: string, Config {
                 config.optimization_type = .OPTIMIZED;
             case Flags.VERY_OPTIMIZED;
                 config.optimization_type = .VERY_OPTIMIZED;
+            case Flags.HELP; #through;
+            case Flags.HELP_SHORT;
+                config.should_help = true;
             case;
                 PLUGIN_ARGUMENT_PREFIX ::  "+";
 
@@ -214,6 +225,26 @@ create_config :: (arguments: []string) -> error: string, Config {
     array_add(*config.plugins_to_create, ..DEFAULT_PLUGINS_TO_CREATE);
 
     return "", config;
+}
+
+help :: () {
+    HELP_TEXT :: #string DONE
+Usage:
+    jai ./build.jai - <optimization-type-flag> [+plugin-name ...]
+
+Example:
+    jai ./build.jai - --very-optimized +Autorun +Iprof
+
+Available flags:
+    --very-debug     - build in very-debug mode
+    --debug          - build in debug mode
+    --optimized      - build in optimized mode
+    --very-optimized - build in very optimized mode
+
+    --help, -h       - show this help
+    DONE
+
+    print(HELP_TEXT);
 }
 
 fail_compilation_with_message :: (format: string, args: ..Any) {
