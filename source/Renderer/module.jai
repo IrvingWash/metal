@@ -12,8 +12,9 @@ Renderer :: struct {
     window:                Window_Type;
     get_window_pixel_size: Window_Pixel_Size_Getter;
 
-    instance: VK.Instance;
-    surface:  VK.Surface_Khr;
+    instance:        VK.Instance;
+    surface:         VK.Surface_Khr;
+    physical_device: VK.Physical_Device;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -41,6 +42,11 @@ init :: (
     }
 
     error, renderer.surface = create_surface(renderer.instance, renderer.window, create_window_surface);
+    if error {
+        return error, renderer;
+    }
+
+    error, renderer.physical_device = find_physical_device(renderer.instance);
     if error {
         return error, renderer;
     }
@@ -81,6 +87,37 @@ VULKAN_API_VERSION :: #run VK.make_version(1, 4, 350);
         pfn_user_callback = debug_utils_messenger_callback,
     };
 }
+
+find_physical_device :: (instance: VK.Instance) -> error: string, VK.Physical_Device {
+    the_suitable_device: VK.Physical_Device;
+
+    result, physical_devices := VK.enumerate_physical_devices(instance,, temp);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to enumerate physical devices: %", result),
+            the_suitable_device;
+    }
+
+    for candidate: physical_devices {
+        candidate_props := VK.get_physical_device_properties(candidate);
+
+        if (
+            candidate_props.device_type == .DISCRETE_GPU
+            && candidate_props.api_version >= VULKAN_API_VERSION
+        ) {
+            the_suitable_device = candidate;
+            break;
+        }
+    }
+    if !the_suitable_device {
+        return
+            tprint("No suitable GPUs"),
+            the_suitable_device;
+    }
+
+    return "", the_suitable_device;
+}
+
 
 create_surface :: (
     instance: VK.Instance,
