@@ -1,0 +1,12 @@
+{
+    "roots": [
+        "source/main.jai",
+        "install_tools.jai",
+        "build.jai",
+    ],
+    "build_root": "build.jai",
+    "intermediate_path": ".build",
+    "local_modules": ["modules"],
+    "auto_insert_parentheses": false,
+    "use_symbols_from_local_modules": true
+}
