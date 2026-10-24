@@ -5,12 +5,15 @@
         "build.jai",
         "modules/Vulkan_Memory_Allocator/generate.jai",
         "modules/Vulkan_Memory_Allocator/module.jai",
+        "modules/Jai_Vulkan/module.jai",
         "modules/SDL3/generate.jai",
-        "modules/SDL3/module.jai"
+        "modules/SDL3/module.jai",
+        "source/Renderer/module.jai",
+        "source/Windowing/module.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",
-    "local_modules": ["modules", "source/Renderer"],
+    "local_modules": ["modules", "source/Renderer", "source/Windowing"],
     "auto_insert_parentheses": false,
     "use_symbols_from_local_modules": true
 }

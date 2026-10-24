@@ -5,7 +5,14 @@
     TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG,
 );
 
+Windowing :: #import,dir "Windowing";
 Renderer :: #import,dir "Renderer"()(DEBUG = DEBUG);
+
+State :: struct {
+    window: *Windowing.Window;
+}
+
+state: State;
 
 main :: () {
     #if DEBUG {
@@ -16,7 +23,22 @@ main :: () {
 
     print("Hello, Sailor!\n");
 
+    init();
+    defer deinit();
+
     reset_temporary_storage();
+}
+
+init :: () {
+    ok := Windowing.init();
+    assert(ok, "Failed to create window");
+    state.window = Windowing.create_window("metal", 800, 600, .RESIZABLE | .VULKAN);
+    assert(state.window != null, "Failed to create window");
+}
+
+deinit :: () {
+    Windowing.destroy_window(state.window);
+    Windowing.deinit();
 }
 
 setup_formatting :: () {

@@ -991,10 +991,13 @@ Audio_Device_Event :: struct {
 }
 
 init_subsystem :: (flags: Init_Flags) -> bool #foreign libsdl3 "SDL_InitSubSystem";
-poll_event :: (event: *Event) -> bool #foreign libsdl3 "SDL_PollEvent";
+quit_subsystem :: (flags: Init_Flags) -> void #foreign libsdl3 "SDL_QuitSubSystem";
+quit :: () -> void #foreign libsdl3 "SDL_Quit";
+
 create_window :: (title: *u8, w: s32, h: s32, flags: Window_Flags) -> *Window #foreign libsdl3 "SDL_CreateWindow";
 destroy_window :: (window: *Window) -> void #foreign libsdl3 "SDL_DestroyWindow";
-quit :: () -> void #foreign libsdl3 "SDL_Quit";
+
+poll_event :: (event: *Event) -> bool #foreign libsdl3 "SDL_PollEvent";
 get_keyboard_state :: (numkeys: *s32) -> *bool #foreign libsdl3 "SDL_GetKeyboardState";
 
 get_window_size_in_pixels :: (window: *Window) -> width: s32, height: s32 {
@@ -1004,9 +1007,9 @@ get_window_size_in_pixels :: (window: *Window) -> width: s32, height: s32 {
     return w, h;
 }
 
-vulkan_get_instance_extensions :: (count: *u32) -> **u8 #foreign libsdl3 "SDL_Vulkan_GetInstanceExtensions";
+get_vulkan_instance_extensions :: (count: *u32) -> **u8 #foreign libsdl3 "SDL_Vulkan_GetInstanceExtensions";
 
-vulkan_create_surface :: (
+create_vulkan_surface :: (
     window: *Window,
     instance: VK.Instance,
     allocator: *VK.Allocation_Callbacks = null,
@@ -1020,7 +1023,7 @@ vulkan_create_surface :: (
 
 #scope_file
 
-SDL_Vulkan_CreateSurface :: (window: *Window, instance: VK.Instance, allocator: *void, surface: *VK.Surface_Khr) -> bool #foreign libsdl3;
+SDL_Vulkan_CreateSurface :: (window: *Window, instance: VK.Instance, allocator: *VK.Allocation_Callbacks, surface: *VK.Surface_Khr) -> bool #foreign libsdl3;
 SDL_GetWindowSizeInPixels :: (window: *Window, w: *s32, h: *s32) -> bool #foreign libsdl3;
 
 #if OS == {
