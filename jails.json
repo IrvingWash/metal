@@ -2,7 +2,7 @@
     "roots": [
         "source/main.jai",
         "install_tools.jai",
-        "build.jai",
+        "build.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",
