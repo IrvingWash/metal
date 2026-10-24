@@ -4,3 +4,6 @@
 [submodule "modules/Vulkan_Memory_Allocator/Vulkan-Headers"]
 	path = modules/Vulkan_Memory_Allocator/Vulkan-Headers
 	url = git@github.com:KhronosGroup/Vulkan-Headers.git
+[submodule "modules/SDL3/SDL"]
+	path = modules/SDL3/SDL
+	url = git@github.com:libsdl-org/SDL.git

@@ -4,11 +4,13 @@
         "install_tools.jai",
         "build.jai",
         "modules/Vulkan_Memory_Allocator/generate.jai",
-        "modules/Vulkan_Memory_Allocator/module.jai"
+        "modules/Vulkan_Memory_Allocator/module.jai",
+        "modules/SDL3/generate.jai",
+        "modules/SDL3/module.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",
-    "local_modules": ["modules"],
+    "local_modules": ["modules", "source/Renderer"],
     "auto_insert_parentheses": false,
     "use_symbols_from_local_modules": true
 }

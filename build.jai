@@ -32,13 +32,6 @@ EXECUTABLE_NAME :: "metal";
 
 BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
 
-MODULES_TO_GENERATE :: struct { name: string; relative_path: string; }.[
-    {
-        name = "Vulkan_Memory_Allocator",
-        relative_path = "modules/Vulkan_Memory_Allocator/generate.jai",
-    },
-];
-
 #run,stallable {
     defer reset_temporary_storage();
 
@@ -76,6 +69,17 @@ MODULES_TO_GENERATE :: struct { name: string; relative_path: string; }.[
 }
 
 generate_modules :: () -> error: string {
+    MODULES_TO_GENERATE :: struct { name: string; relative_path: string; }.[
+        {
+            name = "Vulkan_Memory_Allocator",
+            relative_path = "modules/Vulkan_Memory_Allocator/generate.jai",
+        },
+        {
+            name = "SDL3",
+            relative_path = "modules/SDL3/generate.jai",
+        }
+    ];
+
     for module_metainfo: MODULES_TO_GENERATE {
         print("Generating %\n", module_metainfo.name);
 

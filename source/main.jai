@@ -5,6 +5,8 @@
     TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG,
 );
 
+Renderer :: #import,dir "Renderer"()(DEBUG = DEBUG);
+
 main :: () {
     #if DEBUG {
         defer report_memory_leaks();
@@ -13,6 +15,8 @@ main :: () {
     setup_formatting();
 
     print("Hello, Sailor!\n");
+
+    reset_temporary_storage();
 }
 
 setup_formatting :: () {
