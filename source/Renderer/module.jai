@@ -1,18 +1,9 @@
 #module_parameters()(Window_Type: Type, APPLICATION_NAME: string, DEBUG: bool = false);
 
-Additional_Instance_Extensions_Getter :: #type () -> [..]*u8;
-
-Window_Render_Size_Getter             :: #type (window: Window_Type) -> width: u32, height: u32;
-
-Window_Surface_Creator :: #type (
-    window: Window_Type,
-    instance: VK.Instance,
-    allocator: *VK.Allocation_Callbacks = null,
-) -> VK.Surface_Khr;
-
 Renderer :: struct {
     window:                Window_Type;
     get_window_render_size: Window_Render_Size_Getter;
+    read_shader_file:       Shader_File_Reader;
 
     instance:            VK.Instance;
     surface:             VK.Surface_Khr;
@@ -56,16 +47,38 @@ Timeline_Semaphore_Info :: struct {
     next_signal_value: u64;
 }
 
+// =============================================================================
+// Procedure pointer types
+// =============================================================================
+
+Additional_Instance_Extensions_Getter :: #type () -> [..]*u8;
+
+Window_Render_Size_Getter :: #type (window: Window_Type) -> width: u32, height: u32;
+
+Window_Surface_Creator :: #type (
+    window: Window_Type,
+    instance: VK.Instance,
+    allocator: *VK.Allocation_Callbacks = null,
+) -> VK.Surface_Khr;
+
+Shader_File_Reader :: #type (name: string) -> ok: bool, string;
+
+// =============================================================================
+// Public API
+// =============================================================================
+
 init :: (
     window:                                Window_Type,
     additional_instance_extensions_getter: Additional_Instance_Extensions_Getter,
-    window_renderer_size_getter:              Window_Render_Size_Getter,
-    create_window_surface:                 Window_Surface_Creator,
+    window_render_size_getter:              Window_Render_Size_Getter,
+    window_surface_creator:                 Window_Surface_Creator,
+    shader_file_reader:                     Shader_File_Reader,
 ) -> error: string, Renderer {
     renderer: Renderer;
 
     renderer.window = window;
-    renderer.get_window_render_size = window_renderer_size_getter;
+    renderer.get_window_render_size = window_render_size_getter;
+    renderer.read_shader_file       = shader_file_reader;
 
     error:, renderer.instance = create_instance(additional_instance_extensions_getter);
     if error {
@@ -81,7 +94,7 @@ init :: (
     error, renderer.surface = create_surface(
         renderer.instance,
         renderer.window,
-        create_window_surface,
+        window_surface_creator,
     );
     if error {
         return

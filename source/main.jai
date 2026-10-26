@@ -63,6 +63,7 @@ init :: () {
         Windowing.get_vulkan_instance_extensions,
         Windowing.get_renderable_size,
         Windowing.create_vulkan_surface,
+        read_shader_file,
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
 }
@@ -74,6 +75,19 @@ deinit :: () {
 
     Windowing.destroy_window(state.window);
     Windowing.deinit();
+}
+
+read_shader_file :: (name: string) -> ok: bool, string {
+    System :: #import "System";
+    String :: #import "String";
+    File   :: #import "File";
+
+    exe_path := System.get_path_of_running_executable();
+    exe_container := String.path_strip_filename(exe_path);
+
+    spv, ok := File.read_entire_file(tprint("%/shaders/%", exe_container, name));
+
+    return ok, spv;
 }
 
 setup_formatting :: () {
