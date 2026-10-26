@@ -19,8 +19,13 @@ Renderer :: struct {
     render_resolution: VK.Extent_2D;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
+    frame_index: u64;
+
+    normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
 
     dummy_pipeline_info: Pipeline_Info;
+
+    should_recreate_swapchain: bool;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -256,6 +261,291 @@ deinit :: (renderer: *Renderer) {
     VK.destroy_instance(renderer.instance);
 
     renderer.* = {};
+}
+
+start_drawing :: (renderer: *Renderer) -> error: string {
+    if renderer.should_recreate_swapchain {
+        VK.device_wait_idle(renderer.device);
+
+        destroy_swapchain(renderer.device, *renderer.swapchain_info);
+        destroy_image(renderer.device, renderer.allocator, *renderer.depth_image_info);
+
+        error:, renderer.swapchain_info = create_swapchain(
+            renderer.physical_device,
+            renderer.surface,
+            renderer.device,
+            renderer.window,
+            renderer.get_window_render_size,
+        );
+        if error {
+            return error;
+        }
+
+        renderer.render_resolution = renderer.swapchain_info.config.image_extent;
+
+        error, renderer.depth_image_info = create_depth_image(
+            renderer.device,
+            renderer.allocator,
+            renderer.render_resolution.width,
+            renderer.render_resolution.height,
+        );
+        if error {
+            return error;
+        }
+
+        renderer.should_recreate_swapchain = true;
+    }
+
+    return "";
+}
+
+draw :: (renderer: *Renderer) {
+}
+
+finish_drawing :: (renderer: *Renderer) -> error: string {
+    frame_resources_index := renderer.frame_index % FRAMES_IN_FLIGHT_COUNT;
+    renderer.frame_index += 1;
+
+    signal_value := renderer.timeline_semaphore_info.next_signal_value;
+    renderer.timeline_semaphore_info.next_signal_value += 1;
+
+    { // Waiting for next available frame resources
+        wait_value := signal_value - FRAMES_IN_FLIGHT_COUNT; // Because the inital value is offsetted by this
+
+        semaphore_wait_info := VK.Semaphore_Wait_Info.{
+            semaphore_count = 1,
+            p_semaphores    = *renderer.timeline_semaphore_info.semaphore,
+            p_values        = *wait_value,
+        };
+        VK.wait_semaphores(renderer.device, *semaphore_wait_info, U64_MAX);
+    }
+
+    frame_resources := renderer.frame_resources_list[frame_resources_index];
+
+    { // Reset command pool
+        result := VK.reset_command_pool(
+            renderer.device,
+            frame_resources.command_pool,
+            flags = 0,
+        );
+        if result != .SUCCESS {
+            return "Failed to reset command pool of a frame resources";
+        }
+    }
+
+    swapchain_image_index: u32;
+    { // Acquire swapchain image index and maybe set a flag to recreate the swapchain
+        result:, swapchain_image_index = VK.acquire_next_image_khr(
+            renderer.device,
+            renderer.swapchain_info.swapchain,
+            U64_MAX,
+            frame_resources.image_acquired_semaphore,
+            null,
+        );
+        if result == {
+            case .ERROR_OUT_OF_DATE_KHR;
+                renderer.should_recreate_swapchain = true;
+                return "";
+            case .SUBOPTIMAL_KHR;
+                renderer.should_recreate_swapchain = true;
+            case;
+                if result != .SUCCESS {
+                    return "Failed to acquire next swapchain image";
+                }
+        }
+    }
+
+    { // Begin command buffer
+        command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
+            flags = .ONE_TIME_SUBMIT,
+        };
+        result := VK.begin_command_buffer(frame_resources.command_buffer, *command_buffer_begin_info);
+        if result != .SUCCESS {
+            return "Failed to begin a command buffer";
+        }
+    }
+
+    { // Transition the swapchain image into a renderable layout, so we can draw on it.
+        render_layout_barriers := VK.Image_Memory_Barrier_2.[
+            {
+                src_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
+                src_access_mask   = 0,
+                dst_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
+                dst_access_mask   = .COLOR_ATTACHMENT_WRITE,
+                old_layout        = .UNDEFINED,
+                new_layout        = .COLOR_ATTACHMENT_OPTIMAL,
+                image             = renderer.swapchain_info.images[swapchain_image_index],
+                subresource_range = {
+                    aspect_mask      = .COLOR,
+                    level_count      = 1,
+                    layer_count      = 1,
+                },
+            },
+            // Also transition the depth image
+            // @Todo: do we even need this? Who changes it's layout? Maybe we need to do this just once, when the image is created?
+            {
+                src_stage_mask  = .EARLY_FRAGMENT_TESTS,
+                src_access_mask = 0,
+                dst_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
+                dst_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
+                old_layout      = .UNDEFINED,
+                new_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
+                image           = renderer.depth_image_info.image,
+                subresource_range = {
+                    aspect_mask      = .DEPTH,
+                    level_count      = 1,
+                    layer_count      = 1,
+                },
+            }
+        ];
+
+        render_dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = render_layout_barriers.count,
+            p_image_memory_barriers    = render_layout_barriers.data,
+        };
+
+        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *render_dependency_info);
+    }
+
+    { // Specify the color and depth attachments and begin rendering
+        color_rendering_attachment_info := VK.Rendering_Attachment_Info.{
+            image_view                 = renderer.swapchain_info.image_views[swapchain_image_index],
+            image_layout               = .COLOR_ATTACHMENT_OPTIMAL,
+            load_op                    = .CLEAR,
+            store_op                   = .STORE,
+            clear_value.color._float32 = renderer.normalized_clear_color.component,
+        };
+
+        depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
+            image_view                      = renderer.depth_image_info.image_view,
+            image_layout                    = .DEPTH_ATTACHMENT_OPTIMAL,
+            load_op                         = .CLEAR,
+            store_op                        = .DONT_CARE,
+            clear_value.depth_stencil.depth = 1,
+        };
+
+        rendering_info := VK.Rendering_Info.{
+            render_area = {
+                offset = { x = 0, y = 0 },
+                extent = renderer.render_resolution, // @Todo: I'm not sure here, but it looks like this shouldn't be tied to the swapchain image extent
+            },
+            layer_count = 1,
+            color_attachment_count = 1,
+            p_color_attachments = *color_rendering_attachment_info,
+            p_depth_attachment = *depth_rendering_attachment_info,
+        };
+
+        VK.cmd_begin_rendering(frame_resources.command_buffer, *rendering_info);
+    }
+
+    { // Set viewport and scissor
+        viewport := VK.Viewport.{
+            x      = 0,
+            y      = 0,
+            width  = cast(float, renderer.render_resolution.width), // @Todo: again not sure about these not being the swapchain image's extent. Same for scissor
+            height = cast(float, renderer.render_resolution.height),
+        };
+        VK.cmd_set_viewport(frame_resources.command_buffer, VK.Viewport.[viewport]);
+
+        scissor := VK.Rect_2D.{
+            offset = {
+                x = 0,
+                y = 0,
+            },
+            extent = renderer.render_resolution,
+        };
+        VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
+    }
+
+    VK.cmd_bind_pipeline(frame_resources.command_buffer, .GRAPHICS, renderer.dummy_pipeline_info.pipeline);
+
+    VK.cmd_draw(
+        frame_resources.command_buffer,
+        vertex_count   = 3,
+        instance_count = 1,
+        first_vertex   = 0,
+        first_instance = 0,
+    );
+
+    VK.cmd_end_rendering(frame_resources.command_buffer);
+
+    { // Transition the swapchain image we used for rendering back into the presentable layout
+        present_layout_barrier := VK.Image_Memory_Barrier_2.{
+            src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
+            src_access_mask = .COLOR_ATTACHMENT_WRITE,
+            dst_stage_mask  = .NONE,
+            dst_access_mask = 0,
+            old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
+            new_layout      = .PRESENT_SRC_KHR,
+            image           = renderer.swapchain_info.images[swapchain_image_index],
+            subresource_range = {
+                aspect_mask      = .COLOR,
+                level_count      = 1,
+                layer_count      = 1,
+            },
+        };
+
+        present_dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers = *present_layout_barrier,
+        };
+
+        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *present_dependency_info);
+    }
+
+    VK.end_command_buffer(frame_resources.command_buffer);
+
+    { // Submitting
+        image_acquired_wait_info := VK.Semaphore_Submit_Info.{
+            semaphore  = frame_resources.image_acquired_semaphore,
+            stage_mask = .COLOR_ATTACHMENT_OUTPUT,
+        };
+
+        semaphore_signals := VK.Semaphore_Submit_Info.[
+            {
+                semaphore = renderer.swapchain_info.render_complete_semaphores[swapchain_image_index],
+                stage_mask = .ALL_GRAPHICS,
+            },
+            {
+                semaphore  = renderer.timeline_semaphore_info.semaphore,
+                value      = signal_value,
+                stage_mask = .ALL_COMMANDS,
+            },
+        ];
+
+        cmd_submit_info := VK.Command_Buffer_Submit_Info.{
+            command_buffer = frame_resources.command_buffer,
+        };
+
+        submit_info := VK.Submit_Info_2.{
+            wait_semaphore_info_count   = 1,
+            p_wait_semaphore_infos      = *image_acquired_wait_info,
+            command_buffer_info_count   = 1,
+            p_command_buffer_infos      = *cmd_submit_info,
+            signal_semaphore_info_count = semaphore_signals.count,
+            p_signal_semaphore_infos    = semaphore_signals.data,
+        };
+
+        result := VK.queue_submit_2(renderer.graphics_queue_info.queue, VK.Submit_Info_2.[submit_info], null);
+        if result != .SUCCESS {
+            return "Failed to submit queue";
+        }
+    }
+
+    { // Present
+        present_info := VK.Present_Info_Khr.{
+            wait_semaphore_count = 1,
+            p_wait_semaphores    = *renderer.swapchain_info.render_complete_semaphores[swapchain_image_index],
+            swapchain_count      = 1,
+            p_swapchains         = *renderer.swapchain_info.swapchain,
+            p_image_indices      = *swapchain_image_index,
+            p_results            = null,
+        };
+
+        VK.queue_present_khr(renderer.graphics_queue_info.queue, *present_info);
+    }
+
+    return "";
 }
 
 

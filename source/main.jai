@@ -33,6 +33,10 @@ main :: () {
     while !state.should_quit {
         process_input();
 
+        Renderer.start_drawing(*state.renderer);
+        Renderer.draw(*state.renderer);
+        Renderer.finish_drawing(*state.renderer);
+
         reset_temporary_storage();
     }
 }
