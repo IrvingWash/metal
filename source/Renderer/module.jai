@@ -135,6 +135,8 @@ init :: (
 }
 
 deinit :: (renderer: *Renderer) {
+    VK.device_wait_idle(renderer.device);
+
     destroy_swapchain(renderer.device, *renderer.swapchain_info);
 
     VMA.destroy_allocator(renderer.allocator);
@@ -185,16 +187,140 @@ DEVICE_EXTENSIONS :: *u8.[
     };
 }
 
+create_image_view :: (
+    device: VK.Device,
+    image: VK.Image,
+    format: VK.Format,
+    aspect_mask: VK.Image_Aspect_Flags,
+) -> error: string, VK.Image_View {
+    image_view_create_info := VK.Image_View_Create_Info.{
+        image     = image,
+        view_type = ._2D,
+        format    = format,
+        subresource_range = {
+            aspect_mask = aspect_mask,
+            level_count = 1,
+            layer_count = 1,
+        },
+    };
+
+    result, image_view := VK.create_image_view(device, *image_view_create_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create image view: %", result),
+            image_view;
+    }
+
+    return "", image_view;
+}
+
 create_swapchain :: (
-    physical_device:          VK.Physical_Device,
-    surface:                  VK.Surface_Khr,
-    device:                   VK.Device,
-    window:                   Window_Type,
-    get_window_renderer_size: Window_Render_Size_Getter,
+    physical_device:        VK.Physical_Device,
+    surface:                VK.Surface_Khr,
+    device:                 VK.Device,
+    window:                 Window_Type,
+    get_window_render_size: Window_Render_Size_Getter,
 ) -> error: string, Swapchain_Info {
     swapchain_info: Swapchain_Info;
 
-    // @Todo: incomplete
+    { // The swapchain
+        result, surface_capabilities := VK.get_physical_device_surface_capabilities_khr(physical_device, surface);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to get surface capabilities: %", result),
+                swapchain_info;
+        }
+
+        desired_image_count := ifx surface_capabilities.max_image_count > 0
+            then clamp(2, surface_capabilities.min_image_count, surface_capabilities.max_image_count)
+            else max(2, surface_capabilities.min_image_count);
+
+        image_extent := ifx surface_capabilities.current_extent.width != U32_MAX {
+            surface_capabilities.current_extent;
+        } else {
+            width, height := get_window_render_size(window);
+
+            extent: VK.Extent_2D;
+            extent.width = clamp(
+                width,
+                surface_capabilities.min_image_extent.width,
+                surface_capabilities.max_image_extent.width,
+            );
+            extent.height = clamp(
+                height,
+                surface_capabilities.min_image_extent.height,
+                surface_capabilities.max_image_extent.height,
+            );
+
+            extent;
+        }
+
+        swapchain_info.config = {
+            surface            = surface,
+            min_image_count    = cast(u32, desired_image_count),
+            image_format       = SURFACE_FORMAT.format,
+            image_color_space  = SURFACE_FORMAT.color_space,
+            image_extent       = image_extent,
+            image_array_layers = 1,
+            image_usage        = .COLOR_ATTACHMENT,
+            image_sharing_mode = .EXCLUSIVE,
+            pre_transform      = surface_capabilities.current_transform,
+            composite_alpha    = .OPAQUE_KHR,
+            present_mode       = DEFAULT_PRESENT_MODE,
+            clipped            = VK.TRUE,
+        };
+
+        result, swapchain_info.swapchain = VK.create_swapchain_khr(device, *swapchain_info.config);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create swapchain: %", result),
+                swapchain_info;
+        }
+    }
+
+    { // Images
+        result:, swapchain_info.images = VK.get_swapchain_images_khr(device, swapchain_info.swapchain);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to get swapchain images: %", result),
+                swapchain_info;
+        }
+    }
+
+    // Image views
+    for image: swapchain_info.images {
+        error, image_view := create_image_view(
+            device,
+            image,
+            swapchain_info.config.image_format,
+            .COLOR,
+        );
+        if error {
+            return error, swapchain_info;
+        }
+
+        array_add(
+            *swapchain_info.image_views,
+            image_view,
+        );
+    }
+
+    // Render complete semaphores
+    for swapchain_info.images {
+        semaphore_create_info: VK.Semaphore_Create_Info;
+
+        result, semaphore := VK.create_semaphore(device, *semaphore_create_info);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create semaphore for swapchain: %", result),
+                swapchain_info;
+        }
+
+        array_add(
+            *swapchain_info.render_complete_semaphores,
+            semaphore,
+        );
+    }
 
     return "", swapchain_info;
 }
@@ -557,6 +683,7 @@ create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Ge
 }
 
 #import "Basic";
+#import "Math";
 VK  :: #import "Jai_Vulkan";
 VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
