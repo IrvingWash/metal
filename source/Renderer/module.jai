@@ -340,7 +340,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             renderer.swapchain_info.swapchain,
             U64_MAX,
             frame_resources.image_acquired_semaphore,
-            null,
+            fence = null,
         );
         if result == {
             case .ERROR_OUT_OF_DATE_KHR;
