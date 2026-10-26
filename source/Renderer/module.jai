@@ -14,11 +14,13 @@ Renderer :: struct {
 
     timeline_semaphore_info: Timeline_Semaphore_Info;
 
-    dummy_pipeline_info: Pipeline_Info;
-
     swapchain_info:    Swapchain_Info;
     depth_image_info:  Image_Info;
     render_resolution: VK.Extent_2D;
+
+    frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
+
+    dummy_pipeline_info: Pipeline_Info;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -54,6 +56,12 @@ Image_Info :: struct {
 Timeline_Semaphore_Info :: struct {
     semaphore:         VK.Semaphore;
     next_signal_value: u64;
+}
+
+Frame_Resources :: struct {
+    command_pool:             VK.Command_Pool;
+    command_buffer:           VK.Command_Buffer;
+    image_acquired_semaphore: VK.Semaphore;
 }
 
 // =============================================================================
@@ -188,6 +196,18 @@ init :: (
             renderer;
     }
 
+    for *frame_resources: renderer.frame_resources_list {
+        error:, frame_resources.* = create_frame_resources(
+            renderer.device,
+            renderer.graphics_queue_info.family_index,
+        );
+        if error {
+            return
+                error,
+                renderer;
+        }
+    }
+
     error, renderer.dummy_pipeline_info = create_dummy_pipeline(
         renderer.device,
         renderer.read_shader_file,
@@ -209,6 +229,10 @@ deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
     destroy_pipeline(renderer.device, *renderer.dummy_pipeline_info);
+
+    for *frame_resources: renderer.frame_resources_list {
+        destroy_frame_resources(renderer.device, frame_resources);
+    }
 
     destroy_image( // Depth image
         renderer.device,
@@ -417,6 +441,68 @@ destroy_pipeline :: (device: VK.Device, pipeline_info: *Pipeline_Info) {
     pipeline_info.* = {};
 }
 
+destroy_frame_resources :: (device: VK.Device, frame_resources: *Frame_Resources) {
+    VK.destroy_semaphore(device, frame_resources.image_acquired_semaphore);
+
+    VK.destroy_command_pool(device, frame_resources.command_pool);
+
+    frame_resources.* = {};
+}
+
+create_frame_resources :: (
+    device: VK.Device,
+    queue_family_index: u32,
+) -> error: string, Frame_Resources {
+    frame_resources: Frame_Resources;
+
+    { // Image acquired semaphore
+        semaphore_create_info: VK.Semaphore_Create_Info;
+        result:, frame_resources.image_acquired_semaphore = VK.create_semaphore(
+            device,
+            *semaphore_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create image acquired semapohre: %", result),
+                frame_resources;
+        }
+    }
+
+    { // Command pool
+        command_pool_create_info := VK.Command_Pool_Create_Info.{
+            queue_family_index = queue_family_index,
+        };
+        result:, frame_resources.command_pool = VK.create_command_pool(
+            device,
+            *command_pool_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create a command pool for a frame resources: %", result),
+                frame_resources;
+        }
+    }
+
+    { // Command buffer
+        command_buffer_allocate_info := VK.Command_Buffer_Allocate_Info.{
+            command_pool         = frame_resources.command_pool,
+            level                = .PRIMARY,
+            command_buffer_count = 1,
+        };
+        result:, frame_resources.command_buffer = VK.allocate_command_buffer(
+            device,
+            *command_buffer_allocate_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to allocate a command buffer for a frame resources: %", result),
+                frame_resources;
+        }
+    }
+
+    return "", frame_resources;
+}
+
 create_timeline_semaphore :: (device: VK.Device) -> error: string, Timeline_Semaphore_Info {
     timeline_semaphore_info: Timeline_Semaphore_Info;
 
@@ -484,6 +570,8 @@ create_swapchain :: (
         desired_image_count := ifx surface_capabilities.max_image_count > 0
             then clamp(2, surface_capabilities.min_image_count, surface_capabilities.max_image_count)
             else max(2, surface_capabilities.min_image_count);
+
+         // If false, some of our frame resources will have to wait for a free swapchain image
         if desired_image_count < FRAMES_IN_FLIGHT_COUNT {
             return
                 tprint(
