@@ -21,7 +21,8 @@ Renderer :: struct {
     device:              VK.Device;
     allocator:           VMA.Allocator;
 
-    swapchain_info:      Swapchain_Info;
+    swapchain_info:   Swapchain_Info;
+    depth_image_info: Image_Info;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -40,6 +41,12 @@ Swapchain_Info :: struct {
     images:                     [..]VK.Image;
     image_views:                [..]VK.Image_View;
     render_complete_semaphores: [..]VK.Semaphore;
+}
+
+Image_Info :: struct {
+    image:      VK.Image;
+    image_view: VK.Image_View;
+    allocation: VMA.Allocation;
 }
 
 init :: (
@@ -129,6 +136,18 @@ init :: (
             renderer;
     }
 
+    error, renderer.depth_image_info = create_depth_image(
+        renderer.device,
+        renderer.allocator,
+        renderer.swapchain_info.config.image_extent.width,
+        renderer.swapchain_info.config.image_extent.height,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     return
         "",
         renderer;
@@ -137,6 +156,11 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
+    destroy_image(
+        renderer.device,
+        renderer.allocator,
+        *renderer.depth_image_info,
+    );
     destroy_swapchain(renderer.device, *renderer.swapchain_info);
 
     VMA.destroy_allocator(renderer.allocator);
@@ -167,6 +191,8 @@ SURFACE_FORMAT :: VK.Surface_Format_Khr.{
 
 DEFAULT_PRESENT_MODE :: VK.Present_Mode_Khr.FIFO_KHR;
 
+DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
+
 DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
 ];
@@ -187,31 +213,25 @@ DEVICE_EXTENSIONS :: *u8.[
     };
 }
 
-create_image_view :: (
-    device: VK.Device,
-    image: VK.Image,
-    format: VK.Format,
-    aspect_mask: VK.Image_Aspect_Flags,
-) -> error: string, VK.Image_View {
-    image_view_create_info := VK.Image_View_Create_Info.{
-        image     = image,
-        view_type = ._2D,
-        format    = format,
-        subresource_range = {
-            aspect_mask = aspect_mask,
-            level_count = 1,
-            layer_count = 1,
-        },
-    };
+create_depth_image :: (
+    device:    VK.Device,
+    allocator: VMA.Allocator,
+    width:     u32,
+    height:    u32,
+) -> error: string, Image_Info {
+    error, depth_image_info := create_image(
+            device,
+            allocator,
+            format           = DEPTH_IMAGE_FORMAT,
+            width            = width,
+            height           = height,
+            depth            = 1,
+            tiling           = .OPTIMAL,
+            usage            = .DEPTH_STENCIL_ATTACHMENT,
+            allocation_flags = .DEDICATED_MEMORY,
+    );
 
-    result, image_view := VK.create_image_view(device, *image_view_create_info);
-    if result != .SUCCESS {
-        return
-            tprint("Failed to create image view: %", result),
-            image_view;
-    }
-
-    return "", image_view;
+    return error, depth_image_info;
 }
 
 create_swapchain :: (
@@ -630,6 +650,98 @@ create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Ge
     return
         "",
         instance;
+}
+
+create_image :: (
+    device:           VK.Device,
+    allocator:        VMA.Allocator,
+    format:           VK.Format,
+    width:            u32,
+    height:           u32,
+    depth:            u32,
+    tiling:           VK.Image_Tiling,
+    usage:            VK.Image_Usage_Flags,
+    allocation_flags: VMA.Allocation_Create_Flags,
+) -> error: string, Image_Info {
+    image_info: Image_Info;
+
+    image_create_info := VK.Image_Create_Info.{
+        image_type = ._2D,
+        format     = format,
+        extent = {
+            width  = width,
+            height = height,
+            depth  = depth,
+        },
+        mip_levels     = 1,
+        array_layers   = 1,
+        samples        = ._1,
+        tiling         = tiling,
+        usage          = usage,
+        initial_layout = .UNDEFINED,
+        sharing_mode   = .EXCLUSIVE,
+    };
+
+    allocation_create_info := VMA.Allocation_Create_Info.{
+        flags = allocation_flags,
+        usage = .AUTO,
+    };
+
+    result:, image_info.image, image_info.allocation = VMA.create_image(
+        allocator,
+        *image_create_info,
+        *allocation_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create image: %", result),
+            image_info;
+    }
+
+    error:, image_info.image_view = create_image_view(device, image_info.image, format, .DEPTH);
+    if error {
+        return error, image_info;
+    }
+
+    return "", image_info;
+}
+
+destroy_image :: (
+    device: VK.Device,
+    allocator: VMA.Allocator,
+    image_info: *Image_Info,
+) {
+    VK.destroy_image_view(device, image_info.image_view);
+    VMA.destroy_image(allocator, image_info.image, image_info.allocation);
+
+    image_info.* = {};
+}
+
+create_image_view :: (
+    device: VK.Device,
+    image: VK.Image,
+    format: VK.Format,
+    aspect_mask: VK.Image_Aspect_Flags,
+) -> error: string, VK.Image_View {
+    image_view_create_info := VK.Image_View_Create_Info.{
+        image     = image,
+        view_type = ._2D,
+        format    = format,
+        subresource_range = {
+            aspect_mask = aspect_mask,
+            level_count = 1,
+            layer_count = 1,
+        },
+    };
+
+    result, image_view := VK.create_image_view(device, *image_view_create_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create image view: %", result),
+            image_view;
+    }
+
+    return "", image_view;
 }
 
 #if DEBUG {
