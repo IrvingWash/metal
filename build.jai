@@ -138,7 +138,7 @@ build :: (
         set_optimization(
             *build_options,
             config.optimization_type,
-            preserve_debug_info = config.optimization_type >= .OPTIMIZED,
+            preserve_debug_info = config.optimization_type < .OPTIMIZED,
         );
 
         set_build_options(build_options, w);

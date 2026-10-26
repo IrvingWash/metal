@@ -15,7 +15,7 @@ Renderer :: struct {
     timeline_semaphore_info: Timeline_Semaphore_Info;
 
     swapchain_info:    Swapchain_Info;
-    depth_image_info:  Image_Info;
+    depth_image_info:  Image_Info; // @Todo: Per frame in flight!
     render_resolution: VK.Extent_2D;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
@@ -293,7 +293,7 @@ start_drawing :: (renderer: *Renderer) -> error: string {
             return error;
         }
 
-        renderer.should_recreate_swapchain = true;
+        renderer.should_recreate_swapchain = false;
     }
 
     return "";
@@ -317,7 +317,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             p_semaphores    = *renderer.timeline_semaphore_info.semaphore,
             p_values        = *wait_value,
         };
-        VK.wait_semaphores(renderer.device, *semaphore_wait_info, U64_MAX);
+        result := VK.wait_semaphores(renderer.device, *semaphore_wait_info, U64_MAX);
+        if result != .SUCCESS {
+            return tprint("Failed to wait semaphores: %", result);
+        }
     }
 
     frame_resources := renderer.frame_resources_list[frame_resources_index];
@@ -493,7 +496,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *present_dependency_info);
     }
 
-    VK.end_command_buffer(frame_resources.command_buffer);
+    result := VK.end_command_buffer(frame_resources.command_buffer);
+    if result != .SUCCESS {
+        return tprint("Failed to end command buffer: %", result);
+    }
 
     { // Submitting
         image_acquired_wait_info := VK.Semaphore_Submit_Info.{
@@ -542,7 +548,18 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             p_results            = null,
         };
 
-        VK.queue_present_khr(renderer.graphics_queue_info.queue, *present_info);
+        result := VK.queue_present_khr(renderer.graphics_queue_info.queue, *present_info);
+        if result == {
+            case .ERROR_OUT_OF_DATE_KHR;
+                renderer.should_recreate_swapchain = true;
+                return "";
+            case .SUBOPTIMAL_KHR;
+                renderer.should_recreate_swapchain = true;
+            case;
+                if result != .SUCCESS {
+                    return "Failed to present";
+                }
+        }
     }
 
     return "";
@@ -835,6 +852,7 @@ create_depth_image :: (
             tiling           = .OPTIMAL,
             usage            = .DEPTH_STENCIL_ATTACHMENT,
             allocation_flags = .DEDICATED_MEMORY,
+            aspect_mask      = .DEPTH,
     );
 
     return error, depth_image_info;
@@ -1279,6 +1297,7 @@ create_image :: (
     tiling:           VK.Image_Tiling,
     usage:            VK.Image_Usage_Flags,
     allocation_flags: VMA.Allocation_Create_Flags,
+    aspect_mask:      VK.Image_Aspect_Flags,
 ) -> error: string, Image_Info {
     image_info: Image_Info;
 
@@ -1315,7 +1334,12 @@ create_image :: (
             image_info;
     }
 
-    error:, image_info.image_view = create_image_view(device, image_info.image, format, .DEPTH);
+    error:, image_info.image_view = create_image_view(
+        device,
+        image_info.image,
+        format,
+        aspect_mask,
+    );
     if error {
         return error, image_info;
     }

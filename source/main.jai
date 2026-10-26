@@ -25,8 +25,6 @@ main :: () {
 
     setup_formatting();
 
-    print("Hello, Sailor!\n");
-
     init();
     defer deinit();
 
