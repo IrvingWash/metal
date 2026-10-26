@@ -148,6 +148,8 @@ init :: (
             renderer;
     }
 
+    // @Todo: global descriptor pool?
+
     return
         "",
         renderer;

@@ -283,7 +283,7 @@ Available flags:
     --optimized        - build in optimized mode
     --very-optimized   - build in very optimized mode
 
-    --generate_modules - build binaries/generate bindings for modules
+    --generate-modules - build binaries/generate bindings for modules
 
     --help, -h         - show this help
     DONE
