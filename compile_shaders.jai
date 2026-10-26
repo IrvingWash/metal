@@ -83,10 +83,12 @@ SHADERS :: Shader.[
     {
         source_path   = "source/Renderer/shaders/dummy.fragment.glsl",
         compiled_name = "dummy.fragment.spv",
+        stage         = .FRAGMENT,
     },
     {
         source_path   = "source/Renderer/shaders/dummy.vertex.glsl",
         compiled_name = "dummy.vertex.spv",
+        stage         = .VERTEX,
     },
 ];
 

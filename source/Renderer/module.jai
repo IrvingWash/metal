@@ -14,12 +14,20 @@ Renderer :: struct {
 
     timeline_semaphore_info: Timeline_Semaphore_Info;
 
-    swapchain_info:   Swapchain_Info;
-    depth_image_info: Image_Info;
+    dummy_pipeline_info: Pipeline_Info;
+
+    swapchain_info:    Swapchain_Info;
+    depth_image_info:  Image_Info;
+    render_resolution: VK.Extent_2D;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
     }
+}
+
+Pipeline_Info :: struct {
+    pipeline: VK.Pipeline;
+    layout:   VK.Pipeline_Layout;
 }
 
 Queue_Info :: struct {
@@ -40,6 +48,7 @@ Image_Info :: struct {
     image:      VK.Image;
     image_view: VK.Image_View;
     allocation: VMA.Allocation;
+    format:     VK.Format;
 }
 
 Timeline_Semaphore_Info :: struct {
@@ -61,7 +70,7 @@ Window_Surface_Creator :: #type (
     allocator: *VK.Allocation_Callbacks = null,
 ) -> VK.Surface_Khr;
 
-Shader_File_Reader :: #type (name: string) -> ok: bool, string;
+Shader_File_Reader :: #type (name: string) -> error: string, content: string;
 
 // =============================================================================
 // Public API
@@ -163,11 +172,27 @@ init :: (
             renderer;
     }
 
+    // @Todo: will be replaced with a texture.
+    // For now, must be updated when swapchain is recreated
+    renderer.render_resolution = renderer.swapchain_info.config.image_extent;
+
     error, renderer.depth_image_info = create_depth_image(
         renderer.device,
         renderer.allocator,
-        renderer.swapchain_info.config.image_extent.width,
-        renderer.swapchain_info.config.image_extent.height,
+        renderer.render_resolution.width,
+        renderer.render_resolution.height,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
+    error, renderer.dummy_pipeline_info = create_dummy_pipeline(
+        renderer.device,
+        renderer.read_shader_file,
+        .[renderer.swapchain_info.config.image_format],
+        renderer.depth_image_info.format,
     );
     if error {
         return
@@ -183,7 +208,9 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
-    destroy_image(
+    destroy_pipeline(renderer.device, *renderer.dummy_pipeline_info);
+
+    destroy_image( // Depth image
         renderer.device,
         renderer.allocator,
         *renderer.depth_image_info,
@@ -213,7 +240,7 @@ deinit :: (renderer: *Renderer) {
 
 VULKAN_API_VERSION :: #run VK.make_version(1, 4, 0);
 
-SURFACE_FORMAT :: VK.Surface_Format_Khr.{
+DEFAULT_SURFACE_FORMAT :: VK.Surface_Format_Khr.{
     format      = .B8G8R8A8_SRGB,
     color_space = .SRGB_NONLINEAR_KHR,
 };
@@ -242,6 +269,152 @@ FRAMES_IN_FLIGHT_COUNT :: 2;
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+create_dummy_pipeline :: (
+    device:                   VK.Device,
+    shader_file_reader:       Shader_File_Reader,
+    color_attachment_formats: []VK.Format,
+    depth_attachment_format:  VK.Format,
+) -> error: string, Pipeline_Info {
+    pipeline_info: Pipeline_Info;
+
+    { // Layout
+        pipeline_layout_create_info := VK.Pipeline_Layout_Create_Info.{
+            set_layout_count          = 0,
+            push_constant_range_count = 0,
+        };
+
+        result:, pipeline_info.layout = VK.create_pipeline_layout(
+            device,
+            *pipeline_layout_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create pipeline layout: %", result),
+                pipeline_info;
+        }
+    }
+
+    error, vertex_shader := create_shader_module(device, "dummy.vertex.spv", shader_file_reader);
+    if error {
+        return
+            error,
+            pipeline_info;
+    }
+    defer VK.destroy_shader_module(device, vertex_shader);
+
+    error =, fragment_shader := create_shader_module(device, "dummy.fragment.spv", shader_file_reader);
+    if error {
+        return
+            error,
+            pipeline_info;
+    }
+    defer VK.destroy_shader_module(device, fragment_shader);
+
+    shader_stage_create_infos := VK.Pipeline_Shader_Stage_Create_Info.[
+        {
+            stage  = .VERTEX,
+            module = vertex_shader,
+            p_name = "main",
+        },
+        {
+            stage  = .FRAGMENT,
+            module = fragment_shader,
+            p_name = "main",
+        },
+    ];
+
+    vertex_input_state_create_info := VK.Pipeline_Vertex_Input_State_Create_Info.{};
+
+    input_assembly_state_create_info := VK.Pipeline_Input_Assembly_State_Create_Info.{
+        topology = .TRIANGLE_LIST,
+    };
+
+    depth_stencil_state_create_info := VK.Pipeline_Depth_Stencil_State_Create_Info.{
+        depth_test_enable   = VK.TRUE,
+        depth_write_enable  = VK.TRUE,
+        depth_compare_op    = .LESS,
+        stencil_test_enable = VK.FALSE,
+    };
+
+    viewport_state_create_info := VK.Pipeline_Viewport_State_Create_Info.{
+        viewport_count = 1,
+        p_viewports    = null,
+        scissor_count  = 1,
+        p_scissors     = null,
+    };
+
+    rasterization_state_create_info := VK.Pipeline_Rasterization_State_Create_Info.{
+        polygon_mode = .FILL,
+        cull_mode    = .BACK,
+        front_face   = .COUNTER_CLOCKWISE,
+        line_width   = 1,
+    };
+
+    multisample_state_create_info := VK.Pipeline_Multisample_State_Create_Info.{
+        rasterization_samples = ._1,
+    };
+
+    color_blend_attachment_states := VK.Pipeline_Color_Blend_Attachment_State.[
+        {
+            blend_enable = VK.FALSE,
+            color_write_mask = .R | .G | .B | .A,
+        },
+    ];
+
+    color_blend_state_create_info := VK.Pipeline_Color_Blend_State_Create_Info.{
+        attachment_count = color_blend_attachment_states.count,
+        p_attachments    = color_blend_attachment_states.data,
+    };
+
+    dynamic_states := VK.Dynamic_State.[
+        .VIEWPORT,
+        .SCISSOR,
+    ];
+
+    dynamic_state_create_info := VK.Pipeline_Dynamic_State_Create_Info.{
+        dynamic_state_count = dynamic_states.count,
+        p_dynamic_states    = dynamic_states.data,
+    };
+
+    rendering_create_info := VK.Pipeline_Rendering_Create_Info.{
+        color_attachment_count     = cast(u32, color_attachment_formats.count),
+        p_color_attachment_formats = color_attachment_formats.data,
+        depth_attachment_format    = depth_attachment_format,
+    };
+
+    pipeline_create_info := VK.Graphics_Pipeline_Create_Info.{
+        p_next                 = *rendering_create_info,
+        stage_count            = shader_stage_create_infos.count,
+        p_stages               = shader_stage_create_infos.data,
+        p_vertex_input_state   = *vertex_input_state_create_info,
+        p_input_assembly_state = *input_assembly_state_create_info,
+        p_viewport_state       = *viewport_state_create_info,
+        p_rasterization_state  = *rasterization_state_create_info,
+        p_multisample_state    = *multisample_state_create_info,
+        p_depth_stencil_state  = *depth_stencil_state_create_info,
+        p_color_blend_state    = *color_blend_state_create_info,
+        p_dynamic_state        = *dynamic_state_create_info,
+        layout                 = pipeline_info.layout,
+        render_pass            = null,
+    };
+
+    result:, pipeline_info.pipeline = VK.create_graphics_pipeline(device, null, *pipeline_create_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create dummy pipeline: %", result),
+            pipeline_info;
+    }
+
+    return "", pipeline_info;
+}
+
+destroy_pipeline :: (device: VK.Device, pipeline_info: *Pipeline_Info) {
+    VK.destroy_pipeline(device, pipeline_info.pipeline);
+    VK.destroy_pipeline_layout(device, pipeline_info.layout);
+
+    pipeline_info.* = {};
 }
 
 create_timeline_semaphore :: (device: VK.Device) -> error: string, Timeline_Semaphore_Info {
@@ -344,8 +517,8 @@ create_swapchain :: (
         swapchain_info.config = {
             surface            = surface,
             min_image_count    = cast(u32, desired_image_count),
-            image_format       = SURFACE_FORMAT.format,
-            image_color_space  = SURFACE_FORMAT.color_space,
+            image_format       = DEFAULT_SURFACE_FORMAT.format,
+            image_color_space  = DEFAULT_SURFACE_FORMAT.color_space,
             image_extent       = image_extent,
             image_array_layers = 1,
             image_usage        = .COLOR_ATTACHMENT,
@@ -602,8 +775,8 @@ find_physical_device :: (instance: VK.Instance, surface: VK.Surface_Khr) -> erro
 
             for format: supported_formats {
                 if (
-                    format.format == SURFACE_FORMAT.format
-                    && format.color_space == SURFACE_FORMAT.color_space
+                    format.format == DEFAULT_SURFACE_FORMAT.format
+                    && format.color_space == DEFAULT_SURFACE_FORMAT.color_space
                 ) {
                     supports_needed_surface_format = true;
                     break;
@@ -769,6 +942,8 @@ create_image :: (
         return error, image_info;
     }
 
+    image_info.format = format;
+
     return "", image_info;
 }
 
@@ -808,6 +983,36 @@ create_image_view :: (
     }
 
     return "", image_view;
+}
+
+create_shader_module :: (
+    device: VK.Device,
+    name: string,
+    read_shader_file: Shader_File_Reader,
+) -> error: string, VK.Shader_Module {
+    error, content := read_shader_file(name,, temp);
+    if error {
+        return
+            error,
+            null;
+    }
+
+    shader_module_create_info := VK.Shader_Module_Create_Info.{
+        code_size = cast(u32, content.count * size_of(u8)),
+        p_code    = cast(*u32, content.data),
+    };
+
+    result, shader_module := VK.create_shader_module(
+        device,
+        *shader_module_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create shader module: %", result),
+            shader_module;
+    }
+
+    return "", shader_module;
 }
 
 #if DEBUG {

@@ -77,7 +77,7 @@ deinit :: () {
     Windowing.deinit();
 }
 
-read_shader_file :: (name: string) -> ok: bool, string {
+read_shader_file :: (name: string) -> error: string, shader: string {
     System :: #import "System";
     String :: #import "String";
     File   :: #import "File";
@@ -85,9 +85,15 @@ read_shader_file :: (name: string) -> ok: bool, string {
     exe_path := System.get_path_of_running_executable();
     exe_container := String.path_strip_filename(exe_path);
 
-    spv, ok := File.read_entire_file(tprint("%/shaders/%", exe_container, name));
+    path := tprint("%/shaders/%", exe_container, name);
+    content, ok := File.read_entire_file(path);
+    if !ok {
+        return
+            tprint("Failed to read shader file at '%'", path),
+            content;
+    }
 
-    return ok, spv;
+    return "", content;
 }
 
 setup_formatting :: () {
