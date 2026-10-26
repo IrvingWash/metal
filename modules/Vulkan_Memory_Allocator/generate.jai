@@ -79,7 +79,7 @@ build_vma :: () -> error: string {
             extras: [..]string;
             extras.allocator = temp;
             array_add(
-                *extra,
+                *extras,
                 "/I",
                 VULKAN_INCLUDE_PATH,
                 "/DVMA_IMPLEMENTATION",

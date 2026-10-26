@@ -1029,6 +1029,21 @@ SDL_GetWindowSizeInPixels :: (window: *Window, w: *s32, h: *s32) -> bool #foreig
 #if OS == {
     case .LINUX;
         libsdl3 :: #library "./LINUX/lib/libSDL3";
+    case .WINDOWS;
+        #library,system,link_always "Gdi32";
+        #library,system,link_always "User32";
+        #library,system,link_always "Hid";
+        #library,system,link_always "Setupapi";
+        #library,system,link_always "Ole32";
+        #library,system,link_always "Shell32";
+        #library,system,link_always "Imm32";
+        #library,system,link_always "Kernel32";
+        #library,system,link_always "Winmm";
+        #library,system,link_always "Oleaut32";
+        #library,system,link_always "Version";
+        #library,system,link_always "Uuid";
+        #library,system,link_always "Advapi32";
+        libsdl3 :: #library,no_dll "./WINDOWS/lib/SDL3-static";
     case;
         #assert "Unsupported OS";
 }

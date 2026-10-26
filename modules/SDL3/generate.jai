@@ -39,24 +39,40 @@ build :: () -> error: string {
 
     absolute_sdl_path := get_absolute_path(SDL_PATH);
 
-
     { // Configuring cmake
+        #if OS == {
+            case .LINUX;
+                config_command := string.[
+                    "cmake",
+                    "-S", absolute_sdl_path,
+                    "-B", absolute_artefact_path,
+                    tprint("-DCMAKE_INSTALL_PREFIX=%", absolute_install_path),
+                    tprint("-DCMAKE_PREFIX_PATH=%", absolute_install_path),
+                    "-DCMAKE_BUILD_TYPE=Release",
+                    "-DSDL_STATIC=ON",
+                    "-DSDL_SHARED=OFF",
+                ];
+            case .WINDOWS;
+                config_command := string.[
+                    "cmake",
+                    "-S", absolute_sdl_path,
+                    "-B", absolute_artefact_path,
+                    tprint("-DCMAKE_INSTALL_PREFIX=%", absolute_install_path),
+                    tprint("-DCMAKE_PREFIX_PATH=%", absolute_install_path),
+                    "-DSDL_STATIC=ON",
+                    "-DSDL_SHARED=OFF",
+                    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                    "-DSDL_LIBC=OFF",
+                ];
+        }
+
         result, _, error, _ := run_command(
-            ..string.[
-                "cmake",
-                "-S", absolute_sdl_path,
-                "-B", absolute_artefact_path,
-                tprint("-DCMAKE_INSTALL_PREFIX=%", absolute_install_path),
-                tprint("-DCMAKE_PREFIX_PATH=%", absolute_install_path),
-                "-DCMAKE_BUILD_TYPE=Release",
-            ],
+            ..config_command,
             capture_and_return_output = true,
         );
-
         if error {
             return error;
         }
-
         if result.exit_code != 0 {
             return "Failed to configure cmake";
         }
@@ -72,11 +88,9 @@ build :: () -> error: string {
             ],
             capture_and_return_output = true,
         );
-
         if error {
             return error;
         }
-
         if result.exit_code != 0 {
             return "Failed to install SDL";
         }
@@ -87,21 +101,17 @@ build :: () -> error: string {
             ..string.["cmake", "--install", absolute_artefact_path, "--config", "Release"],
             capture_and_return_output = true,
         );
-
         if error {
             return error;
         }
-
         if result.exit_code != 0 {
             return "Failed to install SDL";
         }
     }
 
-    { // Delete stuff
-        delete_directory(tprint("%/include", absolute_install_path));
-        delete_directory(tprint("%/lib/cmake", absolute_install_path));
-        delete_directory(tprint("%/lib/pkgconfig", absolute_install_path));
-    }
+    delete_directory(tprint("%/include", absolute_install_path));
+    delete_directory(tprint("%/lib/cmake", absolute_install_path));
+    delete_directory(tprint("%/lib/pkgconfig", absolute_install_path));
 
     return "";
 }
