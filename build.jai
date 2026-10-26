@@ -7,6 +7,8 @@
 #import "File";
 #import "Process";
 
+#import,file "compile_shaders.jai";
+
 Config :: struct {
     should_help:             bool;
     should_generate_modules: bool;
@@ -50,6 +52,7 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
         return;
     }
 
+    log("Generating modules...");
     if config.should_generate_modules {
         error := generate_modules();
         if error {
@@ -60,7 +63,16 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
 
     output_path := tprint("%bin/%", #filepath, config.optimization_type);
 
-    print("Building...\n");
+    #if !#exists(JAILS_DIAGNOSTICS_BUILD) {
+        log("Compiling shaders...");
+        error = compile_shaders(config.optimization_type, output_path);
+        if error {
+            fail_compilation_with_message("Failed to compile shaders: %", error);
+            return;
+        }
+    }
+
+    log("Building...");
     error = build(build_options_dc, config, output_path);
     if error {
         fail_compilation_with_message("Failed to build: %", error);
@@ -81,7 +93,7 @@ generate_modules :: () -> error: string {
     ];
 
     for module_metainfo: MODULES_TO_GENERATE {
-        print("Generating %\n", module_metainfo.name);
+        log("Generating %", module_metainfo.name);
 
         result := run_command(
             "jai",
@@ -102,6 +114,11 @@ build :: (
     config:           Config,
     output_path:      string,
 ) -> error: string {
+    log("Building in % mode", config.optimization_type);
+    for plugin_to_create: config.plugins_to_create {
+        log("'%' plugin enabled", plugin_to_create.name);
+    }
+
     w := compiler_create_workspace(EXECUTABLE_NAME);
 
     { // Build options
@@ -130,11 +147,6 @@ build :: (
     ok := make_directory_if_it_does_not_exist(output_path, recursive = true);
     if !ok {
         return tprint("Failed to create build directory '%'", output_path);
-    }
-
-    log("Building in % mode", config.optimization_type);
-    for plugin_to_create: config.plugins_to_create {
-        log("'%' plugin enabled", plugin_to_create.name);
     }
 
     // Building and managing plugins below
