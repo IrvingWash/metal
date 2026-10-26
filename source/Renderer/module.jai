@@ -21,6 +21,8 @@ Renderer :: struct {
     device:              VK.Device;
     allocator:           VMA.Allocator;
 
+    timeline_semaphore_info: Timeline_Semaphore_Info;
+
     swapchain_info:   Swapchain_Info;
     depth_image_info: Image_Info;
 
@@ -47,6 +49,11 @@ Image_Info :: struct {
     image:      VK.Image;
     image_view: VK.Image_View;
     allocation: VMA.Allocation;
+}
+
+Timeline_Semaphore_Info :: struct {
+    semaphore:         VK.Semaphore;
+    next_signal_value: u64;
 }
 
 init :: (
@@ -123,6 +130,13 @@ init :: (
             renderer;
     }
 
+    error, renderer.timeline_semaphore_info = create_timeline_semaphore(renderer.device);
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     error, renderer.swapchain_info = create_swapchain(
         renderer.physical_device,
         renderer.surface,
@@ -148,8 +162,6 @@ init :: (
             renderer;
     }
 
-    // @Todo: global descriptor pool?
-
     return
         "",
         renderer;
@@ -164,6 +176,8 @@ deinit :: (renderer: *Renderer) {
         *renderer.depth_image_info,
     );
     destroy_swapchain(renderer.device, *renderer.swapchain_info);
+
+    VK.destroy_semaphore(renderer.device, renderer.timeline_semaphore_info.semaphore);
 
     VMA.destroy_allocator(renderer.allocator);
 
@@ -199,6 +213,8 @@ DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
 ];
 
+FRAMES_IN_FLIGHT_COUNT :: 2;
+
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
         VK.Extension_Names.DEBUG_UTILS
@@ -213,6 +229,32 @@ DEVICE_EXTENSIONS :: *u8.[
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+create_timeline_semaphore :: (device: VK.Device) -> error: string, Timeline_Semaphore_Info {
+    timeline_semaphore_info: Timeline_Semaphore_Info;
+
+    semaphore_type_create_info :=  VK.Semaphore_Type_Create_Info.{
+        semaphore_type = .TIMELINE,
+        initial_value  = FRAMES_IN_FLIGHT_COUNT,
+    };
+    sempaphore_create_info := VK.Semaphore_Create_Info.{
+        p_next = *semaphore_type_create_info,
+    };
+
+    result:, timeline_semaphore_info.semaphore = VK.create_semaphore(
+        device,
+        *sempaphore_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create timeline semaphore: %", result),
+            timeline_semaphore_info;
+    }
+
+    timeline_semaphore_info.next_signal_value = semaphore_type_create_info.initial_value + 1;
+
+    return "", timeline_semaphore_info;
 }
 
 create_depth_image :: (
@@ -256,6 +298,15 @@ create_swapchain :: (
         desired_image_count := ifx surface_capabilities.max_image_count > 0
             then clamp(2, surface_capabilities.min_image_count, surface_capabilities.max_image_count)
             else max(2, surface_capabilities.min_image_count);
+        if desired_image_count < FRAMES_IN_FLIGHT_COUNT {
+            return
+                tprint(
+                    "The number of swapchain images is less than the number of frames in flight (% vs %)",
+                    desired_image_count,
+                    FRAMES_IN_FLIGHT_COUNT,
+                ),
+                swapchain_info;
+        }
 
         image_extent := ifx surface_capabilities.current_extent.width != U32_MAX {
             surface_capabilities.current_extent;
