@@ -7,12 +7,10 @@ parse_glb_from_memory :: (user_provided_glb: []u8) -> error: string, json: strin
     );
 
     glb_view := user_provided_glb;
-    total_read_bytes: int;
 
     header: *Header;
     {
         header = cast(*Header, glb_view.data);
-        total_read_bytes += Header.SPEC_BYTE_SIZE;
         glb_view.data += Header.SPEC_BYTE_SIZE;
         glb_view.count -= Header.SPEC_BYTE_SIZE;
         RETURN_EMPTY_IF(
@@ -36,7 +34,6 @@ parse_glb_from_memory :: (user_provided_glb: []u8) -> error: string, json: strin
     json: string = ---;
     {
         first_chunk_header := cast(*Chunk_Header, glb_view.data);
-        total_read_bytes += Chunk_Header.SPEC_BYTE_SIZE;
         glb_view.data += Chunk_Header.SPEC_BYTE_SIZE;
         glb_view.count -= Chunk_Header.SPEC_BYTE_SIZE;
         RETURN_EMPTY_IF(
@@ -44,10 +41,10 @@ parse_glb_from_memory :: (user_provided_glb: []u8) -> error: string, json: strin
             "The provided glb is not a single glb file, because it's first chunk is not a json chunk",
         );
         RETURN_EMPTY_IF(
-            first_chunk_header.length + total_read_bytes > header.length,
+            first_chunk_header.length + (user_provided_glb.count - glb_view.count) > header.length,
             "The provided glb is malformed: % chunk ends at % while the header states a smaller length (%)",
             first_chunk_header.type,
-            first_chunk_header.length + total_read_bytes,
+            first_chunk_header.length + (user_provided_glb.count - glb_view.count),
             header.length,
         );
 
@@ -55,24 +52,22 @@ parse_glb_from_memory :: (user_provided_glb: []u8) -> error: string, json: strin
             data  = glb_view.data,
             count = first_chunk_header.length,
         };
-        total_read_bytes += json.count;
         glb_view.data += json.count;
         glb_view.count -= json.count;
     }
 
     binary: []u8;
-    if total_read_bytes + Chunk_Header.SPEC_BYTE_SIZE < header.length {
+    if (user_provided_glb.count - glb_view.count) + Chunk_Header.SPEC_BYTE_SIZE < header.length {
         second_chunk_header := cast(*Chunk_Header, glb_view.data);
-        total_read_bytes += Chunk_Header.SPEC_BYTE_SIZE;
         glb_view.data += Chunk_Header.SPEC_BYTE_SIZE;
         glb_view.count -= Chunk_Header.SPEC_BYTE_SIZE;
 
         if second_chunk_header.type == Chunk_Type.BIN {
             RETURN_EMPTY_IF(
-                second_chunk_header.length + total_read_bytes > header.length,
+                second_chunk_header.length + (user_provided_glb.count - glb_view.count) > header.length,
                 "The provided glb is malformed: % chunk ends at % while the header states a smaller length (%)",
                 second_chunk_header.type,
-                second_chunk_header.length + total_read_bytes,
+                second_chunk_header.length + (user_provided_glb.count - glb_view.count),
                 header.length,
             );
 
