@@ -20,9 +20,9 @@ parse_glb_from_memory :: (user_provided_glb: []u8) -> error: string, json: strin
             MAGIC,
         );
         RETURN_EMPTY_IF(
-            header.version != SUPPORTED_VERSION,
+            header.version != SUPPORTED_GLB_VERSION,
             "Only gltf binary container format of version '%' is supported, but provided glb contained version '%'",
-            SUPPORTED_VERSION,
+            SUPPORTED_GLB_VERSION,
             header.version,
         );
         RETURN_EMPTY_IF(
@@ -100,9 +100,9 @@ load_glb_from_file :: (path: string) -> error: string, json: string, binary: []u
         MAGIC,
     );
     RETURN_EMPTY_IF(
-        header.version != SUPPORTED_VERSION,
+        header.version != SUPPORTED_GLB_VERSION,
         "Only gltf binary container format of version '%' is supported, but file at '%' contained version '%'",
-        SUPPORTED_VERSION,
+        SUPPORTED_GLB_VERSION,
         path,
         header.version,
     );
@@ -172,7 +172,7 @@ load_glb_from_file :: (path: string) -> error: string, json: string, binary: []u
 #scope_file
 
 MAGIC             :: 0x46546C67;
-SUPPORTED_VERSION :: 2;
+SUPPORTED_GLB_VERSION :: 2;
 
 Header :: struct {
     magic: u32;

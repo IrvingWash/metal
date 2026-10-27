@@ -10,7 +10,9 @@
         "modules/SDL3/module.jai",
         "source/Renderer/module.jai",
         "source/Windowing/module.jai",
-        "source/Input/module.jai"
+        "source/Input/module.jai",
+        "source/Gltf/module.jai",
+        "test_gltf.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",
@@ -18,7 +20,8 @@
         "modules",
         "source/Renderer",
         "source/Windowing",
-        "source/Input"
+        "source/Input",
+        "source/Gltf"
     ],
     "auto_insert_parentheses": false,
     "use_symbols_from_local_modules": true

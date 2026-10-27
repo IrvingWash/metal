@@ -115,7 +115,7 @@ build_vma :: () -> error: string {
                 }
             }
         case;
-            assert("Unsupported OS: '%'", OS);
+            assert(false, "Unsupported OS: '%'", OS);
     }
 
     return "";
