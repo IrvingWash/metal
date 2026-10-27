@@ -10,6 +10,8 @@ parse_glb  :: (glb : []u8)              -> error: string, Gltf
 
 load_gltf :: (path: string) -> error: string, Gltf
 load_glb  :: (path: string) -> error: string, Gltf
+
+Also all the types from source/gltf_types.jai
 */
 
 // Use this if the scene is exported into both .gltf and .glb files.
@@ -20,8 +22,15 @@ parse_gltf :: (gltf: string, glb: []u8) -> error: string, Gltf {
 
 // Use this if the scene is exported into a single .glb file.
 parse_glb :: (glb: []u8) -> error: string, Gltf {
-    // @Todo
-    return "", Gltf.{};
+    error, json, binary := parse_glb_from_memory(glb);
+    if error {
+        return
+            error,
+            Gltf.{};
+    }
+
+    error =, gltf := parse_gltf(json, binary);
+    return error, gltf;
 }
 
 // Use this if the scene is exported into both .gltf and .glb files.
@@ -71,4 +80,5 @@ GLB_EXTENSION  :: ".glb";
 #import "Basic";
 #import "File";
 #import "String";
+
 #load "source/glb.jai";
