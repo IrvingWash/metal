@@ -15,7 +15,7 @@ Renderer :: struct {
     timeline_semaphore_info: Timeline_Semaphore_Info;
 
     swapchain_info:    Swapchain_Info;
-    depth_image_info:  Image_Info; // @Todo: Per frame in flight!
+    depth_image_info:  Image_Info;
     render_resolution: VK.Extent_2D;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
@@ -281,6 +281,7 @@ start_drawing :: (renderer: *Renderer) -> error: string {
             return error;
         }
 
+        // @Todo: remove this
         renderer.render_resolution = renderer.swapchain_info.config.image_extent;
 
         error, renderer.depth_image_info = create_depth_image(
@@ -385,7 +386,6 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 },
             },
             // Also transition the depth image
-            // @Todo: do we even need this? Who changes it's layout? Maybe we need to do this just once, when the image is created?
             {
                 src_stage_mask  = .EARLY_FRAGMENT_TESTS,
                 src_access_mask = 0,

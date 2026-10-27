@@ -135,6 +135,7 @@ build :: (
         build_options.write_added_strings    = true;
         build_options.intermediate_path      = output_path;
         build_options.output_path            = output_path;
+        build_options.dead_code_elimination  = .ALL;
         set_optimization(
             *build_options,
             config.optimization_type,
