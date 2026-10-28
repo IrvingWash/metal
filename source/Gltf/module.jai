@@ -77,9 +77,9 @@ read_glb_from_file :: (path: string) -> error: string, Gltf {
                         gltf;
                 }
 
-                gltf.buffers[0].data = binary;
+                gltf.buffers[0].bytes = binary;
 
-                if gltf.buffers[0].data.count < gltf.buffers[0].byte_length {
+                if gltf.buffers[0].bytes.count < gltf.buffers[0].byte_length {
                     return
                         tprint(
                             "The binary size of '%' is less than it's buffer's byte length",
@@ -130,9 +130,9 @@ load_buffers_data :: (buffers: *[]Buffer, main_file_path: string) -> error: stri
                 return tprint("Failed to load bin file at '%'", bin_path);
             }
 
-            buffer.data = cast([]u8, bin);
+            buffer.bytes = cast([]u8, bin);
 
-            if buffer.data.count < buffer.byte_length {
+            if buffer.bytes.count < buffer.byte_length {
                 return
                     tprint(
                         "The binary size of '%' is less than it's buffer's byte length",

@@ -142,7 +142,7 @@ Buffer :: struct {
     extensions:  JSON_Value;
     extras:      JSON_Value;
 
-    data: []u8; @JsonIgnore
+    bytes: []u8; @JsonIgnore
 }
 
 Buffer_View :: struct {

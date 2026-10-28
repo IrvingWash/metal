@@ -7,3 +7,8 @@ Option_Kind :: enum {
     NONE;
     SOME;
 }
+
+set :: (option: *Option($T), value: T) {
+    option.kind = .SOME;
+    option.some = value;
+}
