@@ -8,6 +8,8 @@
         "modules/Jai_Vulkan/module.jai",
         "modules/SDL3/generate.jai",
         "modules/SDL3/module.jai",
+        "modules/Shaderc/module.jai",
+        "modules/Shaderc/generate.jai",
         "source/Renderer/module.jai",
         "source/Windowing/module.jai",
         "source/Input/module.jai",
