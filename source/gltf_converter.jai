@@ -35,17 +35,17 @@ convert_gltf :: (path: string) {
 Model_Dto :: struct {
     name:      string;
 
-    nodes:     []Node_Dto;
+    nodes:     [..]Node_Dto;
     meshes:    [..]Mesh_Dto;
-    materials: []Material_Dto;
-    images:    []Image_Dto;
+    materials: [..]Material_Dto;
+    images:    [..]Image_Dto;
 }
 
 Node_Dto :: struct {
     name:             string;
 
     parent_index:     Option(u32);
-    children_indices: []u32;
+    children_indices: [..]u32;
 
     first_mesh_index: Option(u32);
     mesh_count:       u32;
@@ -56,8 +56,8 @@ Node_Dto :: struct {
 Mesh_Dto :: struct {
     name: string;
 
-    vertices: []Vertex_Dto;
-    indices:  []u32;
+    vertices: [..]Vertex_Dto;
+    indices:  [..]u32;
     topology: Gltf.Mesh.Primitive.Topology_Mode = .TRIANGLES;
 
     min: Vector3;
@@ -72,6 +72,7 @@ Vertex_Dto :: struct {
     uv0:      Vector2;
     uv1:      Vector2;
     tangent:  Vector4;
+    color:    Vector4 = { 1, 1, 1, 1 };
 }
 
 Material_Dto :: struct {
@@ -123,7 +124,7 @@ Texture_Dto :: struct {
 Image_Dto :: union kind: enum { PATH; DATA; } {
     .PATH,, path: string;
     .DATA,, data: struct {
-        data:      []u8;
+        data:      [..]u8;
         mime_type: string;
     };
 };
@@ -145,26 +146,190 @@ convert_glft_primitive_to_mesh_dto :: (
 
     if gltf_primitive._indices != Gltf.SENTINEL {
         gltf_indices_accessor := gltf.accessors[gltf_primitive._indices];
-        mesh_dto.indices = parse_indices(gltf, gltf_primitive, gltf_indices_accessor);
+        mesh_dto.indices = parse_gltf_indices(gltf, gltf_indices_accessor);
+    }
+
+    if gltf_primitive.attributes._position != Gltf.SENTINEL {
+        gltf_position_accessor := gltf.accessors[gltf_primitive.attributes._position];
+        array_resize(*mesh_dto.vertices, gltf_position_accessor.count);
+
+        parse_gltf_attribute(
+            gltf,
+            gltf_position_accessor,
+            *mesh_dto.vertices[0].position,
+            size_of(Vertex_Dto),
+            "POSITION",
+        );
+    } else {
+        assert(false, "No POSITION attribute");
+    }
+    if gltf_primitive.attributes._normal != Gltf.SENTINEL {
+        gltf_normal_accessor := gltf.accessors[gltf_primitive.attributes._normal];
+        assert(gltf_normal_accessor.count == mesh_dto.vertices.count, "There is less normals than positions");
+        parse_gltf_attribute(
+            gltf,
+            gltf_normal_accessor,
+            *mesh_dto.vertices[0].normal,
+            size_of(Vertex_Dto),
+            "NORMAL",
+        );
+    }
+    if gltf_primitive.attributes._tangent != Gltf.SENTINEL {
+        gltf_tangent_accessor := gltf.accessors[gltf_primitive.attributes._tangent];
+        assert(gltf_tangent_accessor.count == mesh_dto.vertices.count, "There is less tangents than positions");
+        parse_gltf_attribute(
+            gltf,
+            gltf_tangent_accessor,
+            *mesh_dto.vertices[0].tangent,
+            size_of(Vertex_Dto),
+            "TANGENT",
+        );
+    }
+    if gltf_primitive.attributes._tex_coord_0 != Gltf.SENTINEL {
+        gltf_tex_coord_0_accessor := gltf.accessors[gltf_primitive.attributes._tex_coord_0];
+        assert(gltf_tex_coord_0_accessor.count == mesh_dto.vertices.count, "There is less tex_coord_0s than positions");
+        parse_gltf_attribute(
+            gltf,
+            gltf_tex_coord_0_accessor,
+            *mesh_dto.vertices[0].uv0,
+            size_of(Vertex_Dto),
+            "TEXCOORD_0",
+        );
+    }
+    if gltf_primitive.attributes._tex_coord_1 != Gltf.SENTINEL {
+        gltf_tex_coord_1_accessor := gltf.accessors[gltf_primitive.attributes._tex_coord_1];
+        assert(gltf_tex_coord_1_accessor.count == mesh_dto.vertices.count, "There is less tex_coord_1s than positions");
+        parse_gltf_attribute(
+            gltf,
+            gltf_tex_coord_1_accessor,
+            *mesh_dto.vertices[0].uv1,
+            size_of(Vertex_Dto),
+            "TEXCOORD_1",
+        );
+    }
+    if gltf_primitive.attributes._color_0 != Gltf.SENTINEL {
+        gltf_color_0_accessor := gltf.accessors[gltf_primitive.attributes._color_0];
+        assert(gltf_color_0_accessor.count == mesh_dto.vertices.count, "There is less color_0s than positions");
+        parse_gltf_attribute(
+            gltf,
+            gltf_color_0_accessor,
+            *mesh_dto.vertices[0].color,
+            size_of(Vertex_Dto),
+            "COLOR_0",
+        );
     }
 
     return mesh_dto;
 }
 
-parse_indices :: (gltf: Gltf.Gltf, gltf_primitive: Gltf.Mesh.Primitive, gltf_indices_accessor: Gltf.Accessor) -> []u32 {
+parse_gltf_attribute :: (
+    gltf:                       Gltf.Gltf,
+    gltf_accessor:              Gltf.Accessor,
+    destination:                *$Result_Type,
+    destination_stride:         int,
+    attribute_key_for_printing: string,
+) {
+    if #complete gltf_accessor.type == { // @SpecValidation
+        case .SCALAR;
+            assert(
+                IsScalar(Result_Type),
+                "The % accessor is of scalar type, but the provided Result_Type is not scalar",
+                attribute_key_for_printing,
+            );
+        case .VEC2;
+            assert(
+                Result_Type == Vector2,
+                "The % accessor is of VEC2 type, but the provided Result_Type is not Vector2",
+                attribute_key_for_printing,
+            );
+        case .VEC3;
+            assert(
+                Result_Type == Vector3,
+                "The % accessor is of VEC3 type, but the provided Result_Type is not Vector3",
+                attribute_key_for_printing,
+            );
+        case .VEC4;
+            assert(
+                Result_Type == Vector4,
+                "The % accessor is of VEC4 type, but the provided Result_Type is not Vector4",
+                attribute_key_for_printing,
+            );
+        case .MAT2;
+            assert(
+                Result_Type == Matrix2,
+                "The % accessor is of MAT2 type, but the provided Result_Type is not Mat2",
+                attribute_key_for_printing,
+            );
+        case .MAT3;
+            assert(
+                Result_Type == Matrix3,
+                "The % accessor is of MAT3 type, but the provided Result_Type is not Mat3",
+                attribute_key_for_printing,
+            );
+        case .MAT4;
+            assert(
+                Result_Type == Matrix4,
+                "The % accessor is of MAT4 type, but the provided Result_Type is not Mat4",
+                attribute_key_for_printing,
+            );
+    }
+    assert(gltf_accessor.component_type == .FLOAT, "Only floats are supported");
+
+    assert(gltf_accessor.sparse._count == Gltf.SENTINEL, "Sparse accessors are not supported");
+    assert(gltf_accessor._buffer_view != Gltf.SENTINEL, "Got an accessor without a buffer view");
+
+    gltf_buffer_view := gltf.buffer_views[gltf_accessor._buffer_view];
+    gltf_buffer := gltf.buffers[gltf_buffer_view.buffer];
+
+    component_byte_size := get_size_from_gltf_component_type(gltf_accessor.component_type);
+    component_count := get_component_count_from_gltf_accessor_type(gltf_accessor.type);
+    element_byte_size := component_count * component_byte_size;
+
+    assert(element_byte_size == size_of(Result_Type), "The size of the element doesn't matche the size of Result_Type");
+
+    byte_offset := gltf_accessor.byte_offset + gltf_buffer_view.byte_offset;
+
+    step: int = ifx gltf_buffer_view._byte_stride != Gltf.SENTINEL
+        then gltf_buffer_view._byte_stride
+        else element_byte_size;
+
+    { // @SpecValidation
+        assert(gltf_accessor.count > 0, "The accessor count must be more than 0");
+
+        span := (gltf_accessor.count - 1) * step + element_byte_size;
+
+        assert(
+            byte_offset + span <= gltf_buffer.bytes.count,
+            "The span of the attribute is more than the number of bytes",
+        );
+        assert(
+            gltf_accessor.byte_offset + span <= gltf_buffer_view.byte_length,
+            "The span of the attribute is more than the byte length of the buffer view",
+        );
+    }
+
+    gltf_attribute_bytes := gltf_buffer.bytes.data + byte_offset;
+
+    for 0 .. gltf_accessor.count - 1 {
+        target := cast(*Result_Type, cast(*u8, destination) + it * destination_stride);
+        target.* = cast(*Result_Type, it * step + gltf_attribute_bytes);
+    }
+};
+
+parse_gltf_indices :: (gltf: Gltf.Gltf, gltf_indices_accessor: Gltf.Accessor) -> [..]u32 {
     assert(gltf_indices_accessor.sparse._count == Gltf.SENTINEL, "Sparse accessors are not supported");
     assert(gltf_indices_accessor._buffer_view != Gltf.SENTINEL, "Got an accessor without a buffer view");
-    assert(gltf_indices_accessor.type == .SCALAR, "Indices accessor must be be scalar");
+    assert(gltf_indices_accessor.type == .SCALAR, "Indices accessor must be be scalar"); // @SpecValidation
     gltf_indices_buffer_view := gltf.buffer_views[gltf_indices_accessor._buffer_view];
-    assert(gltf_indices_buffer_view._byte_stride == Gltf.SENTINEL, "Indices accessor should not have byte_stride");
+    assert(gltf_indices_buffer_view._byte_stride == Gltf.SENTINEL, "Indices accessor should not have byte_stride"); // @SpecValidation
     gltf_indices_buffer := gltf.buffers[gltf_indices_buffer_view.buffer];
 
-    component_size := get_size_from_gltf_component_type(gltf_indices_accessor.component_type);
-    byte_count := gltf_indices_accessor.count * component_size;
-    data_offset := gltf_indices_accessor.byte_offset + gltf_indices_buffer_view.byte_offset;
+    component_byte_size := get_size_from_gltf_component_type(gltf_indices_accessor.component_type);
+    byte_count := gltf_indices_accessor.count * component_byte_size;
+    byte_offset := gltf_indices_accessor.byte_offset + gltf_indices_buffer_view.byte_offset;
 
-    {
-        span_in_buffer := data_offset + byte_count;
+    { // @SpecValidation
+        span_in_buffer := byte_offset + byte_count;
         span_in_view   := gltf_indices_accessor.byte_offset + byte_count;
 
         assert(
@@ -181,22 +346,23 @@ parse_indices :: (gltf: Gltf.Gltf, gltf_primitive: Gltf.Mesh.Primitive, gltf_ind
         );
     }
 
-    gltf_indices_bytes := gltf_indices_buffer.bytes.data + data_offset;
+    gltf_indices_bytes := gltf_indices_buffer.bytes.data + byte_offset;
 
-    result := NewArray(gltf_indices_accessor.count, u32, initialized = false);
+    result: [..]u32;
+    array_resize(*result, gltf_indices_accessor.count, initialize = false);
     if #complete gltf_indices_accessor.component_type == {
         case .BYTE; #through;
         case .SHORT; #through;
         case .FLOAT;
-            assert(false, "Indices component type can't be BYTE, SHORT or FLOAT");
+            assert(false, "Indices component type can't be BYTE, SHORT or FLOAT"); // @SpecValidation
         case .UNSIGNED_BYTE;
-            for 0 .. result.count - 1 {
-                result[it] = gltf_indices_bytes[it];
+            for *result_element: result {
+                result_element.* = gltf_indices_bytes[it_index];
             }
         case .UNSIGNED_SHORT;
             casted := cast(*u16, gltf_indices_bytes);
-            for 0 .. result.count - 1 {
-                result[it] = casted[it];
+            for *result_element: result {
+                result_element.* = casted[it_index];
             }
         case .UNSIGNED_INT;
             memcpy(
