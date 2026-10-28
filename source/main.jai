@@ -8,7 +8,6 @@
 Windowing     :: #import,dir "Windowing";
 Input         :: #import,dir "Input";
 Renderer      :: #import,dir "Renderer"()(Window_Type = *Windowing.Window, APPLICATION_NAME = "metal", DEBUG = DEBUG);
-Asset_Manager :: #import,dir "Asset_Manager";
 
 State :: struct {
     window:   *Windowing.Window;
@@ -59,8 +58,6 @@ init :: () {
     state.window = Windowing.create_window("metal", 800, 600, .RESIZABLE | .VULKAN);
     assert(state.window != null, "Failed to create window");
 
-    Asset_Manager.init();
-
     Input.init();
 
     error:, state.renderer = Renderer.init(
@@ -68,7 +65,7 @@ init :: () {
         Windowing.get_vulkan_instance_extensions,
         Windowing.get_renderable_size,
         Windowing.create_vulkan_surface,
-        Asset_Manager.read_shader_from_file,
+        read_shader_from_file,
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
 }
@@ -78,10 +75,28 @@ deinit :: () {
 
     Input.deinit();
 
-    Asset_Manager.deinit();
-
     Windowing.destroy_window(state.window);
     Windowing.deinit();
+}
+
+read_shader_from_file :: (name: string) -> error: string, shader: string {
+    System :: #import "System";
+    String :: #import "String";
+    File   :: #import "File";
+
+    exe_path := System.get_path_of_running_executable();
+
+    root_path := String.path_strip_filename(exe_path);
+    path := String.path_join(root_path, "shaders", name,, temp);
+
+    content, ok := File.read_entire_file(path);
+    if !ok {
+        return
+            tprint("Failed to read shader file at '%'", path),
+            content;
+    }
+
+    return "", content;
 }
 
 setup_formatting :: () {
