@@ -6,12 +6,12 @@ API
 load_gltf :: (path: string) -> error: string, Gltf
 load_glb  :: (path: string) -> error: string, Gltf
 
-Also all the types from source/gltf_types.jai
+Also all the types from gltf_types.jai
 */
 
-#load "source/gltf_types.jai";
+#load "gltf_types.jai";
 
-load_gltf :: (path: string) -> error: string, Gltf {
+read_gltf_from_file :: (path: string) -> error: string, Gltf {
     json, ok := read_entire_file(path,, temp);
     if !ok {
         return
@@ -40,8 +40,8 @@ load_gltf :: (path: string) -> error: string, Gltf {
     return "", gltf;
 }
 
-load_glb :: (path: string) -> error: string, Gltf {
-    error, json, binary := load_glb_from_file(path);
+read_glb_from_file :: (path: string) -> error: string, Gltf {
+    error, json, binary := parse_glb_from_file(path);
     if error {
         return
             error,
@@ -190,4 +190,4 @@ parse_gltf :: (json: string) -> error: string, Gltf {
 #import "String";
 #import "Jaison";
 
-#load "source/glb.jai";
+#load "glb.jai";

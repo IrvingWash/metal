@@ -43,4 +43,3 @@ The build artefacts are placed into `./bin/<OPTIMIZATION_TYPE>` directory
 
 `source` - The game and our own modules
 `modules` - External dependencies and bindings
-`test_gltf.jai` - Tests for `source/Gltf`

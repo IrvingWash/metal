@@ -12,7 +12,7 @@
         "source/Windowing/module.jai",
         "source/Input/module.jai",
         "source/Gltf/module.jai",
-        "test_gltf.jai"
+        "source/Asset_Manager/module.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",
@@ -21,7 +21,8 @@
         "source/Renderer",
         "source/Windowing",
         "source/Input",
-        "source/Gltf"
+        "source/Gltf",
+        "source/Asset_Manager"
     ],
     "auto_insert_parentheses": false,
     "use_symbols_from_local_modules": true

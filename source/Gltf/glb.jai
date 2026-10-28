@@ -79,7 +79,7 @@ parse_glb_from_memory :: (user_provided_glb: []u8) -> error: string, json: strin
     return "", json, binary;
 }
 
-load_glb_from_file :: (path: string) -> error: string, json: string, binary: []u8 {
+parse_glb_from_file :: (path: string) -> error: string, json: string, binary: []u8 {
     file, ok := file_open(path);
     RETURN_EMPTY_IF(!ok, "Failed to open file at '%'", path);
     defer file_close(*file);
@@ -175,9 +175,9 @@ MAGIC             :: 0x46546C67;
 SUPPORTED_GLB_VERSION :: 2;
 
 Header :: struct {
-    magic: u32;
+    magic:   u32;
     version: u32;
-    length: u32; // The length of the whole thing, includes everything
+    length:  u32; // The length of the whole thing, includes everything
 
     SPEC_BYTE_SIZE :: 12;
 }
