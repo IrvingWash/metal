@@ -24,8 +24,6 @@ Gltf :: struct {
     textures: []Texture;
     extensions: JSON_Value;
     extras: JSON_Value;
-
-    buffer: []u8; @JsonIgnore
 }
 
 Accessor :: struct {
@@ -143,6 +141,8 @@ Buffer :: struct {
     name: string;
     extensions: JSON_Value;
     extras: JSON_Value;
+
+    data: []u8; @JsonIgnore
 }
 
 Buffer_View :: struct {
