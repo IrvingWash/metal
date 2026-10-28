@@ -10,3 +10,6 @@
 [submodule "modules/Jaison"]
 	path = modules/Jaison
 	url = git@github.com:rluba/jaison.git
+[submodule "modules/Shaderc/shaderc"]
+	path = modules/Shaderc/shaderc
+	url = git@github.com:google/shaderc.git
