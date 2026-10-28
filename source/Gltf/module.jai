@@ -3,8 +3,8 @@
 /*
 API
 
-load_gltf :: (path: string) -> error: string, Gltf
-load_glb  :: (path: string) -> error: string, Gltf
+read_gltf_from_file :: (path: string) -> error: string, Gltf
+read_glb_from_file  :: (path: string) -> error: string, Gltf
 
 Also all the types from gltf_types.jai
 */
