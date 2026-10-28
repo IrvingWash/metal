@@ -187,12 +187,22 @@ Include_Type :: enum u32 {
 }
 
 Target_Env :: enum u32 {
-    SHADERC_TARGET_ENV_VULKAN;
-    SHADERC_TARGET_ENV_OPENGL;
-    SHADERC_TARGET_ENV_OPENGL_COMPAT;
-    SHADERC_TARGET_ENV_WEBGPU;
-    SHADERC_TARGET_ENV_DEFAULT :: SHADERC_TARGET_ENV_VULKAN;
+    VULKAN;
+    OPENGL;
+    OPENGL_COMPAT;
+    WEBGPU;
+    DEFAULT :: VULKAN;
 }
+
+Env_Version :: enum u32 {
+  VULKAN_1_0 :: ((1 << 22));
+  VULKAN_1_1 :: ((1 << 22) | (1 << 12));
+  VULKAN_1_2 :: ((1 << 22) | (2 << 12));
+  VULKAN_1_3 :: ((1 << 22) | (3 << 12));
+  VULKAN_1_4 :: ((1 << 22) | (4 << 12));
+  OPENGL_4_5 :: 450;
+  WEBGPU; // Deprecated, WebGPU env never defined versions
+};
 
 Spirv_Version :: enum {
     _1_0 :: 0x010000;
@@ -256,18 +266,12 @@ compile_options_clone :: (options: Compile_Options_T) -> Compile_Options_T #fore
 compile_options_release :: (options: Compile_Options_T) -> void #foreign libshaderc "shaderc_compile_options_release";
 
 compile_options_add_macro_definition :: (
-    options: Compile_Options_T,
-    name:    string,
-    value:   string,
-) {
-    shaderc_compile_options_add_macro_definition(
-        options,
-        name.data,
-        cast(u64, name.count),
-        value.data,
-        cast(u64, value.count),
-    );
-}
+    options:      Compile_Options_T,
+    name:         *u8,
+    name_length:  u64,
+    value:        *u8,
+    value_length: u64,
+) -> void #foreign libshaderc "shaderc_compile_options_add_macro_definition";
 
 compile_options_set_source_language :: (
     options: Compile_Options_T,
@@ -311,7 +315,7 @@ compile_options_set_suppress_warnings :: (
 compile_options_set_target_env :: (
     options: Compile_Options_T,
     target:  Target_Env,
-    version: u32,
+    version: Env_Version,
 ) -> void #foreign libshaderc "shaderc_compile_options_set_target_env";
 
 compile_options_set_target_spirv :: (
@@ -477,14 +481,6 @@ parse_version_profile :: (str: *u8, version: *s32, profile: *Profile) -> bool #f
 
 
 #scope_file
-
-shaderc_compile_options_add_macro_definition :: (
-    options: Compile_Options_T,
-    name: *u8,
-    name_length: u64,
-    value: *u8,
-    value_length: u64,
-) -> void #foreign libshaderc;
 
 #if OS == {
     case .LINUX;
