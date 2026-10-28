@@ -89,7 +89,11 @@ generate_modules :: () -> error: string {
         {
             name = "SDL3",
             relative_path = "modules/SDL3/generate.jai",
-        }
+        },
+        {
+            name = "Shaderc",
+            relative_path = "modules/Shaderc/generate.jai",
+        },
     ];
 
     for module_metainfo: MODULES_TO_GENERATE {

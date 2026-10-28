@@ -4,20 +4,28 @@
 #import "Basic";
 #import "File";
 
-SHADERC_PATH         :: #run path_join(#filepath, "shaderc",, temp);
+SHADERC_PATH            :: #run path_join(#filepath, "shaderc",, temp);
+
 BINARY_OUTPUT_PATH   :: #run path_join(#filepath, tprint("%", OS),, temp);
 CMAKE_ARTEFACTS_PATH :: #run path_join(#filepath, "cmake_build",, temp);
 
 #run {
     set_build_options_dc({ do_output = false });
 
+    error := build();
+    if error {
+        log_error(error);
+        exit(1);
+    }
+}
+
+build :: () -> error: string {
     result := run_command(
         "python3",
         path_join(SHADERC_PATH, "utils", "git-sync-deps",, temp),
     );
     if result.exit_code != 0 {
-        log_error("Failed\n");
-        exit(1);
+        return "Failed to sync deps";
     }
 
     #if OS_IS_UNIX {
@@ -32,8 +40,7 @@ CMAKE_ARTEFACTS_PATH :: #run path_join(#filepath, "cmake_build",, temp);
             tprint("-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=%", BINARY_OUTPUT_PATH),
         );
         if result.exit_code != 0 {
-            log_error("Failed\n");
-            exit(1);
+            return "Failed to configure cmake";
         }
 
         result = run_command(
@@ -42,12 +49,16 @@ CMAKE_ARTEFACTS_PATH :: #run path_join(#filepath, "cmake_build",, temp);
             "--target", "shaderc_shared",
         );
         if result.exit_code != 0 {
-            log_error("Failed\n");
-            exit(1);
+            return "Failed to build";
         }
     } else {
         #assert false, "Unsupported OS";
     }
 
-    delete_directory(CMAKE_ARTEFACTS_PATH);
+    ok := delete_directory(CMAKE_ARTEFACTS_PATH);
+    if !ok {
+        return tprint("Failed to delete artefacts directory at '%'", CMAKE_ARTEFACTS_PATH);
+    }
+
+    return "";
 }

@@ -96,3 +96,4 @@ SHADERS :: Shader.[
 #import "File";
 #import "Process";
 #import "Compiler";
+Shaderc :: #import "Shaderc";
