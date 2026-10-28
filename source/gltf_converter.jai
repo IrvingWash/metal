@@ -1,3 +1,5 @@
+// @Todo: Compute normals!
+
 convert_gltf :: (path: string) {
     error: string = ---;
     gltf: Gltf.Gltf = ---;
@@ -160,6 +162,23 @@ convert_glft_primitive_to_mesh_dto :: (
             size_of(Vertex_Dto),
             "POSITION",
         );
+
+        assert( // @SpecValidation
+            gltf_position_accessor.min.count == 3
+            && gltf_position_accessor.max.count == 3,
+            "min and max for a primitive are not defined"
+        );
+
+        mesh_dto.min = {
+            gltf_position_accessor.min[0],
+            gltf_position_accessor.min[1],
+            gltf_position_accessor.min[2],
+        };
+        mesh_dto.max = {
+            gltf_position_accessor.max[0],
+            gltf_position_accessor.max[1],
+            gltf_position_accessor.max[2],
+        };
     } else {
         assert(false, "No POSITION attribute");
     }
