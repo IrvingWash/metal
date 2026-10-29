@@ -1,6 +1,6 @@
-GLTF_EXTENSION :: ".gltf";
-GLB_EXTENSION  :: ".glb";
-BIN_EXTENSION  :: ".bin";
+GLTF_FILE_EXTENSION :: "gltf";
+GLB_FILE_EXTENSION  :: "glb";
+BIN_FILE_EXTENSION  :: "bin";
 
 SUPPORTED_EXTENSIONS :: string.[];
 

@@ -1,4 +1,9 @@
-convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
+GLTF_FILE_EXTENSIONS :: string.[
+    Gltf.GLTF_FILE_EXTENSION,
+    Gltf.GLB_FILE_EXTENSION,
+];
+
+convert_gltf :: (path: string, $validate: bool = false) -> error: string, Model_Dto {
     assert(
         context.allocator.proc != temporary_allocator_proc,
         "Temp allocator is forbidden for this procedure, because it's auto_released here",
@@ -8,13 +13,21 @@ convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
 
     error: string = ---;
     gltf: Gltf.Gltf = ---;
-    if ends_with(path, Gltf.GLTF_EXTENSION) {
+    if ends_with(path, Gltf.GLTF_FILE_EXTENSION) {
         error, gltf = Gltf.read_gltf_from_file(path, validate,, temp);
     } else {
         error, gltf = Gltf.read_glb_from_file(path, validate,, temp);
     }
-    assert(!error, error);
-    assert(gltf.scenes.count == 1, "GLTF at % has multiple scenes", path);
+    if error {
+        return
+            error,
+            .{};
+    }
+    if gltf.scenes.count != 1 {
+        return
+            tprint("GLTF at % has multiple scenes", path),
+            .{};
+    }
 
     model_dto: Model_Dto;
 
@@ -87,7 +100,7 @@ convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
         }
     }
 
-    return model_dto;
+    return "", model_dto;
 }
 
 
@@ -777,4 +790,3 @@ get_component_count_from_gltf_accessor_type :: (gltf_accessor_type: Gltf.Accesso
 
 #import "stb_image";
 Gltf :: #import,dir "../Gltf";
-#import,dir "../Option";

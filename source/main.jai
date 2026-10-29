@@ -16,7 +16,7 @@ Renderer      :: #import,dir "Renderer"()(
     APPLICATION_NAME = "metal",
     DEBUG            = DEBUG,
 );
-Asset_Manager :: #import,dir "Asset_Manager";
+Asset_Manager :: #import,dir "Asset_Manager"()(VALIDATE = DEBUG);
 
 State :: struct {
     window:        *Windowing.Window;
@@ -37,6 +37,9 @@ main :: () {
 
     init();
     defer deinit();
+
+    error := Asset_Manager.upload_model("assets/models/Fox/gltf/Fox.gltf");
+    assert(!error, error);
 
     while !state.should_quit {
         process_input();

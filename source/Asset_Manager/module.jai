@@ -1,3 +1,5 @@
+#module_parameters()(VALIDATE: bool = false);
+
 Asset_Manager :: struct {
     root_path:    string;
     shaders_path: string;
@@ -37,6 +39,29 @@ get_compiled_shader :: (asset_manager: Asset_Manager, name: string) -> error: st
     return "", content;
 }
 
+// @Todo: In the future, this will just upload our own binaries.
+// The convertation would be run via a script, like shader compilation
+upload_model :: (path: string) -> error: string {
+    model_dto: Option(Model_Dto);
+
+    extension := path_extension(path);
+    if array_find(GLTF_FILE_EXTENSIONS, extension) {
+        error, result := convert_gltf(path, VALIDATE);
+        if error {
+            return error;
+        }
+
+        set(*model_dto, result);
+    }
+
+    if model_dto.kind == .NONE {
+        return tprint("Unsupported model file extension: %", path);
+    }
+
+    // @Todo
+
+    return "";
+}
 
 
 
@@ -47,6 +72,7 @@ get_compiled_shader :: (asset_manager: Asset_Manager, name: string) -> error: st
 #import "String";
 #import "Math";
 #import "File";
+#import,dir "../Option";
 
 #load "model_dto.jai";
 #load "gltf_converter.jai";
