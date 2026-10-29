@@ -11,9 +11,14 @@
 
 Windowing     :: #import,dir "Windowing";
 Input         :: #import,dir "Input";
-Renderer      :: #import,dir "Renderer"()(Window_Type = *Windowing.Window, APPLICATION_NAME = "metal", DEBUG = DEBUG);
+Renderer      :: #import,dir "Renderer"()(
+    Window_Type      = *Windowing.Window,
+    APPLICATION_NAME = "metal",
+    DEBUG            = DEBUG,
+);
 
-#load "gltf_converter.jai";
+Model_Dto :: #import,file "Model_Dto.jai";
+#import,file "Gltf_Converter.jai";
 
 State :: struct {
     window:   *Windowing.Window;
@@ -34,8 +39,14 @@ main :: () {
     init();
     defer deinit();
 
-    model_dto := convert_gltf("assets/models/Fox/glb/Fox.glb");
-    print_vars(model_dto);
+    #import "Flat_Pool";
+    pool: Flat_Pool;
+    allocator: Allocator;
+    allocator.data = *pool;
+    allocator.proc = flat_pool_allocator_proc;
+
+    model_dto := convert_gltf("assets/models/Fox/gltf/Fox.gltf", validate = DEBUG);
+    Model_Dto.destroy(*model_dto);
 
     while !state.should_quit {
         process_input();

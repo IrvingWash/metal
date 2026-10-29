@@ -1,5 +1,3 @@
-#module_parameters(DEBUG: bool = false);
-
 GLTF_EXTENSION :: ".gltf";
 GLB_EXTENSION  :: ".glb";
 BIN_EXTENSION  :: ".bin";
