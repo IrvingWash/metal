@@ -1,7 +1,7 @@
-convert_gltf :: (path: string) {
+convert_gltf :: (path: string) -> Model_Dto {
     error: string = ---;
     gltf: Gltf.Gltf = ---;
-    if ends_with(path, "gltf") {
+    if ends_with(path, Gltf.GLTF_EXTENSION) {
         error, gltf = Gltf.read_gltf_from_file(path, validate = DEBUG);
     } else {
         error, gltf = Gltf.read_glb_from_file(path, validate = DEBUG);
@@ -26,6 +26,18 @@ convert_gltf :: (path: string) {
             array_add(*model_dto.meshes, mesh_dto);
         }
     }
+
+    for gltf_image: gltf.images {
+        image_dto := convert_gltf_image_to_image_dto(
+            gltf,
+            gltf_image,
+            path,
+            it_index,
+        );
+        array_add(*model_dto.images, image_dto);
+    }
+
+    return model_dto;
 }
 
 
@@ -121,13 +133,91 @@ Texture_Dto :: struct {
     wrap_t:     Gltf.Sampler.Wrap_Mode  = .REPEAT;
 }
 
-Image_Dto :: union kind: enum { PATH; DATA; } {
-    .PATH,, path: string;
-    .DATA,, data: struct {
-        data:      [..]u8;
-        mime_type: string;
-    };
+Image_Dto :: struct {
+    identifier: string;
+    bytes:      [..]u8;
+
+    width:         u32;
+    height:        u32;
+    channel_count: u8;
 };
+
+convert_gltf_image_to_image_dto :: (
+    gltf:             Gltf.Gltf,
+    gltf_image:       Gltf.Image,
+    gltf_path:        string,
+    gltf_image_index: int,
+) -> Image_Dto {
+    assert(
+        !starts_with(gltf_image.uri, Gltf.DATA_URI_PREFIX),
+        "Images in data uris are not supported (%)",
+        gltf_path,
+    );
+
+    image_dto: Image_Dto;
+
+    image_dto.identifier = sprint(
+        "%-%-%-%",
+        gltf_path,
+        gltf_image.uri,
+        gltf_image_index,
+        gltf_image.name,
+    );
+
+    width, height: s32;
+    channel_count: s32;
+    DESIRED_CHANNEL_COUNT :: 4;
+    loaded_bytes: *u8;
+
+    if gltf_image.uri {
+        path := path_join(
+            path_strip_filename(gltf_path),
+            gltf_image.uri,,
+            temp
+        );
+
+        loaded_bytes = stbi_load(
+            temp_c_string(path),
+            *width, *height,
+            *channel_count,
+            DESIRED_CHANNEL_COUNT,
+        );
+    } else if gltf_image._buffer_view != Gltf.SENTINEL {
+        gltf_image_buffer_view := gltf.buffer_views[gltf_image._buffer_view];
+        gltf_image_buffer      := gltf.buffers[gltf_image_buffer_view.buffer];
+        gltf_image_data        := gltf_image_buffer.bytes.data + gltf_image_buffer_view.byte_offset;
+
+        loaded_bytes = stbi_load_from_memory(
+            gltf_image_data,
+            cast(s32, gltf_image_buffer_view.byte_length),
+            *width, *height,
+            *channel_count,
+            DESIRED_CHANNEL_COUNT,
+        );
+    } else {
+        assert(
+            false,
+            "The image % has neither uri, nor buffer view",
+            image_dto.identifier,
+        );
+    }
+
+    if loaded_bytes == null {
+        failure_reason := stbi_failure_reason();
+        assert(false, "Failed to load image '%': %", image_dto.identifier, to_string(failure_reason));
+    }
+    defer stbi_image_free(loaded_bytes);
+
+    image_dto.width         = cast(u32, width);
+    image_dto.height        = cast(u32, height);
+    image_dto.channel_count = DESIRED_CHANNEL_COUNT;
+
+    image_dto.bytes.count = width * height * DESIRED_CHANNEL_COUNT;
+    image_dto.bytes.data = alloc(image_dto.bytes.count);
+    memcpy(image_dto.bytes.data, loaded_bytes, image_dto.bytes.count);
+
+    return image_dto;
+}
 
 convert_glft_primitive_to_mesh_dto :: (
     gltf:                 Gltf.Gltf,
@@ -466,5 +556,6 @@ get_component_count_from_gltf_accessor_type :: (gltf_accessor_type: Gltf.Accesso
 
 #import "String";
 #import "Math";
+#import "stb_image";
 Gltf :: #import,dir "Gltf";
 #import,dir "Option";

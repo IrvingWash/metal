@@ -5,9 +5,15 @@
     TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG,
 );
 
+#if DEBUG {
+    #import "Print_Vars";
+}
+
 Windowing     :: #import,dir "Windowing";
 Input         :: #import,dir "Input";
 Renderer      :: #import,dir "Renderer"()(Window_Type = *Windowing.Window, APPLICATION_NAME = "metal", DEBUG = DEBUG);
+
+#load "gltf_converter.jai";
 
 State :: struct {
     window:   *Windowing.Window;
@@ -27,6 +33,8 @@ main :: () {
 
     init();
     defer deinit();
+
+    model_dto := convert_gltf("assets/models/Fox/glb/Fox.glb",, temp);
 
     while !state.should_quit {
         process_input();

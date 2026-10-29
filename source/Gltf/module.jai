@@ -1,5 +1,13 @@
 #module_parameters(DEBUG: bool = false);
 
+GLTF_EXTENSION :: ".gltf";
+GLB_EXTENSION  :: ".glb";
+BIN_EXTENSION  :: ".bin";
+
+SUPPORTED_EXTENSIONS :: string.[];
+
+DATA_URI_PREFIX :: "data:";
+
 /*
 API
 
@@ -122,14 +130,6 @@ read_glb_from_file :: (path: string, $validate: bool = false) -> error: string, 
 
 #scope_file
 
-GLTF_EXTENSION :: ".gltf";
-GLB_EXTENSION  :: ".glb";
-BIN_EXTENSION  :: ".bin";
-
-SUPPORTED_EXTENSIONS :: string.[];
-
-DATA_URI_PREFIX :: "data:";
-
 load_buffers_data :: (buffers: *[]Buffer, main_file_path: string) -> error: string {
     root_path := path_strip_filename(main_file_path);
 
@@ -158,7 +158,10 @@ load_buffers_data :: (buffers: *[]Buffer, main_file_path: string) -> error: stri
                     );
             }
         } else {
-            return "The gltf has data-uri binary, we don't support those";
+            return tprint(
+                "The gltf at % has data-uri binary, we don't support those",
+                main_file_path,
+            );
         }
     }
 
