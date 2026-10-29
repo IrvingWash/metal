@@ -13,18 +13,18 @@ Renderer :: struct {
     allocator:           VMA.Allocator;
 
     timeline_semaphore_info: Timeline_Semaphore_Info;
+    transient_command_pool:  VK.Command_Pool;
 
     swapchain_info:    Swapchain_Info;
     depth_image_info:  Image_Info;
     render_resolution: VK.Extent_2D;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
-    frame_index: u64;
-
-    normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
 
     dummy_pipeline_info: Pipeline_Info;
 
+    normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
+    frame_index: u64;
     should_recreate_swapchain: bool;
 
     #if DEBUG {
@@ -172,6 +172,16 @@ init :: (
             renderer;
     }
 
+    error, renderer.transient_command_pool = create_transient_command_pool(
+        renderer.device,
+        renderer.graphics_queue_info.family_index,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     error, renderer.swapchain_info = create_swapchain(
         renderer.physical_device,
         renderer.surface,
@@ -245,6 +255,8 @@ deinit :: (renderer: *Renderer) {
         *renderer.depth_image_info,
     );
     destroy_swapchain(renderer.device, *renderer.swapchain_info);
+
+    VK.destroy_command_pool(renderer.device, renderer.transient_command_pool);
 
     VK.destroy_semaphore(renderer.device, renderer.timeline_semaphore_info.semaphore);
 
@@ -808,6 +820,22 @@ create_frame_resources :: (
     }
 
     return "", frame_resources;
+}
+
+create_transient_command_pool :: (device: VK.Device, queue_family_index: u32) -> error: string, VK.Command_Pool {
+    command_pool_create_info := VK.Command_Pool_Create_Info.{
+        flags              = .TRANSIENT,
+        queue_family_index = queue_family_index,
+    };
+
+    result, command_pool := VK.create_command_pool(device, *command_pool_create_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create transient command pool: %", result),
+            command_pool;
+    }
+
+    return "", command_pool;
 }
 
 create_timeline_semaphore :: (device: VK.Device) -> error: string, Timeline_Semaphore_Info {
