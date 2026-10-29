@@ -36,7 +36,7 @@ Accessor :: struct {
     max:            []float;
     min:            []float;
     sparse:         Sparse;
-    name:           string;
+    name:           string = "Accessor";
     extensions:     JSON_Value;
     extras:         JSON_Value;
 
@@ -86,7 +86,7 @@ Accessor :: struct {
 Animation :: struct {
     channels:   []Channel;
     samplers:   []Animation.Sampler;
-    name:       string;
+    name:       string = "Animation";
     extensions: JSON_Value;
     extras:     JSON_Value;
 
@@ -138,7 +138,7 @@ Asset :: struct {
 Buffer :: struct {
     uri:         string;
     byte_length: int; @JsonName(byteLength)
-    name:        string;
+    name:        string = "Buffer";
     extensions:  JSON_Value;
     extras:      JSON_Value;
 
@@ -151,7 +151,7 @@ Buffer_View :: struct {
     byte_length:  int;             @JsonName(byteLength)
     _byte_stride: int  = SENTINEL; @JsonName(byteStride)
     target:       Target;
-    name:         string;
+    name:         string = "Buffer View";
     extensions:   JSON_Value;
     extras:       JSON_Value;
 
@@ -166,7 +166,7 @@ Camera :: struct {
     orthographic: Orthographic;
     perspective:  Perspective;
     type:         _Type;
-    name:         string;
+    name:         string = "Camera";
     extensions:   JSON_Value;
     extras:       JSON_Value;
 
@@ -198,7 +198,7 @@ Image :: struct {
     uri:          string;
     mime_type:    string;             @JsonName(mimeType)
     _buffer_view: int     = SENTINEL; @JsonName(bufferView)
-    name:         string;
+    name:         string = "Image";
     extensions:   JSON_Value;
     extras:       JSON_Value;
 }
@@ -212,7 +212,7 @@ Material :: struct {
     alpha_mode:             Alpha_Mode              = .OPAQUE; @JsonName(alphaMode)
     alpha_cutoff:           float                   = 0.5;     @JsonName(alphaCutoff)
     double_sided:           bool;                              @JsonName(doubleSided)
-    name:                   string;
+    name:                   string = "Material";
     extensions:             JSON_Value;
     extras:                 JSON_Value;
 
@@ -252,7 +252,7 @@ Material :: struct {
 Mesh :: struct {
     primitives: []Primitive;
     weights:    []float;
-    name:       string;
+    name:       string = "Mesh";
     extensions: JSON_Value;
     extras:     JSON_Value;
 
@@ -317,7 +317,7 @@ Node :: struct {
     scale:       [3]float = .[1, 1, 1];
     translation: [3]float;
     weights:     []float;
-    name:        string;
+    name:        string = "Node";
     extensions:  JSON_Value;
     extras:      JSON_Value;
 }
@@ -327,7 +327,7 @@ Sampler :: struct {
     min_filter: Min_Filter;            @JsonName(minFilter)
     wrap_s:     Wrap_Mode   = .REPEAT; @JsonName(wrapS)
     wrap_t:     Wrap_Mode   = .REPEAT; @JsonName(wrapT)
-    name:       string;
+    name:       string = "Sampler";
     extensions: JSON_Value;
     extras:     JSON_Value;
 
@@ -356,7 +356,7 @@ Sampler :: struct {
 
 Scene :: struct {
     nodes:      []int;
-    name:       string;
+    name:       string = "Scene";
     extensions: JSON_Value;
     extras:     JSON_Value;
 }
@@ -365,7 +365,7 @@ Skin :: struct {
     _inverse_bind_matrices: int = SENTINEL; @JsonName(inverseBindMatrices)
     _skeleton:              int = SENTINEL; @JsonName(skeleton)
     joints:                 []int;
-    name:                   string;
+    name:                   string = "Skin";
     extensions:             JSON_Value;
     extras:                 JSON_Value;
 }
@@ -373,7 +373,7 @@ Skin :: struct {
 Texture :: struct {
     _sampler:   int = SENTINEL; @JsonName(sampler)
     _source:    int = SENTINEL; @JsonName(source)
-    name:       string;
+    name:       string = "Texture";
     extensions: JSON_Value;
     extras:     JSON_Value;
 }

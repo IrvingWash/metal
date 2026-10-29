@@ -1,4 +1,3 @@
-// @Todo: rework names/paths
 // @Todo: give Gltf an allocator
 
 convert_gltf :: (path: string) -> Model_Dto {
@@ -15,7 +14,8 @@ convert_gltf :: (path: string) -> Model_Dto {
     model_dto: Model_Dto;
 
     gltf_scene := gltf.scenes[0];
-    model_dto.name = sprint("%", gltf_scene.name);
+    _, file_name := path_decomp(path);
+    model_dto.name = sprint("%-%", file_name, gltf_scene.name);
 
     // These indices are used to subscript `model_dto.meshes` using `gltf_node._mesh`.
     // These are indices of elements which are the first `gltf_primitive`s of the `gltf_mesh`es.
@@ -26,44 +26,52 @@ convert_gltf :: (path: string) -> Model_Dto {
 
     for gltf_mesh: gltf.meshes {
         array_add(*first_mesh_indices, cast(u32, model_dto.meshes.count));
+
+        name := sprint("%-%", model_dto.name, gltf_mesh.name);
         for gltf_primitive: gltf_mesh.primitives {
             mesh_dto := convert_gltf_primitive_to_mesh_dto(
                 gltf,
-                gltf_mesh,
                 gltf_primitive,
-                path,
-                it_index,
+
+                name                  = name,
+                identifier_for_errors = path,
             );
             array_add(*model_dto.meshes, mesh_dto);
         }
     }
 
     for gltf_image: gltf.images {
+        name := sprint("%-%", model_dto.name, gltf_image.name);
         image_dto := convert_gltf_image_to_image_dto(
             gltf,
             gltf_image,
-            path,
-            it_index,
+            root_path = path_strip_filename(path),
+            name = name,
+            identifier_for_errors = path,
         );
         array_add(*model_dto.images, image_dto);
     }
 
     for gltf_material: gltf.materials {
+        name := sprint("%-%", model_dto.name, gltf_material.name);
         material_dto := convert_gltf_material_to_material_dto(
             gltf,
             gltf_material,
-            path,
-            it_index,
+            name,
+            identifier_for_errors = path,
         );
         array_add(*model_dto.materials, material_dto);
     }
 
     array_resize(*model_dto.nodes, gltf.nodes.count);
     for gltf_node: gltf.nodes {
+        name := sprint("%-%", model_dto.name, gltf_node.name);
+
         node_dto := convert_gltf_node_to_node_dto_skipping_parent_index(
             gltf,
             gltf_node,
             first_mesh_indices,
+            name,
         );
 
         model_dto.nodes[it_index] = node_dto;
@@ -183,8 +191,8 @@ Texture_Dto :: struct {
 }
 
 Image_Dto :: struct {
-    identifier: string;
-    bytes:      [..]u8;
+    name:  string;
+    bytes: [..]u8;
 
     width:         u32;
     height:        u32;
@@ -195,10 +203,12 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
     gltf:               Gltf.Gltf,
     gltf_node:          Gltf.Node,
     first_mesh_indices: []u32,
+
+    name: string,
 ) -> Node_Dto {
     node_dto: Node_Dto;
 
-    node_dto.name = sprint("%", gltf_node.name);
+    node_dto.name = name;
 
     array_resize(
         *node_dto.children_indices,
@@ -247,9 +257,11 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
 }
 
 make_texture_dto :: (
-    gltf:                  Gltf.Gltf,
-    gltf_texture_info:     $T/interface Gltf.Texture_Info,
-    name_prefix:           string,
+    gltf:              Gltf.Gltf,
+    gltf_texture_info: $T/interface Gltf.Texture_Info,
+
+    name_prefix: string,
+
     identifier_for_errors: string,
 ) -> Texture_Dto {
     gltf_texture      := gltf.textures[gltf_texture_info._index];
@@ -282,19 +294,16 @@ make_texture_dto :: (
 }
 
 convert_gltf_material_to_material_dto :: (
-    gltf:                Gltf.Gltf,
-    gltf_material:       Gltf.Material,
-    gltf_path:           string,
-    gltf_material_index: int,
+    gltf:          Gltf.Gltf,
+    gltf_material: Gltf.Material,
+
+    name: string,
+
+    identifier_for_errors: string,
 ) -> Material_Dto {
     material_dto: Material_Dto;
 
-    material_dto.name = sprint(
-        "%-%-%",
-        gltf_path,
-        gltf_material.name,
-        gltf_material_index,
-    );
+    material_dto.name = name;
 
     material_dto.double_sided              = gltf_material.double_sided;
     material_dto.alpha_mode                = gltf_material.alpha_mode;
@@ -314,7 +323,7 @@ convert_gltf_material_to_material_dto :: (
                 gltf,
                 gltf_pbr.base_color_texture,
                 tprint("%-%", material_dto.name, "base_color"),
-                gltf_path,
+                identifier_for_errors,
             );
             set(*pbr_dto.base_color_texture, texture_dto);
         }
@@ -324,7 +333,7 @@ convert_gltf_material_to_material_dto :: (
                 gltf,
                 gltf_pbr.metallic_roughness_texture,
                 tprint("%-%", material_dto.name, "metallic_roughness"),
-                gltf_path,
+                identifier_for_errors,
             );
             set(*pbr_dto.metallic_roughness_texture, texture_dto);
         }
@@ -338,7 +347,7 @@ convert_gltf_material_to_material_dto :: (
                 gltf,
                 gltf_normal_texture,
                 tprint("%-%", material_dto.name, "normal"),
-                gltf_path,
+                identifier_for_errors,
             );
             set(
                 *material_dto.normal_texture,
@@ -358,7 +367,7 @@ convert_gltf_material_to_material_dto :: (
                 gltf,
                 gltf_occlusion_texture,
                 tprint("%-%", material_dto.name, "occlusion"),
-                gltf_path,
+                identifier_for_errors,
             );
             set(
                 *material_dto.occlusion_texture,
@@ -378,7 +387,7 @@ convert_gltf_material_to_material_dto :: (
                 gltf,
                 gltf_emissive_texture,
                 tprint("%-%", material_dto.name, "emissive"),
-                gltf_path,
+                identifier_for_errors,
             );
             set(
                 *material_dto.emissive_texture,
@@ -391,26 +400,23 @@ convert_gltf_material_to_material_dto :: (
 }
 
 convert_gltf_image_to_image_dto :: (
-    gltf:             Gltf.Gltf,
-    gltf_image:       Gltf.Image,
-    gltf_path:        string,
-    gltf_image_index: int,
+    gltf:       Gltf.Gltf,
+    gltf_image: Gltf.Image,
+    root_path:  string,
+
+    name: string,
+
+    identifier_for_errors: string,
 ) -> Image_Dto {
     assert(
         !starts_with(gltf_image.uri, Gltf.DATA_URI_PREFIX),
         "Images in data uris are not supported (%)",
-        gltf_path,
+        identifier_for_errors,
     );
 
     image_dto: Image_Dto;
 
-    image_dto.identifier = sprint(
-        "%-%-%-%",
-        gltf_path,
-        gltf_image.uri,
-        gltf_image_index,
-        gltf_image.name,
-    );
+    image_dto.name = name;
 
     width, height: s32;
     channel_count: s32;
@@ -419,7 +425,7 @@ convert_gltf_image_to_image_dto :: (
 
     if gltf_image.uri {
         path := path_join(
-            path_strip_filename(gltf_path),
+            root_path,
             gltf_image.uri,,
             temp
         );
@@ -446,13 +452,13 @@ convert_gltf_image_to_image_dto :: (
         assert(
             false,
             "The image % has neither uri, nor buffer view",
-            image_dto.identifier,
+            image_dto.name,
         );
     }
 
     if loaded_bytes == null {
         failure_reason := stbi_failure_reason();
-        assert(false, "Failed to load image '%': %", image_dto.identifier, to_string(failure_reason));
+        assert(false, "Failed to load image '%': %", image_dto.name, to_string(failure_reason));
     }
     defer stbi_image_free(loaded_bytes);
 
@@ -468,16 +474,15 @@ convert_gltf_image_to_image_dto :: (
 }
 
 convert_gltf_primitive_to_mesh_dto :: (
-    gltf:                 Gltf.Gltf,
-    gltf_mesh:            Gltf.Mesh,
-    gltf_primitive:       Gltf.Mesh.Primitive,
-    path_for_printing:    string,
-    gltf_primitive_index: int,
+    gltf:           Gltf.Gltf,
+    gltf_primitive: Gltf.Mesh.Primitive,
+
+    name:                  string,
+    identifier_for_errors: string,
 ) -> Mesh_Dto {
     mesh_dto: Mesh_Dto;
 
-    mesh_dto.name = sprint("%-%", gltf_mesh.name, gltf_primitive_index);
-
+    mesh_dto.name     = name;
     mesh_dto.topology = gltf_primitive.mode;
 
     if gltf_primitive._material != Gltf.SENTINEL {
@@ -489,7 +494,7 @@ convert_gltf_primitive_to_mesh_dto :: (
         mesh_dto.indices = parse_gltf_indices(
             gltf,
             gltf_indices_accessor,
-            path_for_printing,
+            identifier_for_errors,
         );
     }
 
@@ -502,8 +507,8 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf_position_accessor,
             *mesh_dto.vertices[0].position,
             size_of(Vertex_Dto),
-            "POSITION",
-            path_for_printing,
+            attribute_key_for_errors = "POSITION",
+            identifier_for_errors,
         );
 
         mesh_dto.min = {
@@ -517,27 +522,27 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf_position_accessor.max[2],
         };
     } else {
-        assert(false, "No POSITION attribute (%)", path_for_printing);
+        assert(false, "No POSITION attribute (%)", identifier_for_errors);
     }
     if gltf_primitive.attributes._normal != Gltf.SENTINEL {
         gltf_normal_accessor := gltf.accessors[gltf_primitive.attributes._normal];
         assert(
             gltf_normal_accessor.count == mesh_dto.vertices.count,
             "There is less normals than positions (%)",
-            path_for_printing,
+            identifier_for_errors,
         );
         parse_gltf_attribute(
             gltf,
             gltf_normal_accessor,
             *mesh_dto.vertices[0].normal,
             size_of(Vertex_Dto),
-            "NORMAL",
-            path_for_printing,
+            attribute_key_for_errors = "NORMAL",
+            identifier_for_errors,
         );
     } else {
         log(
             "No normals in the primitive (%)",
-            path_for_printing,
+            identifier_for_errors,
             flags = .WARNING
         );
     }
@@ -546,15 +551,15 @@ convert_gltf_primitive_to_mesh_dto :: (
         assert(
             gltf_tangent_accessor.count == mesh_dto.vertices.count,
             "There is less tangents than positions (%)",
-            path_for_printing,
+            identifier_for_errors,
         );
         parse_gltf_attribute(
             gltf,
             gltf_tangent_accessor,
             *mesh_dto.vertices[0].tangent,
             size_of(Vertex_Dto),
-            "TANGENT",
-            path_for_printing,
+            attribute_key_for_errors = "TANGENT",
+            identifier_for_errors,
         );
     }
     if gltf_primitive.attributes._tex_coord_0 != Gltf.SENTINEL {
@@ -562,15 +567,15 @@ convert_gltf_primitive_to_mesh_dto :: (
         assert(
             gltf_tex_coord_0_accessor.count == mesh_dto.vertices.count,
             "There is less tex_coord_0s than positions (%)",
-            path_for_printing,
+            identifier_for_errors,
         );
         parse_gltf_attribute(
             gltf,
             gltf_tex_coord_0_accessor,
             *mesh_dto.vertices[0].uv0,
             size_of(Vertex_Dto),
-            "TEXCOORD_0",
-            path_for_printing,
+            attribute_key_for_errors = "TEXCOORD_0",
+            identifier_for_errors,
         );
     }
     if gltf_primitive.attributes._tex_coord_1 != Gltf.SENTINEL {
@@ -578,15 +583,15 @@ convert_gltf_primitive_to_mesh_dto :: (
         assert(
             gltf_tex_coord_1_accessor.count == mesh_dto.vertices.count,
             "There is less tex_coord_1s than positions",
-            path_for_printing,
+            identifier_for_errors,
         );
         parse_gltf_attribute(
             gltf,
             gltf_tex_coord_1_accessor,
             *mesh_dto.vertices[0].uv1,
             size_of(Vertex_Dto),
-            "TEXCOORD_1",
-            path_for_printing,
+            attribute_key_for_errors = "TEXCOORD_1",
+            identifier_for_errors,
         );
     }
     if gltf_primitive.attributes._color_0 != Gltf.SENTINEL {
@@ -594,15 +599,15 @@ convert_gltf_primitive_to_mesh_dto :: (
         assert(
             gltf_color_0_accessor.count == mesh_dto.vertices.count,
             "There is less color_0s than positions",
-            path_for_printing,
+            identifier_for_errors,
         );
         parse_gltf_attribute(
             gltf,
             gltf_color_0_accessor,
             *mesh_dto.vertices[0].color,
             size_of(Vertex_Dto),
-            "COLOR_0",
-            path_for_printing,
+            attribute_key_for_errors = "COLOR_0",
+            identifier_for_errors,
         );
     }
 
@@ -610,82 +615,83 @@ convert_gltf_primitive_to_mesh_dto :: (
 }
 
 parse_gltf_attribute :: (
-    gltf:                       Gltf.Gltf,
-    gltf_accessor:              Gltf.Accessor,
-    destination:                *$Result_Type,
-    destination_stride:         int,
-    attribute_key_for_printing: string,
-    path_for_printing:          string,
+    gltf:               Gltf.Gltf,
+    gltf_accessor:      Gltf.Accessor,
+    destination:        *$Result_Type,
+    destination_stride: int,
+
+    attribute_key_for_errors: string,
+    identifier_for_errors:    string,
 ) {
     if #complete gltf_accessor.type == {
         case .SCALAR;
             assert(
                 IsScalar(Result_Type),
                 "The % accessor is of scalar type, but the provided Result_Type is not scalar (%)",
-                attribute_key_for_printing,
-                path_for_printing,
+                attribute_key_for_errors,
+                identifier_for_errors,
             );
         case .VEC2;
             assert(
                 Result_Type == Vector2,
                 "The % accessor is of VEC2 type, but the provided Result_Type is not Vector2 (%)",
-                attribute_key_for_printing,
-                path_for_printing,
+                attribute_key_for_errors,
+                identifier_for_errors,
             );
         case .VEC3;
             assert(
                 Result_Type == Vector3,
                 "The % accessor is of VEC3 type, but the provided Result_Type is not Vector3 (%)",
-                attribute_key_for_printing,
-                path_for_printing,
+                attribute_key_for_errors,
+                identifier_for_errors,
             );
         case .VEC4;
             assert(
                 Result_Type == Vector4,
                 "The % accessor is of VEC4 type, but the provided Result_Type is not Vector4 (%)",
-                attribute_key_for_printing,
-                path_for_printing,
+                attribute_key_for_errors,
+                identifier_for_errors,
             );
         case .MAT2;
             assert(
                 Result_Type == Matrix2,
                 "The % accessor is of MAT2 type, but the provided Result_Type is not Mat2 (%)",
-                attribute_key_for_printing,
-                path_for_printing,
+                attribute_key_for_errors,
+                identifier_for_errors,
             );
         case .MAT3;
             assert(
                 Result_Type == Matrix3,
                 "The % accessor is of MAT3 type, but the provided Result_Type is not Mat3 (%)",
-                attribute_key_for_printing,
-                path_for_printing,
+                attribute_key_for_errors,
+                identifier_for_errors,
             );
         case .MAT4;
             assert(
                 Result_Type == Matrix4,
                 "The % accessor is of MAT4 type, but the provided Result_Type is not Mat4 (%)",
-                attribute_key_for_printing,
-                path_for_printing,
+                attribute_key_for_errors,
+                identifier_for_errors,
             );
     }
     assert(
         gltf_accessor.component_type == .FLOAT,
         "Only floats are supported for attributes (attribute: %) (%)",
-        attribute_key_for_printing,
-        path_for_printing,
+        attribute_key_for_errors,
+        identifier_for_errors,
     );
 
     assert(
         gltf_accessor.sparse._count == Gltf.SENTINEL,
         "Sparse accessors are not supported (attribute: %) (%)",
-        attribute_key_for_printing,
-        path_for_printing,
+        attribute_key_for_errors,
+        identifier_for_errors,
     );
     assert(
         gltf_accessor._buffer_view != Gltf.SENTINEL,
         "Got an accessor without a buffer view (attribute: %) (%)",
-        attribute_key_for_printing,
-        path_for_printing,
+        attribute_key_for_errors,
+        identifier_for_errors,
     );
 
     gltf_buffer_view := gltf.buffer_views[gltf_accessor._buffer_view];
@@ -697,8 +703,9 @@ parse_gltf_attribute :: (
 
     assert(
         element_byte_size == size_of(Result_Type),
-        "The size of the element doesn't matche the size of Result_Type (%)",
-        path_for_printing,
+        "The size of the element doesn't matche the size of Result_Type (attribute: %) (%)",
+        attribute_key_for_errors,
+        identifier_for_errors,
     );
 
     byte_offset := gltf_accessor.byte_offset + gltf_buffer_view.byte_offset;
@@ -718,17 +725,17 @@ parse_gltf_attribute :: (
 parse_gltf_indices :: (
     gltf:                  Gltf.Gltf,
     gltf_indices_accessor: Gltf.Accessor,
-    path_for_printing:     string,
+    identifier_for_errors:     string,
 ) -> [..]u32 {
     assert(
         gltf_indices_accessor.sparse._count == Gltf.SENTINEL,
         "Sparse accessors are not supported (%)",
-        path_for_printing,
+        identifier_for_errors,
     );
     assert(
         gltf_indices_accessor._buffer_view != Gltf.SENTINEL,
         "Got an accessor without a buffer view (%)",
-        path_for_printing,
+        identifier_for_errors,
     );
     gltf_indices_buffer_view := gltf.buffer_views[gltf_indices_accessor._buffer_view];
     gltf_indices_buffer := gltf.buffers[gltf_indices_buffer_view.buffer];
