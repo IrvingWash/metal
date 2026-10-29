@@ -1,3 +1,6 @@
+// @Todo: rework names/paths
+// @Todo: give Gltf an allocator
+
 convert_gltf :: (path: string) -> Model_Dto {
     error: string = ---;
     gltf: Gltf.Gltf = ---;
@@ -12,11 +15,19 @@ convert_gltf :: (path: string) -> Model_Dto {
     model_dto: Model_Dto;
 
     gltf_scene := gltf.scenes[0];
-    model_dto.name = copy_string(gltf_scene.name);
+    model_dto.name = sprint("%", gltf_scene.name);
+
+    // These indices are used to subscript `model_dto.meshes` using `gltf_node._mesh`.
+    // These are indices of elements which are the first `gltf_primitive`s of the `gltf_mesh`es.
+    // We need this to later populate `node_dto.first_mesh_index`.
+    // It's a little bit hairy, because we flatten gltf_meshes and gltf_primitives into a single array of mesh_dtos.
+    first_mesh_indices: [..]u32;
+    first_mesh_indices.allocator = temp;
 
     for gltf_mesh: gltf.meshes {
+        array_add(*first_mesh_indices, cast(u32, model_dto.meshes.count));
         for gltf_primitive: gltf_mesh.primitives {
-            mesh_dto := convert_glft_primitive_to_mesh_dto(
+            mesh_dto := convert_gltf_primitive_to_mesh_dto(
                 gltf,
                 gltf_mesh,
                 gltf_primitive,
@@ -45,6 +56,22 @@ convert_gltf :: (path: string) -> Model_Dto {
             it_index,
         );
         array_add(*model_dto.materials, material_dto);
+    }
+
+    array_resize(*model_dto.nodes, gltf.nodes.count);
+    for gltf_node: gltf.nodes {
+        node_dto := convert_gltf_node_to_node_dto_skipping_parent_index(
+            gltf,
+            gltf_node,
+            first_mesh_indices,
+        );
+
+        model_dto.nodes[it_index] = node_dto;
+    }
+    for node, node_index: model_dto.nodes {
+        for child_index: node.children_indices {
+            model_dto.nodes[child_index].parent_index = some(cast(u32, node_index));
+        }
     }
 
     return model_dto;
@@ -85,7 +112,7 @@ Node_Dto :: struct {
     first_mesh_index: Option(u32);
     mesh_count:       u32;
 
-    column_major_local_transform: Matrix4 = Matrix4_Identity;
+    local_transform: Matrix4 = Matrix4_Identity;
 }
 
 Mesh_Dto :: struct {
@@ -163,6 +190,61 @@ Image_Dto :: struct {
     height:        u32;
     channel_count: u8;
 };
+
+convert_gltf_node_to_node_dto_skipping_parent_index :: (
+    gltf:               Gltf.Gltf,
+    gltf_node:          Gltf.Node,
+    first_mesh_indices: []u32,
+) -> Node_Dto {
+    node_dto: Node_Dto;
+
+    node_dto.name = sprint("%", gltf_node.name);
+
+    array_resize(
+        *node_dto.children_indices,
+        gltf_node.children.count,
+    );
+    for *child_index: node_dto.children_indices {
+        child_index.* = cast(u32, gltf_node.children[it_index]);
+    }
+
+    if gltf_node._mesh != Gltf.SENTINEL {
+        set(
+            *node_dto.first_mesh_index,
+            first_mesh_indices[gltf_node._mesh],
+        );
+
+        node_dto.mesh_count = cast(
+            u32,
+            gltf.meshes[gltf_node._mesh].primitives.count
+        );
+    }
+
+    { // Transform
+        gltf_matrix: Matrix4;
+        gltf_matrix.floats = gltf_node.column_major_matrix;
+        gltf_matrix = transpose(gltf_matrix);
+
+        if gltf_matrix != Matrix4_Identity {
+            node_dto.local_transform = gltf_matrix;
+        } else {
+            translation: Vector3;
+            scale:       Vector3;
+            rotation:    Quaternion;
+            translation.component = gltf_node.translation;
+            scale.component       = gltf_node.scale;
+            rotation.component    = gltf_node.rotation;
+
+            translation_matrix := make_translation_matrix4(translation);
+            scale_matrix       := make_scale_matrix4(scale);
+            _rotation_matrix   := rotation_matrix(Matrix4, rotation);
+
+            node_dto.local_transform = translation_matrix * _rotation_matrix * scale_matrix;
+        }
+    }
+
+    return node_dto;
+}
 
 make_texture_dto :: (
     gltf:                  Gltf.Gltf,
@@ -385,7 +467,7 @@ convert_gltf_image_to_image_dto :: (
     return image_dto;
 }
 
-convert_glft_primitive_to_mesh_dto :: (
+convert_gltf_primitive_to_mesh_dto :: (
     gltf:                 Gltf.Gltf,
     gltf_mesh:            Gltf.Mesh,
     gltf_primitive:       Gltf.Mesh.Primitive,
@@ -723,5 +805,6 @@ get_component_count_from_gltf_accessor_type :: (gltf_accessor_type: Gltf.Accesso
 #import "String";
 #import "Math";
 #import "stb_image";
+#import "Hash_Table";
 Gltf :: #import,dir "Gltf";
 #import,dir "Option";

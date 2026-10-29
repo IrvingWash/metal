@@ -12,3 +12,18 @@ set :: (option: *Option($T), value: T) {
     option.kind = .SOME;
     option.some = value;
 }
+
+some :: (value: $T) -> Option(T) {
+    option: Option(T);
+    option.kind = .SOME;
+    option.some = value;
+
+    return option;
+}
+
+none :: ($T: Type) -> Option(T) {
+    option: Option(T);
+    option.kind = .NONE;
+
+    return option;
+}

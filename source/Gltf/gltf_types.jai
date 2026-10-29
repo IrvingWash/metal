@@ -306,12 +306,12 @@ Node :: struct {
     children: []int;
     _skin:    int = SENTINEL; @JsonName(skin)
     // Column-major
-    matrix: [16]float = .[
+    column_major_matrix: [16]float = .[
         1, 0, 0, 0,
         0, 1, 0, 0,
         0, 0, 1, 0,
         0, 0, 0, 1,
-    ];
+    ]; @JsonName(matrix)
     _mesh:       int      = SENTINEL; @JsonName(mesh)
     rotation:    [4]float = .[0, 0, 0, 1];
     scale:       [3]float = .[1, 1, 1];
