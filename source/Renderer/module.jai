@@ -24,6 +24,7 @@ Renderer :: struct {
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
     dummy_pipeline_info: Pipeline_Info;
+    common_pipeline_info: Pipeline_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     should_recreate_swapchain: bool;
@@ -75,6 +76,12 @@ Descriptor_Info :: struct {
     pool:   VK.Descriptor_Pool;
     layout: VK.Descriptor_Set_Layout;
     set:    VK.Descriptor_Set;
+}
+
+Push_Constants :: struct @Gpu {
+    vertex_buffer_address:   u64;
+    material_buffer_address: u64;
+    instance_buffer_address: u64;
 }
 
 // =============================================================================
@@ -244,6 +251,14 @@ init :: (
         .[renderer.swapchain_info.config.image_format],
         renderer.depth_image_info.format,
     );
+
+    error, renderer.common_pipeline_info = create_common_pipeline(
+        renderer.device,
+        renderer.read_shader_file,
+        .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targes
+        renderer.depth_image_info.format,
+        .[renderer.texture_descriptor_info.layout],
+    );
     if error {
         return
             error,
@@ -258,6 +273,7 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
+    destroy_pipeline(renderer.device, *renderer.common_pipeline_info);
     destroy_pipeline(renderer.device, *renderer.dummy_pipeline_info);
 
     for *frame_resources: renderer.frame_resources_list {
@@ -631,6 +647,155 @@ MAX_TEXTURE_COUNT :: 256;
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+create_common_pipeline :: (
+    device:                   VK.Device,
+    shader_file_reader:       Shader_File_Reader,
+    color_attachment_formats: []VK.Format,
+    depth_attachment_format:  VK.Format,
+    descriptor_set_layouts:   []VK.Descriptor_Set_Layout,
+) -> error: string, Pipeline_Info {
+    pipeline_info: Pipeline_Info;
+
+    { // Layout
+        push_constant_range := VK.Push_Constant_Range.{
+            stage_flags = .VERTEX,
+            offset      = 0,
+            size        = size_of(Push_Constants),
+        };
+
+        layout_create_info := VK.Pipeline_Layout_Create_Info.{
+            set_layout_count          = cast(u32, descriptor_set_layouts.count),
+            p_set_layouts             = descriptor_set_layouts.data,
+            push_constant_range_count = 1,
+            p_push_constant_ranges    = *push_constant_range,
+        };
+
+        result:, pipeline_info.layout = VK.create_pipeline_layout(device, *layout_create_info);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create layout for common pipeline: %", result),
+                pipeline_info;
+        }
+    }
+
+    error, vertex_shader := create_shader_module(device, "common.vertex.spv", shader_file_reader);
+    if error {
+        return
+            error,
+            pipeline_info;
+    }
+    defer VK.destroy_shader_module(device, vertex_shader);
+
+    error =, fragment_shader := create_shader_module(device, "common.fragment.spv", shader_file_reader);
+    if error {
+        return
+            error,
+            pipeline_info;
+    }
+    defer VK.destroy_shader_module(device, fragment_shader);
+
+    shader_stage_create_infos := VK.Pipeline_Shader_Stage_Create_Info.[
+        {
+            stage  = .VERTEX,
+            module = vertex_shader,
+            p_name = "main",
+        },
+        {
+            stage  = .FRAGMENT,
+            module = fragment_shader,
+            p_name = "main",
+        },
+    ];
+
+    vertex_input_state_create_info := VK.Pipeline_Vertex_Input_State_Create_Info.{};
+
+    input_assembly_state_create_info := VK.Pipeline_Input_Assembly_State_Create_Info.{
+        topology = .TRIANGLE_LIST,
+    };
+
+    depth_stencil_state_create_info := VK.Pipeline_Depth_Stencil_State_Create_Info.{
+        depth_test_enable   = VK.TRUE,
+        depth_write_enable  = VK.TRUE,
+        depth_compare_op    = .LESS,
+        stencil_test_enable = VK.FALSE,
+    };
+
+    viewport_state_create_info := VK.Pipeline_Viewport_State_Create_Info.{
+        viewport_count = 1,
+        p_viewports    = null,
+        scissor_count  = 1,
+        p_scissors     = null,
+    };
+
+    rasterization_state_create_info := VK.Pipeline_Rasterization_State_Create_Info.{
+        polygon_mode = .FILL,
+        cull_mode    = .BACK,
+        front_face   = .COUNTER_CLOCKWISE,
+        line_width   = 1,
+    };
+
+    multisample_state_create_info := VK.Pipeline_Multisample_State_Create_Info.{
+        rasterization_samples = ._1,
+    };
+
+    color_blend_attachment_states := VK.Pipeline_Color_Blend_Attachment_State.[
+        {
+            blend_enable = VK.FALSE,
+            color_write_mask = .R | .G | .B | .A,
+        },
+    ];
+
+    color_blend_state_create_info := VK.Pipeline_Color_Blend_State_Create_Info.{
+        attachment_count = color_blend_attachment_states.count,
+        p_attachments    = color_blend_attachment_states.data,
+    };
+
+    dynamic_states := VK.Dynamic_State.[
+        .VIEWPORT,
+        .SCISSOR,
+    ];
+
+    dynamic_state_create_info := VK.Pipeline_Dynamic_State_Create_Info.{
+        dynamic_state_count = dynamic_states.count,
+        p_dynamic_states    = dynamic_states.data,
+    };
+
+    rendering_create_info := VK.Pipeline_Rendering_Create_Info.{
+        color_attachment_count     = cast(u32, color_attachment_formats.count),
+        p_color_attachment_formats = color_attachment_formats.data,
+        depth_attachment_format    = depth_attachment_format,
+    };
+
+    pipeline_create_info := VK.Graphics_Pipeline_Create_Info.{
+        p_next                 = *rendering_create_info,
+        stage_count            = shader_stage_create_infos.count,
+        p_stages               = shader_stage_create_infos.data,
+        p_vertex_input_state   = *vertex_input_state_create_info,
+        p_input_assembly_state = *input_assembly_state_create_info,
+        p_viewport_state       = *viewport_state_create_info,
+        p_rasterization_state  = *rasterization_state_create_info,
+        p_multisample_state    = *multisample_state_create_info,
+        p_depth_stencil_state  = *depth_stencil_state_create_info,
+        p_color_blend_state    = *color_blend_state_create_info,
+        p_dynamic_state        = *dynamic_state_create_info,
+        layout                 = pipeline_info.layout,
+        render_pass            = null,
+    };
+
+    result:, pipeline_info.pipeline = VK.create_graphics_pipeline(
+        device,
+        null,
+        *pipeline_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create common pipeline: %", result),
+            pipeline_info;
+    }
+
+    return "", pipeline_info;
 }
 
 create_dummy_pipeline :: (
