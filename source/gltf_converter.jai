@@ -1,5 +1,3 @@
-// @Todo: Compute normals!
-
 convert_gltf :: (path: string) {
     error: string = ---;
     gltf: Gltf.Gltf = ---;
@@ -73,7 +71,7 @@ Vertex_Dto :: struct {
     normal:   Vector3;
     uv0:      Vector2;
     uv1:      Vector2;
-    tangent:  Vector4;
+    tangent:  Vector4 = { 0, 0, 0, 1 };
     color:    Vector4 = { 1, 1, 1, 1 };
 }
 
@@ -192,6 +190,8 @@ convert_glft_primitive_to_mesh_dto :: (
             size_of(Vertex_Dto),
             "NORMAL",
         );
+    } else {
+        assert(false, "No normals in the primitive");
     }
     if gltf_primitive.attributes._tangent != Gltf.SENTINEL {
         gltf_tangent_accessor := gltf.accessors[gltf_primitive.attributes._tangent];
