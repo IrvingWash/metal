@@ -215,12 +215,14 @@ handle_compiler_messages :: (
 
         if message.kind == {
             case .TYPECHECKED;
-                typechecked := cast(*Message_Typechecked) message;
+                if config.optimization_type < .OPTIMIZED {
+                    typechecked := cast(*Message_Typechecked) message;
 
-                for _struct: typechecked.structs {
-                    for note: _struct.expression.notes {
-                        if note.text == "Gpu" {
-                            log("% has Gpu note", _struct.expression.defined_type.name);
+                    for _struct: typechecked.structs {
+                        for note: _struct.expression.notes {
+                            if note.text == "Gpu" {
+                                log("% has Gpu note", _struct.expression.defined_type.name);
+                            }
                         }
                     }
                 }
