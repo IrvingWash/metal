@@ -2,12 +2,12 @@ convert_gltf :: (path: string) {
     error: string = ---;
     gltf: Gltf.Gltf = ---;
     if ends_with(path, "gltf") {
-        error, gltf = Gltf.read_gltf_from_file(path);
+        error, gltf = Gltf.read_gltf_from_file(path, validate = DEBUG);
     } else {
-        error, gltf = Gltf.read_glb_from_file(path);
+        error, gltf = Gltf.read_glb_from_file(path, validate = DEBUG);
     }
     assert(!error, error);
-    assert(gltf.scenes.count == 1, "Multiple scenes are not supported");
+    assert(gltf.scenes.count == 1, "GLTF at % has multiple scenes", path);
 
     model_dto: Model_Dto;
 
@@ -20,12 +20,12 @@ convert_gltf :: (path: string) {
                 gltf,
                 gltf_mesh,
                 gltf_primitive,
+                path,
+                it_index,
             );
             array_add(*model_dto.meshes, mesh_dto);
         }
     }
-
-    print("%\n", model_dto);
 }
 
 
@@ -130,13 +130,15 @@ Image_Dto :: union kind: enum { PATH; DATA; } {
 };
 
 convert_glft_primitive_to_mesh_dto :: (
-    gltf: Gltf.Gltf,
-    gltf_mesh: Gltf.Mesh,
-    gltf_primitive: Gltf.Mesh.Primitive,
+    gltf:                 Gltf.Gltf,
+    gltf_mesh:            Gltf.Mesh,
+    gltf_primitive:       Gltf.Mesh.Primitive,
+    path_for_printing:    string,
+    gltf_primitive_index: int,
 ) -> Mesh_Dto {
     mesh_dto: Mesh_Dto;
 
-    mesh_dto.name = copy_string(gltf_mesh.name);
+    mesh_dto.name = sprint("%-%", gltf_mesh.name, gltf_primitive_index);
 
     mesh_dto.topology = gltf_primitive.mode;
 
@@ -146,7 +148,11 @@ convert_glft_primitive_to_mesh_dto :: (
 
     if gltf_primitive._indices != Gltf.SENTINEL {
         gltf_indices_accessor := gltf.accessors[gltf_primitive._indices];
-        mesh_dto.indices = parse_gltf_indices(gltf, gltf_indices_accessor);
+        mesh_dto.indices = parse_gltf_indices(
+            gltf,
+            gltf_indices_accessor,
+            path_for_printing,
+        );
     }
 
     if gltf_primitive.attributes._position != Gltf.SENTINEL {
@@ -159,12 +165,7 @@ convert_glft_primitive_to_mesh_dto :: (
             *mesh_dto.vertices[0].position,
             size_of(Vertex_Dto),
             "POSITION",
-        );
-
-        assert( // @SpecValidation
-            gltf_position_accessor.min.count == 3
-            && gltf_position_accessor.max.count == 3,
-            "min and max for a primitive are not defined"
+            path_for_printing,
         );
 
         mesh_dto.min = {
@@ -178,63 +179,92 @@ convert_glft_primitive_to_mesh_dto :: (
             gltf_position_accessor.max[2],
         };
     } else {
-        assert(false, "No POSITION attribute");
+        assert(false, "No POSITION attribute (%)", path_for_printing);
     }
     if gltf_primitive.attributes._normal != Gltf.SENTINEL {
         gltf_normal_accessor := gltf.accessors[gltf_primitive.attributes._normal];
-        assert(gltf_normal_accessor.count == mesh_dto.vertices.count, "There is less normals than positions");
+        assert(
+            gltf_normal_accessor.count == mesh_dto.vertices.count,
+            "There is less normals than positions (%)",
+            path_for_printing,
+        );
         parse_gltf_attribute(
             gltf,
             gltf_normal_accessor,
             *mesh_dto.vertices[0].normal,
             size_of(Vertex_Dto),
             "NORMAL",
+            path_for_printing,
         );
     } else {
-        assert(false, "No normals in the primitive");
+        log(
+            "No normals in the primitive (%)",
+            path_for_printing,
+            flags = .WARNING
+        );
     }
     if gltf_primitive.attributes._tangent != Gltf.SENTINEL {
         gltf_tangent_accessor := gltf.accessors[gltf_primitive.attributes._tangent];
-        assert(gltf_tangent_accessor.count == mesh_dto.vertices.count, "There is less tangents than positions");
+        assert(
+            gltf_tangent_accessor.count == mesh_dto.vertices.count,
+            "There is less tangents than positions (%)",
+            path_for_printing,
+        );
         parse_gltf_attribute(
             gltf,
             gltf_tangent_accessor,
             *mesh_dto.vertices[0].tangent,
             size_of(Vertex_Dto),
             "TANGENT",
+            path_for_printing,
         );
     }
     if gltf_primitive.attributes._tex_coord_0 != Gltf.SENTINEL {
         gltf_tex_coord_0_accessor := gltf.accessors[gltf_primitive.attributes._tex_coord_0];
-        assert(gltf_tex_coord_0_accessor.count == mesh_dto.vertices.count, "There is less tex_coord_0s than positions");
+        assert(
+            gltf_tex_coord_0_accessor.count == mesh_dto.vertices.count,
+            "There is less tex_coord_0s than positions (%)",
+            path_for_printing,
+        );
         parse_gltf_attribute(
             gltf,
             gltf_tex_coord_0_accessor,
             *mesh_dto.vertices[0].uv0,
             size_of(Vertex_Dto),
             "TEXCOORD_0",
+            path_for_printing,
         );
     }
     if gltf_primitive.attributes._tex_coord_1 != Gltf.SENTINEL {
         gltf_tex_coord_1_accessor := gltf.accessors[gltf_primitive.attributes._tex_coord_1];
-        assert(gltf_tex_coord_1_accessor.count == mesh_dto.vertices.count, "There is less tex_coord_1s than positions");
+        assert(
+            gltf_tex_coord_1_accessor.count == mesh_dto.vertices.count,
+            "There is less tex_coord_1s than positions",
+            path_for_printing,
+        );
         parse_gltf_attribute(
             gltf,
             gltf_tex_coord_1_accessor,
             *mesh_dto.vertices[0].uv1,
             size_of(Vertex_Dto),
             "TEXCOORD_1",
+            path_for_printing,
         );
     }
     if gltf_primitive.attributes._color_0 != Gltf.SENTINEL {
         gltf_color_0_accessor := gltf.accessors[gltf_primitive.attributes._color_0];
-        assert(gltf_color_0_accessor.count == mesh_dto.vertices.count, "There is less color_0s than positions");
+        assert(
+            gltf_color_0_accessor.count == mesh_dto.vertices.count,
+            "There is less color_0s than positions",
+            path_for_printing,
+        );
         parse_gltf_attribute(
             gltf,
             gltf_color_0_accessor,
             *mesh_dto.vertices[0].color,
             size_of(Vertex_Dto),
             "COLOR_0",
+            path_for_printing,
         );
     }
 
@@ -247,55 +277,78 @@ parse_gltf_attribute :: (
     destination:                *$Result_Type,
     destination_stride:         int,
     attribute_key_for_printing: string,
+    path_for_printing:          string,
 ) {
-    if #complete gltf_accessor.type == { // @SpecValidation
+    if #complete gltf_accessor.type == {
         case .SCALAR;
             assert(
                 IsScalar(Result_Type),
-                "The % accessor is of scalar type, but the provided Result_Type is not scalar",
+                "The % accessor is of scalar type, but the provided Result_Type is not scalar (%)",
                 attribute_key_for_printing,
+                path_for_printing,
             );
         case .VEC2;
             assert(
                 Result_Type == Vector2,
-                "The % accessor is of VEC2 type, but the provided Result_Type is not Vector2",
+                "The % accessor is of VEC2 type, but the provided Result_Type is not Vector2 (%)",
                 attribute_key_for_printing,
+                path_for_printing,
             );
         case .VEC3;
             assert(
                 Result_Type == Vector3,
-                "The % accessor is of VEC3 type, but the provided Result_Type is not Vector3",
+                "The % accessor is of VEC3 type, but the provided Result_Type is not Vector3 (%)",
                 attribute_key_for_printing,
+                path_for_printing,
             );
         case .VEC4;
             assert(
                 Result_Type == Vector4,
-                "The % accessor is of VEC4 type, but the provided Result_Type is not Vector4",
+                "The % accessor is of VEC4 type, but the provided Result_Type is not Vector4 (%)",
                 attribute_key_for_printing,
+                path_for_printing,
             );
         case .MAT2;
             assert(
                 Result_Type == Matrix2,
-                "The % accessor is of MAT2 type, but the provided Result_Type is not Mat2",
+                "The % accessor is of MAT2 type, but the provided Result_Type is not Mat2 (%)",
                 attribute_key_for_printing,
+                path_for_printing,
             );
         case .MAT3;
             assert(
                 Result_Type == Matrix3,
-                "The % accessor is of MAT3 type, but the provided Result_Type is not Mat3",
+                "The % accessor is of MAT3 type, but the provided Result_Type is not Mat3 (%)",
                 attribute_key_for_printing,
+                path_for_printing,
             );
         case .MAT4;
             assert(
                 Result_Type == Matrix4,
-                "The % accessor is of MAT4 type, but the provided Result_Type is not Mat4",
+                "The % accessor is of MAT4 type, but the provided Result_Type is not Mat4 (%)",
                 attribute_key_for_printing,
+                path_for_printing,
             );
     }
-    assert(gltf_accessor.component_type == .FLOAT, "Only floats are supported");
+    assert(
+        gltf_accessor.component_type == .FLOAT,
+        "Only floats are supported for attributes (attribute: %) (%)",
+        attribute_key_for_printing,
+        path_for_printing,
+    );
 
-    assert(gltf_accessor.sparse._count == Gltf.SENTINEL, "Sparse accessors are not supported");
-    assert(gltf_accessor._buffer_view != Gltf.SENTINEL, "Got an accessor without a buffer view");
+    assert(
+        gltf_accessor.sparse._count == Gltf.SENTINEL,
+        "Sparse accessors are not supported (attribute: %) (%)",
+        attribute_key_for_printing,
+        path_for_printing,
+    );
+    assert(
+        gltf_accessor._buffer_view != Gltf.SENTINEL,
+        "Got an accessor without a buffer view (attribute: %) (%)",
+        attribute_key_for_printing,
+        path_for_printing,
+    );
 
     gltf_buffer_view := gltf.buffer_views[gltf_accessor._buffer_view];
     gltf_buffer := gltf.buffers[gltf_buffer_view.buffer];
@@ -304,28 +357,17 @@ parse_gltf_attribute :: (
     component_count := get_component_count_from_gltf_accessor_type(gltf_accessor.type);
     element_byte_size := component_count * component_byte_size;
 
-    assert(element_byte_size == size_of(Result_Type), "The size of the element doesn't matche the size of Result_Type");
+    assert(
+        element_byte_size == size_of(Result_Type),
+        "The size of the element doesn't matche the size of Result_Type (%)",
+        path_for_printing,
+    );
 
     byte_offset := gltf_accessor.byte_offset + gltf_buffer_view.byte_offset;
 
     step: int = ifx gltf_buffer_view._byte_stride != Gltf.SENTINEL
         then gltf_buffer_view._byte_stride
         else element_byte_size;
-
-    { // @SpecValidation
-        assert(gltf_accessor.count > 0, "The accessor count must be more than 0");
-
-        span := (gltf_accessor.count - 1) * step + element_byte_size;
-
-        assert(
-            byte_offset + span <= gltf_buffer.bytes.count,
-            "The span of the attribute is more than the number of bytes",
-        );
-        assert(
-            gltf_accessor.byte_offset + span <= gltf_buffer_view.byte_length,
-            "The span of the attribute is more than the byte length of the buffer view",
-        );
-    }
 
     gltf_attribute_bytes := gltf_buffer.bytes.data + byte_offset;
 
@@ -335,45 +377,33 @@ parse_gltf_attribute :: (
     }
 };
 
-parse_gltf_indices :: (gltf: Gltf.Gltf, gltf_indices_accessor: Gltf.Accessor) -> [..]u32 {
-    assert(gltf_indices_accessor.sparse._count == Gltf.SENTINEL, "Sparse accessors are not supported");
-    assert(gltf_indices_accessor._buffer_view != Gltf.SENTINEL, "Got an accessor without a buffer view");
-    assert(gltf_indices_accessor.type == .SCALAR, "Indices accessor must be be scalar"); // @SpecValidation
+parse_gltf_indices :: (
+    gltf:                  Gltf.Gltf,
+    gltf_indices_accessor: Gltf.Accessor,
+    path_for_printing:     string,
+) -> [..]u32 {
+    assert(
+        gltf_indices_accessor.sparse._count == Gltf.SENTINEL,
+        "Sparse accessors are not supported (%)",
+        path_for_printing,
+    );
+    assert(
+        gltf_indices_accessor._buffer_view != Gltf.SENTINEL,
+        "Got an accessor without a buffer view (%)",
+        path_for_printing,
+    );
     gltf_indices_buffer_view := gltf.buffer_views[gltf_indices_accessor._buffer_view];
-    assert(gltf_indices_buffer_view._byte_stride == Gltf.SENTINEL, "Indices accessor should not have byte_stride"); // @SpecValidation
     gltf_indices_buffer := gltf.buffers[gltf_indices_buffer_view.buffer];
 
     component_byte_size := get_size_from_gltf_component_type(gltf_indices_accessor.component_type);
     byte_count := gltf_indices_accessor.count * component_byte_size;
     byte_offset := gltf_indices_accessor.byte_offset + gltf_indices_buffer_view.byte_offset;
 
-    { // @SpecValidation
-        span_in_buffer := byte_offset + byte_count;
-        span_in_view   := gltf_indices_accessor.byte_offset + byte_count;
-
-        assert(
-            span_in_buffer <= gltf_indices_buffer.bytes.count,
-            "The span of indices is more than the number of bytes",
-        );
-        assert(
-            span_in_view <= gltf_indices_buffer_view.byte_length,
-            "The span of indices is more than the byte length of the buffer view",
-        );
-        assert(
-            span_in_buffer <= gltf_indices_buffer.byte_length,
-            "The span of indices is more than the byte length of the buffer",
-        );
-    }
-
     gltf_indices_bytes := gltf_indices_buffer.bytes.data + byte_offset;
 
     result: [..]u32;
     array_resize(*result, gltf_indices_accessor.count, initialize = false);
     if #complete gltf_indices_accessor.component_type == {
-        case .BYTE; #through;
-        case .SHORT; #through;
-        case .FLOAT;
-            assert(false, "Indices component type can't be BYTE, SHORT or FLOAT"); // @SpecValidation
         case .UNSIGNED_BYTE;
             for *result_element: result {
                 result_element.* = gltf_indices_bytes[it_index];
@@ -389,6 +419,10 @@ parse_gltf_indices :: (gltf: Gltf.Gltf, gltf_indices_accessor: Gltf.Accessor) ->
                 gltf_indices_bytes,
                 byte_count,
             );
+        case .BYTE; #through;
+        case .SHORT; #through;
+        case .FLOAT;
+            // Impossible, validated in Gltf
     }
 
     return result;

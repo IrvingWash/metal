@@ -3,15 +3,15 @@
 /*
 API
 
-read_gltf_from_file :: (path: string) -> error: string, Gltf
-read_glb_from_file  :: (path: string) -> error: string, Gltf
+read_gltf_from_file :: (path: string, $validate: bool = false) -> error: string, Gltf
+read_glb_from_file  :: (path: string, $validate: bool = false) -> error: string, Gltf
 
 Also all the types from gltf_types.jai
 */
 
 #load "gltf_types.jai";
 
-read_gltf_from_file :: (path: string) -> error: string, Gltf {
+read_gltf_from_file :: (path: string, $validate: bool = false) -> error: string, Gltf {
     json, ok := read_entire_file(path,, temp);
     if !ok {
         return
@@ -37,10 +37,19 @@ read_gltf_from_file :: (path: string) -> error: string, Gltf {
             gltf;
     }
 
+    #if validate {
+        error = validate_gltf(gltf, path);
+        if error {
+            return
+                error,
+                gltf;
+        }
+    }
+
     return "", gltf;
 }
 
-read_glb_from_file :: (path: string) -> error: string, Gltf {
+read_glb_from_file :: (path: string, $validate: bool = false) -> error: string, Gltf {
     error, json, binary := parse_glb_from_file(path);
     if error {
         return
@@ -95,6 +104,15 @@ read_glb_from_file :: (path: string) -> error: string, Gltf {
                     tprint("Failed to load buffer data for '%': %", path, error),
                     gltf;
             }
+    }
+
+    #if validate {
+        error = validate_gltf(gltf, path);
+        if error {
+            return
+                error,
+                gltf;
+        }
     }
 
     return "", gltf;
@@ -191,3 +209,4 @@ parse_gltf :: (json: string) -> error: string, Gltf {
 #import "Jaison";
 
 #load "glb.jai";
+#load "gltf_validator.jai";
