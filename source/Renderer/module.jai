@@ -1,9 +1,9 @@
 #module_parameters()(Window_Type: Type, APPLICATION_NAME: string, DEBUG: bool = false);
 
 Renderer :: struct {
-    window:                Window_Type;
-    get_window_render_size: Window_Render_Size_Getter;
-    read_shader_file:       Shader_File_Reader;
+    window:                 Window_Type;
+    get_window_render_size: Get_Window_Render_Size;
+    get_compiled_shader:    Get_Compiled_Shader;
 
     instance:            VK.Instance;
     surface:             VK.Surface_Khr;
@@ -88,36 +88,36 @@ Push_Constants :: struct @Gpu {
 // Procedure pointer types
 // =============================================================================
 
-Additional_Instance_Extensions_Getter :: #type () -> [..]*u8;
+Get_Additional_Intance_Extensions :: #type () -> [..]*u8;
 
-Window_Render_Size_Getter :: #type (window: Window_Type) -> width: u32, height: u32;
+Get_Window_Render_Size :: #type (window: Window_Type) -> width: u32, height: u32;
 
-Window_Surface_Creator :: #type (
+Create_Window_Surface :: #type (
     window: Window_Type,
     instance: VK.Instance,
     allocator: *VK.Allocation_Callbacks = null,
 ) -> VK.Surface_Khr;
 
-Shader_File_Reader :: #type (name: string) -> error: string, content: string;
+Get_Compiled_Shader :: #type (name: string) -> error: string, content: string;
 
 // =============================================================================
 // Public API
 // =============================================================================
 
 init :: (
-    window:                                Window_Type,
-    additional_instance_extensions_getter: Additional_Instance_Extensions_Getter,
-    window_render_size_getter:              Window_Render_Size_Getter,
-    window_surface_creator:                 Window_Surface_Creator,
-    shader_file_reader:                     Shader_File_Reader,
+    window:                             Window_Type,
+    get_additional_instance_extensions: Get_Additional_Intance_Extensions,
+    window_render_size_getter:          Get_Window_Render_Size,
+    create_window_surface:              Create_Window_Surface,
+    get_compiled_shader:                Get_Compiled_Shader,
 ) -> error: string, Renderer {
     renderer: Renderer;
 
-    renderer.window = window;
+    renderer.window                 = window;
     renderer.get_window_render_size = window_render_size_getter;
-    renderer.read_shader_file       = shader_file_reader;
+    renderer.get_compiled_shader    = get_compiled_shader;
 
-    error:, renderer.instance = create_instance(additional_instance_extensions_getter);
+    error:, renderer.instance = create_instance(get_additional_instance_extensions);
     if error {
         return
             error,
@@ -131,7 +131,7 @@ init :: (
     error, renderer.surface = create_surface(
         renderer.instance,
         renderer.window,
-        window_surface_creator,
+        create_window_surface,
     );
     if error {
         return
@@ -247,14 +247,14 @@ init :: (
 
     error, renderer.dummy_pipeline_info = create_dummy_pipeline(
         renderer.device,
-        renderer.read_shader_file,
+        renderer.get_compiled_shader,
         .[renderer.swapchain_info.config.image_format],
         renderer.depth_image_info.format,
     );
 
     error, renderer.common_pipeline_info = create_common_pipeline(
         renderer.device,
-        renderer.read_shader_file,
+        renderer.get_compiled_shader,
         .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targes
         renderer.depth_image_info.format,
         .[renderer.texture_descriptor_info.layout],
@@ -651,7 +651,7 @@ MAX_TEXTURE_COUNT :: 256;
 
 create_common_pipeline :: (
     device:                   VK.Device,
-    shader_file_reader:       Shader_File_Reader,
+    get_compiled_shader:      Get_Compiled_Shader,
     color_attachment_formats: []VK.Format,
     depth_attachment_format:  VK.Format,
     descriptor_set_layouts:   []VK.Descriptor_Set_Layout,
@@ -680,7 +680,7 @@ create_common_pipeline :: (
         }
     }
 
-    error, vertex_shader := create_shader_module(device, "common.vertex.spv", shader_file_reader);
+    error, vertex_shader := create_shader_module(device, "common.vertex.spv", get_compiled_shader);
     if error {
         return
             error,
@@ -688,7 +688,7 @@ create_common_pipeline :: (
     }
     defer VK.destroy_shader_module(device, vertex_shader);
 
-    error =, fragment_shader := create_shader_module(device, "common.fragment.spv", shader_file_reader);
+    error =, fragment_shader := create_shader_module(device, "common.fragment.spv", get_compiled_shader);
     if error {
         return
             error,
@@ -800,7 +800,7 @@ create_common_pipeline :: (
 
 create_dummy_pipeline :: (
     device:                   VK.Device,
-    shader_file_reader:       Shader_File_Reader,
+    get_compiled_shader:      Get_Compiled_Shader,
     color_attachment_formats: []VK.Format,
     depth_attachment_format:  VK.Format,
 ) -> error: string, Pipeline_Info {
@@ -823,7 +823,7 @@ create_dummy_pipeline :: (
         }
     }
 
-    error, vertex_shader := create_shader_module(device, "dummy.vertex.spv", shader_file_reader);
+    error, vertex_shader := create_shader_module(device, "dummy.vertex.spv", get_compiled_shader);
     if error {
         return
             error,
@@ -831,7 +831,7 @@ create_dummy_pipeline :: (
     }
     defer VK.destroy_shader_module(device, vertex_shader);
 
-    error =, fragment_shader := create_shader_module(device, "dummy.fragment.spv", shader_file_reader);
+    error =, fragment_shader := create_shader_module(device, "dummy.fragment.spv", get_compiled_shader);
     if error {
         return
             error,
@@ -1164,7 +1164,7 @@ create_swapchain :: (
     surface:                VK.Surface_Khr,
     device:                 VK.Device,
     window:                 Window_Type,
-    get_window_render_size: Window_Render_Size_Getter,
+    get_window_render_size: Get_Window_Render_Size,
 ) -> error: string, Swapchain_Info {
     swapchain_info: Swapchain_Info;
 
@@ -1520,7 +1520,7 @@ find_physical_device :: (instance: VK.Instance, surface: VK.Surface_Khr) -> erro
 create_surface :: (
     instance: VK.Instance,
     window:   Window_Type,
-    create_window_surface: Window_Surface_Creator,
+    create_window_surface: Create_Window_Surface,
 ) -> error: string, VK.Surface_Khr {
     surface := create_window_surface(window, instance);
     if !surface {
@@ -1534,7 +1534,7 @@ create_surface :: (
         surface;
 }
 
-create_instance :: (get_additional_extensions: Additional_Instance_Extensions_Getter) -> error: string, VK.Instance {
+create_instance :: (get_additional_extensions: Get_Additional_Intance_Extensions) -> error: string, VK.Instance {
     application_info := VK.Application_Info.{
         p_application_name = APPLICATION_NAME,
         api_version        = VULKAN_API_VERSION,
@@ -1691,9 +1691,9 @@ create_image_view :: (
 create_shader_module :: (
     device: VK.Device,
     name: string,
-    read_shader_file: Shader_File_Reader,
+    get_compiled_shader: Get_Compiled_Shader,
 ) -> error: string, VK.Shader_Module {
-    error, content := read_shader_file(name,, temp);
+    error, content := get_compiled_shader(name,, temp);
     if error {
         return
             error,

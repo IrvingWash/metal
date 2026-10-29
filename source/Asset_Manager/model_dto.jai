@@ -200,7 +200,4 @@ destroy :: (model_dto: *Model_Dto) {
 
 #scope_file
 
-#import "Basic";
-#import "Math";
-#import "String";
-#import,dir "Option";
+#import,dir "../Option";

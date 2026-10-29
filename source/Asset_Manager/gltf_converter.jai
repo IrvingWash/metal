@@ -1,4 +1,4 @@
-convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto.Model_Dto {
+convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
     assert(
         context.allocator.proc != temporary_allocator_proc,
         "Temp allocator is forbidden for this procedure, because it's auto_released here",
@@ -16,7 +16,7 @@ convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto.Model_Dto {
     assert(!error, error);
     assert(gltf.scenes.count == 1, "GLTF at % has multiple scenes", path);
 
-    model_dto: Model_Dto.Model_Dto;
+    model_dto: Model_Dto;
 
     gltf_scene := gltf.scenes[0];
     _, file_name := path_decomp(path);
@@ -100,8 +100,8 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
     first_mesh_indices: []u32,
 
     name: string,
-) -> Model_Dto.Node_Dto {
-    node_dto: Model_Dto.Node_Dto;
+) -> Node_Dto {
+    node_dto: Node_Dto;
 
     node_dto.name = name;
 
@@ -158,7 +158,7 @@ make_texture_dto :: (
     name_prefix: string,
 
     identifier_for_errors: string,
-) -> Model_Dto.Texture_Dto {
+) -> Texture_Dto {
     gltf_texture      := gltf.textures[gltf_texture_info._index];
     assert(
         gltf_texture._source != Gltf.SENTINEL,
@@ -171,12 +171,12 @@ make_texture_dto :: (
         else Gltf.Sampler.{};
 
     assert(
-        gltf_texture_info.tex_coord <= Model_Dto.SUPPORTED_MAX_TEX_COORD,
+        gltf_texture_info.tex_coord <= SUPPORTED_MAX_TEX_COORD,
         "Got a tex coord value higher than we support for %",
         identifier_for_errors,
     );
 
-    return Model_Dto.Texture_Dto.{
+    return Texture_Dto.{
         name        = sprint("%-%", name_prefix, gltf_texture.name),
         image_index = cast(u32, gltf_texture._source),
         tex_coord   = cast(u32, gltf_texture_info.tex_coord),
@@ -195,8 +195,8 @@ convert_gltf_material_to_material_dto :: (
     name: string,
 
     identifier_for_errors: string,
-) -> Model_Dto.Material_Dto {
-    material_dto: Model_Dto.Material_Dto;
+) -> Material_Dto {
+    material_dto: Material_Dto;
 
     material_dto.name = name;
 
@@ -246,7 +246,7 @@ convert_gltf_material_to_material_dto :: (
             );
             set(
                 *material_dto.normal_texture,
-                Model_Dto.Normal_Texture_Dto.{
+                Normal_Texture_Dto.{
                     scale   = gltf_normal_texture.scale,
                     texture = texture_dto,
                 },
@@ -266,7 +266,7 @@ convert_gltf_material_to_material_dto :: (
             );
             set(
                 *material_dto.occlusion_texture,
-                Model_Dto.Occlusion_Texture_Dto.{
+                Occlusion_Texture_Dto.{
                     strength = gltf_occlusion_texture.strength,
                     texture  = texture_dto,
                 },
@@ -302,14 +302,14 @@ convert_gltf_image_to_image_dto :: (
     name: string,
 
     identifier_for_errors: string,
-) -> Model_Dto.Image_Dto {
+) -> Image_Dto {
     assert(
         !starts_with(gltf_image.uri, Gltf.DATA_URI_PREFIX),
         "Images in data uris are not supported (%)",
         identifier_for_errors,
     );
 
-    image_dto: Model_Dto.Image_Dto;
+    image_dto: Image_Dto;
 
     image_dto.name = name;
 
@@ -374,8 +374,8 @@ convert_gltf_primitive_to_mesh_dto :: (
 
     name:                  string,
     identifier_for_errors: string,
-) -> Model_Dto.Mesh_Dto {
-    mesh_dto: Model_Dto.Mesh_Dto;
+) -> Mesh_Dto {
+    mesh_dto: Mesh_Dto;
 
     mesh_dto.name     = name;
     mesh_dto.topology = convert_gltf_topology_mode(gltf_primitive.mode);
@@ -401,7 +401,7 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf,
             gltf_position_accessor,
             *mesh_dto.vertices[0].position,
-            size_of(Model_Dto.Vertex_Dto),
+            size_of(Vertex_Dto),
             attribute_key_for_errors = "POSITION",
             identifier_for_errors,
         );
@@ -430,7 +430,7 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf,
             gltf_normal_accessor,
             *mesh_dto.vertices[0].normal,
-            size_of(Model_Dto.Vertex_Dto),
+            size_of(Vertex_Dto),
             attribute_key_for_errors = "NORMAL",
             identifier_for_errors,
         );
@@ -452,7 +452,7 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf,
             gltf_tangent_accessor,
             *mesh_dto.vertices[0].tangent,
-            size_of(Model_Dto.Vertex_Dto),
+            size_of(Vertex_Dto),
             attribute_key_for_errors = "TANGENT",
             identifier_for_errors,
         );
@@ -468,7 +468,7 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf,
             gltf_tex_coord_0_accessor,
             *mesh_dto.vertices[0].uv0,
-            size_of(Model_Dto.Vertex_Dto),
+            size_of(Vertex_Dto),
             attribute_key_for_errors = "TEXCOORD_0",
             identifier_for_errors,
         );
@@ -484,7 +484,7 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf,
             gltf_tex_coord_1_accessor,
             *mesh_dto.vertices[0].uv1,
-            size_of(Model_Dto.Vertex_Dto),
+            size_of(Vertex_Dto),
             attribute_key_for_errors = "TEXCOORD_1",
             identifier_for_errors,
         );
@@ -500,7 +500,7 @@ convert_gltf_primitive_to_mesh_dto :: (
             gltf,
             gltf_color_0_accessor,
             *mesh_dto.vertices[0].color,
-            size_of(Model_Dto.Vertex_Dto),
+            size_of(Vertex_Dto),
             attribute_key_for_errors = "COLOR_0",
             identifier_for_errors,
         );
@@ -668,7 +668,7 @@ parse_gltf_indices :: (
     return result;
 }
 
-convert_gltf_wrap_mode :: (gltf_wrap_mode: Gltf.Sampler.Wrap_Mode) -> Model_Dto.Wrap_Mode {
+convert_gltf_wrap_mode :: (gltf_wrap_mode: Gltf.Sampler.Wrap_Mode) -> Wrap_Mode {
     if #complete gltf_wrap_mode == {
         case .CLAMP_TO_EDGE;
             return .CLAMP_TO_EDGE;
@@ -679,7 +679,7 @@ convert_gltf_wrap_mode :: (gltf_wrap_mode: Gltf.Sampler.Wrap_Mode) -> Model_Dto.
     }
 }
 
-convert_gltf_mag_filter :: (gltf_mag_filter: Gltf.Sampler.Mag_Filter) -> Model_Dto.Mag_Filter {
+convert_gltf_mag_filter :: (gltf_mag_filter: Gltf.Sampler.Mag_Filter) -> Mag_Filter {
     if #complete gltf_mag_filter == {
         case .UNDEFINED;
             return .UNDEFINED;
@@ -690,7 +690,7 @@ convert_gltf_mag_filter :: (gltf_mag_filter: Gltf.Sampler.Mag_Filter) -> Model_D
     }
 }
 
-convert_gltf_min_filter :: (gltf_min_filter: Gltf.Sampler.Min_Filter) -> Model_Dto.Min_Filter {
+convert_gltf_min_filter :: (gltf_min_filter: Gltf.Sampler.Min_Filter) -> Min_Filter {
     if #complete gltf_min_filter == {
         case .UNDEFINED;
             return .UNDEFINED;
@@ -709,7 +709,7 @@ convert_gltf_min_filter :: (gltf_min_filter: Gltf.Sampler.Min_Filter) -> Model_D
     }
 }
 
-convert_gltf_topology_mode :: (gltf_topology: Gltf.Mesh.Primitive.Topology_Mode) -> Model_Dto.Topology_Mode {
+convert_gltf_topology_mode :: (gltf_topology: Gltf.Mesh.Primitive.Topology_Mode) -> Topology_Mode {
     if #complete gltf_topology == {
         case .POINTS;
             return .POINTS;
@@ -728,7 +728,7 @@ convert_gltf_topology_mode :: (gltf_topology: Gltf.Mesh.Primitive.Topology_Mode)
     }
 }
 
-convert_gltf_alpha_mode :: (gltf_alpha_mode: Gltf.Material.Alpha_Mode) -> Model_Dto.Alpha_Mode {
+convert_gltf_alpha_mode :: (gltf_alpha_mode: Gltf.Material.Alpha_Mode) -> Alpha_Mode {
     if #complete gltf_alpha_mode == {
         case .OPAQUE;
             return .OPAQUE;
@@ -775,10 +775,6 @@ get_component_count_from_gltf_accessor_type :: (gltf_accessor_type: Gltf.Accesso
     }
 }
 
-#import "Basic";
-#import "String";
-#import "Math";
 #import "stb_image";
-Model_Dto :: #import,file "Model_Dto.jai";
-Gltf :: #import,dir "Gltf";
-#import,dir "Option";
+Gltf :: #import,dir "../Gltf";
+#import,dir "../Option";
