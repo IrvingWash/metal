@@ -17,9 +17,6 @@ Renderer      :: #import,dir "Renderer"()(
     DEBUG            = DEBUG,
 );
 
-Model_Dto :: #import,file "Model_Dto.jai";
-#import,file "Gltf_Converter.jai";
-
 State :: struct {
     window:   *Windowing.Window;
     renderer: Renderer.Renderer;
@@ -38,15 +35,6 @@ main :: () {
 
     init();
     defer deinit();
-
-    #import "Flat_Pool";
-    pool: Flat_Pool;
-    allocator: Allocator;
-    allocator.data = *pool;
-    allocator.proc = flat_pool_allocator_proc;
-
-    model_dto := convert_gltf("assets/models/Fox/gltf/Fox.gltf", validate = DEBUG);
-    Model_Dto.destroy(*model_dto);
 
     while !state.should_quit {
         process_input();

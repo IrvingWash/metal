@@ -1475,3 +1475,5 @@ VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 #if DEBUG {
     #import "Print_Vars";
 }
+
+#load "model.jai";

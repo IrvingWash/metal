@@ -214,6 +214,16 @@ handle_compiler_messages :: (
         try_to_fill_debug_placeholder(message, config, w);
 
         if message.kind == {
+            case .TYPECHECKED;
+                typechecked := cast(*Message_Typechecked) message;
+
+                for _struct: typechecked.structs {
+                    for note: _struct.expression.notes {
+                        if note.text == "Gpu" {
+                            log("% has Gpu note", _struct.expression.defined_type.name);
+                        }
+                    }
+                }
             case. COMPLETE;
                 break;
         }
