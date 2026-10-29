@@ -4970,7 +4970,10 @@ create_descriptor_set_layout :: inline (
     return result, set_layout;
 }
 
-allocate_descriptor_sets :: (device: Device, p_allocate_info: *Descriptor_Set_Allocate_Info) -> Result, [..]Descriptor_Set {
+allocate_descriptor_sets :: (
+    device:          Device,
+    p_allocate_info: *Descriptor_Set_Allocate_Info,
+) -> Result, [..]Descriptor_Set {
     descriptor_sets: [..]Descriptor_Set;
     array_resize(*descriptor_sets, p_allocate_info.descriptor_set_count);
 

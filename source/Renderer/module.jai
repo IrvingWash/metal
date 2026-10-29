@@ -19,13 +19,15 @@ Renderer :: struct {
     depth_image_info:  Image_Info;
     render_resolution: VK.Extent_2D;
 
+    texture_descriptor_info: Descriptor_Info;
+
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
     dummy_pipeline_info: Pipeline_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
-    frame_index: u64;
     should_recreate_swapchain: bool;
+    frame_index: u64;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -67,6 +69,12 @@ Frame_Resources :: struct {
     command_pool:             VK.Command_Pool;
     command_buffer:           VK.Command_Buffer;
     image_acquired_semaphore: VK.Semaphore;
+}
+
+Descriptor_Info :: struct {
+    pool:   VK.Descriptor_Pool;
+    layout: VK.Descriptor_Set_Layout;
+    set:    VK.Descriptor_Set;
 }
 
 // =============================================================================
@@ -211,6 +219,13 @@ init :: (
             renderer;
     }
 
+    error, renderer.texture_descriptor_info = create_texture_descriptor_info(renderer.device);
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     for *frame_resources: renderer.frame_resources_list {
         error:, frame_resources.* = create_frame_resources(
             renderer.device,
@@ -248,6 +263,8 @@ deinit :: (renderer: *Renderer) {
     for *frame_resources: renderer.frame_resources_list {
         destroy_frame_resources(renderer.device, frame_resources);
     }
+
+    destroy_descriptor_info(renderer.device, *renderer.texture_descriptor_info);
 
     destroy_image( // Depth image
         renderer.device,
@@ -598,6 +615,8 @@ DEVICE_EXTENSIONS :: *u8.[
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
+MAX_TEXTURE_COUNT :: 256;
+
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
         VK.Extension_Names.DEBUG_UTILS
@@ -758,6 +777,95 @@ destroy_pipeline :: (device: VK.Device, pipeline_info: *Pipeline_Info) {
     VK.destroy_pipeline_layout(device, pipeline_info.layout);
 
     pipeline_info.* = {};
+}
+
+create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descriptor_Info {
+    descriptor_info: Descriptor_Info;
+
+    { // Pool
+        descriptor_pool_sizes := VK.Descriptor_Pool_Size.[
+            {
+                type             = .COMBINED_IMAGE_SAMPLER,
+                descriptor_count = MAX_TEXTURE_COUNT,
+            },
+        ];
+
+        descriptor_pool_create_info := VK.Descriptor_Pool_Create_Info.{
+            flags           = .UPDATE_AFTER_BIND,
+            max_sets        = 1, // Only one, set = 0
+            pool_size_count = descriptor_pool_sizes.count,
+            p_pool_sizes    = descriptor_pool_sizes.data,
+            pool_size_count = descriptor_pool_sizes.count,
+            p_pool_sizes    = descriptor_pool_sizes.data,
+        };
+        result:, descriptor_info.pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create descriptor pool for textures: %", result),
+                descriptor_info;
+        }
+    }
+
+    { // Layout
+        bindings := VK.Descriptor_Set_Layout_Binding.[
+            {
+                binding          = 0,
+                descriptor_type  = .COMBINED_IMAGE_SAMPLER,
+                descriptor_count = MAX_TEXTURE_COUNT,
+                stage_flags      = .FRAGMENT,
+            },
+        ];
+
+        flags_per_binding := VK.Descriptor_Binding_Flags.[
+            .PARTIALLY_BOUND | .UPDATE_AFTER_BIND,
+        ];
+
+        flags_create_info := VK.Descriptor_Set_Layout_Binding_Flags_Create_Info.{
+            binding_count   = flags_per_binding.count,
+            p_binding_flags = flags_per_binding.data,
+        };
+
+        descriptor_set_layout_create_info := VK.Descriptor_Set_Layout_Create_Info.{
+            p_next        = *flags_create_info,
+            flags         = .UPDATE_AFTER_BIND_POOL,
+            binding_count = bindings.count,
+            p_bindings    = bindings.data,
+        };
+
+        result:, descriptor_info.layout = VK.create_descriptor_set_layout(
+            device,
+            *descriptor_set_layout_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create descriptor set layout for textures: %", result),
+                descriptor_info;
+        }
+    }
+
+    { // Set
+        descriptor_set_allocate_info := VK.Descriptor_Set_Allocate_Info.{
+            descriptor_pool      = descriptor_info.pool,
+            descriptor_set_count = 1,
+            p_set_layouts        = *descriptor_info.layout,
+        };
+
+        result, descriptor_sets := VK.allocate_descriptor_sets(device, *descriptor_set_allocate_info,, temp);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to allocate descriptor set for textures: %", result),
+                descriptor_info;
+        }
+    }
+
+    return "", descriptor_info;
+}
+
+destroy_descriptor_info :: (device: VK.Device, descriptor_set_info: *Descriptor_Info) {
+    VK.destroy_descriptor_set_layout(device, descriptor_set_info.layout);
+    VK.destroy_descriptor_pool(device, descriptor_set_info.pool);
+
+    descriptor_set_info.* = {};
 }
 
 destroy_frame_resources :: (device: VK.Device, frame_resources: *Frame_Resources) {
