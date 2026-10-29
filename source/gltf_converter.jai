@@ -37,12 +37,35 @@ convert_gltf :: (path: string) -> Model_Dto {
         array_add(*model_dto.images, image_dto);
     }
 
+    for gltf_material: gltf.materials {
+        material_dto := convert_gltf_material_to_material_dto(
+            gltf,
+            gltf_material,
+            path,
+            it_index,
+        );
+        array_add(*model_dto.materials, material_dto);
+    }
+
     return model_dto;
 }
 
 
 
 #scope_file
+
+SUPPORTED_MAX_TEX_COORD :: #run -> int {
+    tis := cast(*Type_Info_Struct, type_info(Vertex_Dto));
+
+    count: int;
+    for member: tis.members {
+        if starts_with(member.name, "uv") {
+            count += 1;
+        }
+    }
+
+    return count - 1;
+};
 
 Model_Dto :: struct {
     name:      string;
@@ -98,8 +121,7 @@ Material_Dto :: struct {
     normal_texture:         Option(Normal_Texture_Dto);
     occlusion_texture:      Option(Occlusion_Texture_Dto);
     emissive_texture:       Option(Texture_Dto);
-
-    emissive_factor: Vector3;
+    emissive_factor:        Vector3;
 }
 
 Pbr_Metallic_Roughness_Dto :: struct {
@@ -141,6 +163,150 @@ Image_Dto :: struct {
     height:        u32;
     channel_count: u8;
 };
+
+make_texture_dto :: (
+    gltf:                  Gltf.Gltf,
+    gltf_texture_info:     $T/interface Gltf.Texture_Info,
+    name_prefix:           string,
+    identifier_for_errors: string,
+) -> Texture_Dto {
+    gltf_texture      := gltf.textures[gltf_texture_info._index];
+    assert(
+        gltf_texture._source != Gltf.SENTINEL,
+        "The texture doesn't have a source (%)",
+        identifier_for_errors,
+    );
+
+    gltf_sampler := ifx gltf_texture._sampler != Gltf.SENTINEL
+        then gltf.samplers[gltf_texture._sampler]
+        else Gltf.Sampler.{};
+
+    assert(
+        gltf_texture_info.tex_coord <= SUPPORTED_MAX_TEX_COORD,
+        "Got a tex coord value higher than we support for %",
+        identifier_for_errors,
+    );
+
+    return Texture_Dto.{
+        name        = sprint("%-%", name_prefix, gltf_texture.name),
+        image_index = cast(u32, gltf_texture._source),
+        tex_coord   = cast(u32, gltf_texture_info.tex_coord),
+
+        mag_filter = gltf_sampler.mag_filter,
+        min_filter = gltf_sampler.min_filter,
+        wrap_s     = gltf_sampler.wrap_s,
+        wrap_t     = gltf_sampler.wrap_t,
+    };
+}
+
+convert_gltf_material_to_material_dto :: (
+    gltf:                Gltf.Gltf,
+    gltf_material:       Gltf.Material,
+    gltf_path:           string,
+    gltf_material_index: int,
+) -> Material_Dto {
+    material_dto: Material_Dto;
+
+    material_dto.name = sprint(
+        "%-%-%",
+        gltf_path,
+        gltf_material.name,
+        gltf_material_index,
+    );
+
+    material_dto.double_sided              = gltf_material.double_sided;
+    material_dto.alpha_mode                = gltf_material.alpha_mode;
+    material_dto.alpha_cutoff              = gltf_material.alpha_cutoff;
+    material_dto.emissive_factor.component = gltf_material.emissive_factor;
+
+    { // pbr_metallic_roughness_dto
+        gltf_pbr := gltf_material.pbr_metallic_roughness;
+        pbr_dto  := *material_dto.pbr_metallic_roughness;
+
+        pbr_dto.base_color_factor.component = gltf_pbr.base_color_factor;
+        pbr_dto.metallic_factor             = gltf_pbr.metallic_factor;
+        pbr_dto.roughness_factor            = gltf_pbr.roughness_factor;
+
+        if gltf_pbr.base_color_texture._index != Gltf.SENTINEL {
+            texture_dto := make_texture_dto(
+                gltf,
+                gltf_pbr.base_color_texture,
+                tprint("%-%", material_dto.name, "base_color"),
+                gltf_path,
+            );
+            set(*pbr_dto.base_color_texture, texture_dto);
+        }
+
+        if gltf_pbr.metallic_roughness_texture._index != Gltf.SENTINEL {
+            texture_dto := make_texture_dto(
+                gltf,
+                gltf_pbr.metallic_roughness_texture,
+                tprint("%-%", material_dto.name, "metallic_roughness"),
+                gltf_path,
+            );
+            set(*pbr_dto.metallic_roughness_texture, texture_dto);
+        }
+    }
+
+    { // normal_texture_dto
+        gltf_normal_texture := gltf_material.normal_texture;
+
+        if gltf_normal_texture._index != Gltf.SENTINEL {
+            texture_dto := make_texture_dto(
+                gltf,
+                gltf_normal_texture,
+                tprint("%-%", material_dto.name, "normal"),
+                gltf_path,
+            );
+            set(
+                *material_dto.normal_texture,
+                Normal_Texture_Dto.{
+                    scale   = gltf_normal_texture.scale,
+                    texture = texture_dto,
+                },
+            );
+        }
+    }
+
+    { // occlusion_texture
+        gltf_occlusion_texture := gltf_material.occlusion_texture;
+
+        if gltf_occlusion_texture._index != Gltf.SENTINEL {
+            texture_dto := make_texture_dto(
+                gltf,
+                gltf_occlusion_texture,
+                tprint("%-%", material_dto.name, "occlusion"),
+                gltf_path,
+            );
+            set(
+                *material_dto.occlusion_texture,
+                Occlusion_Texture_Dto.{
+                    strength = gltf_occlusion_texture.strength,
+                    texture  = texture_dto,
+                },
+            );
+        }
+    }
+
+    { // emissive_texture
+        gltf_emissive_texture := gltf_material.emissive_texture;
+
+        if gltf_emissive_texture._index != Gltf.SENTINEL {
+            texture_dto := make_texture_dto(
+                gltf,
+                gltf_emissive_texture,
+                tprint("%-%", material_dto.name, "emissive"),
+                gltf_path,
+            );
+            set(
+                *material_dto.emissive_texture,
+                texture_dto,
+            );
+        }
+    }
+
+    return material_dto;
+}
 
 convert_gltf_image_to_image_dto :: (
     gltf:             Gltf.Gltf,
@@ -463,7 +629,7 @@ parse_gltf_attribute :: (
 
     for 0 .. gltf_accessor.count - 1 {
         target := cast(*Result_Type, cast(*u8, destination) + it * destination_stride);
-        target.* = cast(*Result_Type, it * step + gltf_attribute_bytes);
+        target.* = cast(*Result_Type, it * step + gltf_attribute_bytes).*;
     }
 };
 

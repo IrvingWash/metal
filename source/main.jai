@@ -35,6 +35,7 @@ main :: () {
     defer deinit();
 
     model_dto := convert_gltf("assets/models/Fox/glb/Fox.glb",, temp);
+    print_vars(model_dto.materials);
 
     while !state.should_quit {
         process_input();
