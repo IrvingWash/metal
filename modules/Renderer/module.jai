@@ -227,6 +227,9 @@ init :: (
             renderer;
     }
 
+    array_reserve(*renderer.samplers, MAX_TEXTURE_COUNT);
+    array_reserve(*renderer.texture_images, MAX_TEXTURE_COUNT);
+
     return
         "",
         renderer;

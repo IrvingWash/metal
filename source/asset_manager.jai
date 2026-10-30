@@ -51,11 +51,8 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
         set(*maybe_model_dto, result);
     }
 
-    if maybe_model_dto.kind == .NONE {
-        return tprint("Unsupported model file extension: %", path);
-    }
-
     model_dto := maybe_model_dto.some;
+    defer destroy(*model_dto);
 
     result_sampler_ids: [..]int;
     result_image_ids:   [..]int;
@@ -77,7 +74,8 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                     width  = image.width,
                     height = image.height,
                     bytes  = image.bytes,
-                }],
+                }],,
+                temp
             );
             if error {
                 return error;
