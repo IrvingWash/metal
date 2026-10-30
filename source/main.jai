@@ -24,7 +24,7 @@ State :: struct {
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
     camera:        Renderer.Camera = {
-        position     = { 3, 3, 5 },
+        position     = { 0, 3, 5 },
         z_near       = 0.1,
         z_far        = 1000,
         fov_vertical = 1.047198,
@@ -45,15 +45,20 @@ main :: () {
     init();
     defer deinit();
 
-    error, suzanne_model := asset_manager_upload_model(*state.asset_manager, "assets/models/Suzanne/gltf/Suzanne.gltf");
+    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/viking_room/scene.gltf");
+    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Suzanne/gltf/Suzanne.gltf");
+    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/barn/scene.gltf");
+    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/glb/Fox.glb");
+    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/gltf/Fox.gltf");
+    error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam/gundam.glb");
     assert(!error, error);
 
     while !state.should_quit {
         process_input();
 
         Renderer.start_drawing(*state.renderer, state.camera);
-        Renderer.draw_model(*state.renderer, suzanne_model);
-        Renderer.finish_drawing(*state.renderer, suzanne_model);
+        Renderer.draw_model(*state.renderer, model);
+        Renderer.finish_drawing(*state.renderer);
 
         reset_temporary_storage();
     }

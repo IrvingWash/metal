@@ -49,6 +49,8 @@ Renderer :: struct {
     view_transform:             Matrix4;
     view_projection_transform: Matrix4;
 
+    models_this_frame: [..]Model;
+
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
     }
@@ -309,6 +311,8 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
+    array_free(renderer.models_this_frame);
+
     array_free(renderer.vertices);
     array_free(renderer.indices);
     array_free(renderer.materials);
@@ -384,6 +388,8 @@ deinit :: (renderer: *Renderer) {
 }
 
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
+    array_reset_keeping_memory(*renderer.models_this_frame);
+
     if renderer.should_recreate_swapchain {
         VK.device_wait_idle(renderer.device);
 
@@ -437,11 +443,10 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
 }
 
 draw_model :: (renderer: *Renderer, model: Model) {
-    // Omitted for now
+    array_add(*renderer.models_this_frame, model);
 }
 
-// @Todo: remove model
-finish_drawing :: (renderer: *Renderer, model: Model) -> error: string {
+finish_drawing :: (renderer: *Renderer) -> error: string {
     frame_resources_index := renderer.frame_index % FRAMES_IN_FLIGHT_COUNT;
     signal_value := renderer.timeline_semaphore_info.next_signal_value;
 
@@ -496,26 +501,22 @@ finish_drawing :: (renderer: *Renderer, model: Model) -> error: string {
     renderer.frame_index += 1;
     renderer.timeline_semaphore_info.next_signal_value += 1;
 
-    // @Todo: hardcoded because we use Suzanne, which has only 1 node
     draw_index: int;
-    for mesh: model.nodes[0].meshes {
-        world_transform := model.nodes[0].local_transform;
+    for model: renderer.models_this_frame {
+        for node: model.nodes {
+            if node.parent_index.kind != .NONE {
+                continue;
+            }
 
-        frame_resources.indirect_draw_pointer[draw_index] = {
-            index_count    = mesh.index_count,
-            instance_count = 1,
-            first_index    = mesh.index_start,
-            vertex_offset  = cast(s32, mesh.vertex_start),
-            first_instance = cast(u32, draw_index),
-        };
-
-        frame_resources.instance_pointer[draw_index] = {
-            wvp_transform   = transpose(renderer.view_projection_transform * world_transform),
-            world_transform = transpose(world_transform),
-            material_index  = mesh.material_index,
-        };
-
-        draw_index += 1;
+            draw_node(
+                renderer,
+                node,
+                *draw_index,
+                model.nodes,
+                *frame_resources,
+                Matrix4_Identity,
+            );
+        }
     }
 
     { // Begin command buffer
@@ -1193,6 +1194,48 @@ Push_Constants :: struct @Gpu {
     vertex_buffer_address:   VK.Device_Address;
     material_buffer_address: VK.Device_Address;
     instance_buffer_address: VK.Device_Address;
+}
+
+draw_node :: (
+    renderer: Renderer,
+    node: Node,
+    draw_index: *int,
+    nodes: []Node,
+    frame_resources: *Frame_Resources,
+    parent_transform: Matrix4,
+) {
+    world_transform := parent_transform * node.local_transform;
+
+    for mesh: node.meshes {
+        frame_resources.indirect_draw_pointer[draw_index.*] = {
+            index_count    = mesh.index_count,
+            instance_count = 1,
+            first_index    = mesh.index_start,
+            vertex_offset  = cast(s32, mesh.vertex_start),
+            first_instance = cast(u32, draw_index.*),
+        };
+
+        frame_resources.instance_pointer[draw_index.*] = {
+            wvp_transform   = transpose(renderer.view_projection_transform * world_transform),
+            world_transform = transpose(world_transform),
+            material_index  = mesh.material_index,
+        };
+
+        draw_index.* += 1;
+    }
+
+    for child_node_index: node.children_ids {
+        child_node := nodes[child_node_index];
+
+        draw_node(
+            renderer,
+            child_node,
+            draw_index,
+            nodes,
+            frame_resources,
+            world_transform,
+        );
+    }
 }
 
 create_fallbacks :: (renderer: *Renderer) -> error: string {

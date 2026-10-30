@@ -1,6 +1,6 @@
 # Issues
 
-- Draw by traversing nodes
+- Sort everything so parent nodes come before children nodes so we don't need to use recursion when traversing the nodes
 
 - Fix the API so `start_drawing`, `draw_model` and `finish_drawing` make sense
 
