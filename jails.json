@@ -3,6 +3,7 @@
         "source/main.jai",
         "install_tools.jai",
         "build.jai",
+        "compile_glsl_shaders.jai",
         "modules/Vulkan_Memory_Allocator/generate.jai",
         "modules/Vulkan_Memory_Allocator/module.jai",
         "modules/Jai_Vulkan/module.jai",

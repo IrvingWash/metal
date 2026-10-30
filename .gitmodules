@@ -13,6 +13,3 @@
 [submodule "modules/Shaderc/shaderc"]
 	path = modules/Shaderc/shaderc
 	url = git@github.com:google/shaderc.git
-[submodule "modules/Slang/slang"]
-	path = modules/Slang/slang
-	url = git@github.com:shader-slang/slang.git
