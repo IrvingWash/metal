@@ -741,7 +741,7 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
         renderer.allocator,
         staging_buffer,
         buffer_offset = 0,
-        *materials.data,
+        materials.data,
         byte_size,
     );
     if error {
@@ -783,8 +783,11 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
 }
 
 // @Todo: batching
-upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, offset: u32 {
+upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, start: u32, count: u32 {
     byte_size := vertices.count * size_of(Vertex);
+
+    start := renderer.vertices_offset;
+    count := cast(u32, vertices.count);
 
     memcpy(
         *renderer.vertices[renderer.vertices_offset],
@@ -792,7 +795,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         byte_size,
     );
 
-    defer renderer.vertices_offset += cast(u32, vertices.count);
+    renderer.vertices_offset += cast(u32, vertices.count);
 
     error, staging_buffer := create_buffer(
         renderer.device,
@@ -803,7 +806,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         mappable = true,
     );
     if error {
-        return error, renderer.vertices_offset;
+        return error, start, count;
     }
     defer VMA.destroy_buffer(
         renderer.allocator,
@@ -819,7 +822,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         byte_size,
     );
     if error {
-        return error, renderer.vertices_offset;
+        return error, start, count;
     }
 
     error =, command_buffer := start_transient_command_buffer(
@@ -827,7 +830,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         renderer.transient_command_pool,
     );
     if error {
-        return error, renderer.vertices_offset;
+        return error, start, count;
     }
 
     buffer_copy := VK.Buffer_Copy.{
@@ -850,15 +853,18 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         command_buffer,
     );
     if error {
-        return error, renderer.vertices_offset;
+        return error, start, count;
     }
 
-    return "", renderer.vertices_offset;
+    return "", start, count;
 }
 
 // @Todo: batching
-upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset: u32 {
+upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start: u32, count: u32 {
     byte_size := indices.count * size_of(u32);
+
+    start := renderer.indices_offset;
+    count := cast(u32, indices.count);
 
     memcpy(
         *renderer.indices[renderer.indices_offset],
@@ -866,7 +872,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
         byte_size,
     );
 
-    defer renderer.indices_offset += cast(u32, indices.count);
+    renderer.indices_offset += cast(u32, indices.count);
 
     error, staging_buffer := create_buffer(
         renderer.device,
@@ -877,7 +883,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
         mappable     = true,
     );
     if error {
-        return error, renderer.indices_offset;
+        return error, start, count;
     }
     defer VMA.destroy_buffer(
         renderer.allocator,
@@ -893,7 +899,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
         byte_size,
     );
     if error {
-        return error, renderer.indices_offset;
+        return error, start, count;
     }
 
     error =, command_buffer := start_transient_command_buffer(
@@ -901,7 +907,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
         renderer.transient_command_pool,
     );
     if error {
-        return error, renderer.indices_offset;
+        return error, start, count;
     }
 
     buffer_copy := VK.Buffer_Copy.{
@@ -924,14 +930,14 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
         command_buffer,
     );
     if error {
-        return error, renderer.indices_offset;
+        return error, start, count;
     }
 
-    return "", renderer.indices_offset;
+    return "", start, count;
 }
 
 // @Todo: batching
-create_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params) -> error: string, image_ids: [..]u32 {
+upload_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params) -> error: string, image_ids: [..]u32 {
     image_ids: [..]u32;
 
     error, command_buffer := start_transient_command_buffer(
@@ -1072,7 +1078,7 @@ Buffer_Info :: struct {
 
 Timeline_Semaphore_Info :: struct {
     semaphore:         VK.Semaphore;
-    next_signal_value: VK.Device_Address;
+    next_signal_value: u64;
 }
 
 Frame_Resources :: struct {

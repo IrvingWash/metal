@@ -1,16 +1,13 @@
-#scope_module
-
 Model :: struct {
-    nodes: Node;
+    nodes: [..]Node;
 }
 
 Node :: struct {
     local_transform: Matrix4 = Matrix4_Identity;
 
-    fist_mesh_index: u32;
-    mesh_count:      u32;
-    parent_index:    u32;
-    children_ids:    [..]u32;
+    meshes:       [..]Mesh;
+    parent_index: Option(u32);
+    children_ids: [..]u32;
 }
 
 Mesh :: struct {
@@ -19,7 +16,7 @@ Mesh :: struct {
     index_start:  u32;
     index_count:  u32;
 
-    material_index: u32;
+    material_index: Option(u32);
 }
 
 Texture :: struct {
@@ -40,7 +37,13 @@ Vertex :: struct @Gpu {
 }
 
 Instance :: struct @Gpu {
-    wvp_transform:    Matrix4;
-    world__transform: Matrix4;
-    material_index:   u32;
+    wvp_transform:   Matrix4;
+    world_transform: Matrix4;
+    material_index:  u32;
 }
+
+
+
+#scope_file
+
+#import "Option";

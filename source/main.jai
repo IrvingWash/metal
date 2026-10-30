@@ -39,14 +39,14 @@ main :: () {
     init();
     defer deinit();
 
-    error := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/gltf/Fox.gltf");
+    error, suzanne_model := asset_manager_upload_model(*state.asset_manager, "assets/models/Suzanne/gltf/Suzanne.gltf");
     assert(!error, error);
 
     while !state.should_quit {
         process_input();
 
         Renderer.start_drawing(*state.renderer);
-        Renderer.draw_model(*state.renderer, .{});
+        Renderer.draw_model(*state.renderer, suzanne_model);
         Renderer.finish_drawing(*state.renderer);
 
         reset_temporary_storage();

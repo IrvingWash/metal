@@ -38,43 +38,125 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
 
 // @Todo: In the future, this will just upload our own binaries.
 // The convertation would be run via a script, like shader compilation
-asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> error: string {
+asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> error: string, Renderer.Model {
+    renderer_model: Renderer.Model;
+
     maybe_model_dto: Option(Model_Dto);
 
     extension := path_extension(path);
     if array_find(GLTF_FILE_EXTENSIONS, extension) {
         error, result := convert_gltf(path, DEBUG);
         if error {
-            return error;
+            return error, renderer_model;
         }
 
         set(*maybe_model_dto, result);
     }
 
+    if maybe_model_dto.kind != .SOME {
+        return
+            tprint("Unsupported model format: '%'", extension),
+            renderer_model;
+    }
+
     model_dto := maybe_model_dto.some;
     defer destroy(*model_dto);
 
-    indices_offsets:    [..]u32;
-    vertices_offsets:   [..]u32;
-    material_ids:       [..]u32;
+    uploaded_renderer_material_ids: [..]u32;
+    uploaded_renderer_material_ids.allocator = temp;
+    renderer_base_color_texture_id_by_image_dto_index: Table(u32, u32);
+    renderer_base_color_texture_id_by_image_dto_index.allocator = temp;
+    for material_dto: model_dto.materials {
+        renderer_base_color_texture_id: u32;
+        if material_dto.pbr_metallic_roughness.base_color_texture.kind == .SOME {
+            base_color_texture_dto := material_dto.pbr_metallic_roughness.base_color_texture.some;
 
-    for mesh: model_dto.meshes {
-        if mesh.indices.count > 0 {
-            error, indices_offset := Renderer.upload_indices(
-                *state.renderer,
-                mesh.indices,
+            found, renderer_texture_id := table_find(
+                *renderer_base_color_texture_id_by_image_dto_index,
+                base_color_texture_dto.image_index,
             );
-            if error {
-                return error;
+            if !found {
+                error, sampler_id := create_sampler_from_texture_dto(base_color_texture_dto);
+                if error {
+                    return error, renderer_model;
+                }
+
+                image_dto := model_dto.images[base_color_texture_dto.image_index];
+
+                error =, image_ids := Renderer.upload_texture_images(
+                    *state.renderer,
+                    .[{
+                        width  = image_dto.width,
+                        height = image_dto.height,
+                        bytes  = image_dto.bytes,
+                    }],,
+                    temp
+                );
+                if error {
+                    return error, renderer_model;
+                }
+
+                renderer_base_color_texture_id = Renderer.add_textures(
+                    *state.renderer,
+                    .[{
+                        image_index   = image_ids[0],
+                        sampler_index = sampler_id,
+                    }],,
+                    temp
+                )[0];
+
+                table_set(
+                    *renderer_base_color_texture_id_by_image_dto_index,
+                    base_color_texture_dto.image_index,
+                    renderer_base_color_texture_id,
+                );
+            } else {
+                renderer_base_color_texture_id = renderer_texture_id;
             }
-            array_add(*indices_offsets, indices_offset);
         }
 
-        if mesh.vertices.count > 0 {
+        error, material_ids := Renderer.upload_materials(
+            *state.renderer,
+            .[{
+                base_color_factor        = material_dto.pbr_metallic_roughness.base_color_factor,
+                base_color_texture_index = renderer_base_color_texture_id,
+            }],,
+            temp
+        );
+        if error {
+            return error, renderer_model;
+        }
+        array_add(*uploaded_renderer_material_ids, ..material_ids);
+    }
+
+    renderer_meshes: [..]Renderer.Mesh;
+    renderer_meshes.allocator = temp;
+    for mesh_dto: model_dto.meshes {
+        mesh: Renderer.Mesh;
+        defer array_add(*renderer_meshes, mesh);
+
+        if mesh_dto.material_index.kind == .SOME {
+            mesh.material_index = some(uploaded_renderer_material_ids[mesh_dto.material_index.some]);
+        }
+
+        if mesh_dto.indices.count > 0 {
+            error, start, count := Renderer.upload_indices(
+                *state.renderer,
+                mesh_dto.indices,
+            );
+            if error {
+                return error, renderer_model;
+            }
+
+            mesh.index_start = start;
+            mesh.index_count = count;
+        }
+
+        if mesh_dto.vertices.count > 0 {
             converted_vertices: [..]Renderer.Vertex;
             converted_vertices.allocator = temp;
-            array_resize(*converted_vertices, mesh.vertices.count);
-            for vertex_dto: mesh.vertices {
+            array_resize(*converted_vertices, mesh_dto.vertices.count);
+            for vertex_dto: mesh_dto.vertices {
                 converted_vertices[it_index] = {
                     position = vertex_dto.position,
                     color    = vertex_dto.color,
@@ -83,67 +165,45 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                 };
             }
 
-            error, vertices_offset := Renderer.upload_vertices(
+            error, start, count := Renderer.upload_vertices(
                 *state.renderer,
                 converted_vertices,
             );
             if error {
-                return error;
+                return error, renderer_model;
             }
-            array_add(*vertices_offsets, vertices_offset);
+
+            mesh.vertex_start = start;
+            mesh.vertex_count = count;
         }
     }
 
-    for material: model_dto.materials {
-        base_color_texture_id: u32;
-        if material.pbr_metallic_roughness.base_color_texture.kind == .SOME {
-            base_color_texture := material.pbr_metallic_roughness.base_color_texture.some;
+    for node_dto: model_dto.nodes {
+        renderer_node: Renderer.Node;
+        renderer_node.local_transform = node_dto.local_transform;
+        renderer_node.parent_index = node_dto.parent_index;
 
-            error, sampler_id := create_sampler_from_texture_dto(base_color_texture);
-            if error {
-                return error;
+        if node_dto.first_mesh_index.kind == .SOME && node_dto.mesh_count > 0 {
+            first := node_dto.first_mesh_index.some;
+            for first .. first + node_dto.mesh_count - 1 {
+                array_add(*renderer_node.meshes, renderer_meshes[it]);
             }
-
-            image := model_dto.images[base_color_texture.image_index];
-
-            error =, image_ids := Renderer.create_texture_images(
-                *state.renderer,
-                .[{
-                    width  = image.width,
-                    height = image.height,
-                    bytes  = image.bytes,
-                }],,
-                temp
-            );
-            if error {
-                return error;
-            }
-
-            base_color_texture_id = Renderer.add_textures(
-                *state.renderer,
-                .[{
-                    image_index   = image_ids[0],
-                    sampler_index = sampler_id,
-                }],,
-                temp
-            )[0];
         }
 
-        error, _material_ids := Renderer.upload_materials(
-            *state.renderer,
-            .[{
-                base_color_factor        = material.pbr_metallic_roughness.base_color_factor,
-                base_color_texture_index = base_color_texture_id,
-            }],,
-            temp
+        array_resize(*renderer_node.children_ids, node_dto.children_indices.count);
+        memcpy(
+            renderer_node.children_ids.data,
+            node_dto.children_indices.data,
+            renderer_node.children_ids.count * size_of(u32),
         );
-        if error {
-            return error;
-        }
-        array_add(*material_ids, .._material_ids);
+
+        array_add(
+            *renderer_model.nodes,
+            renderer_node,
+        );
     }
 
-    return "";
+    return "", renderer_model;
 }
 
 
@@ -163,7 +223,7 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
     }
 
     if #complete texture_dto.min_filter == {
-        case. UNDEFINED;
+        case .UNDEFINED;
             params.min_filter = .LINEAR;
             params.mipmap_mode = .LINEAR;
         case. NEAREST;
@@ -220,6 +280,7 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
 #import "Math";
 #import "File";
 #import "Option";
+#import "Hash_Table";
 
 #load "asset_manager/model_dto.jai";
 #load "asset_manager/gltf_converter.jai";
