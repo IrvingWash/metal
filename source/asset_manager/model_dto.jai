@@ -1,3 +1,5 @@
+#scope_module
+
 SUPPORTED_MAX_TEX_COORD :: #run -> int {
     tis := cast(*Type_Info_Struct, type_info(Vertex_Dto));
 
@@ -195,7 +197,3 @@ destroy :: (model_dto: *Model_Dto) {
 
     model_dto.* = {};
 }
-
-
-
-#scope_file

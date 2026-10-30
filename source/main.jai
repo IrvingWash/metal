@@ -16,11 +16,12 @@ Renderer      :: #import "Renderer"()(
     APPLICATION_NAME = "metal",
     DEBUG            = DEBUG,
 );
-Asset_Manager :: #import,dir "Asset_Manager"()(VALIDATE = DEBUG);
+
+#load "asset_manager.jai";
 
 State :: struct {
     window:        *Windowing.Window;
-    asset_manager: Asset_Manager.Asset_Manager;
+    asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
 
     should_quit: bool;
@@ -38,7 +39,7 @@ main :: () {
     init();
     defer deinit();
 
-    error := Asset_Manager.upload_model("assets/models/Fox/gltf/Fox.gltf");
+    error := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/gltf/Fox.gltf");
     assert(!error, error);
 
     while !state.should_quit {
@@ -73,7 +74,7 @@ init :: () {
 
     Input.init();
 
-    state.asset_manager = Asset_Manager.init();
+    state.asset_manager = init_asset_manager();
 
     error:, state.renderer = Renderer.init(
         state.window,
@@ -88,7 +89,7 @@ init :: () {
 deinit :: () {
     Renderer.deinit(*state.renderer);
 
-    Asset_Manager.deinit(*state.asset_manager);
+    deinit_asset_manager(*state.asset_manager);
 
     Input.deinit();
 
@@ -97,14 +98,8 @@ deinit :: () {
 }
 
 get_compiled_shader :: (name: string) -> error: string, shader: string {
-    error, shader := Asset_Manager.get_compiled_shader(state.asset_manager, name);
+    error, shader := asset_manager_get_compiled_shader(state.asset_manager, name);
     return error, shader;
-}
-
-create_sampler :: (params: Renderer.Create_Sampler_Params) -> error: string, index: int {
-    error, index := Renderer.create_sampler(*state.renderer, params);
-
-    return error, index;
 }
 
 setup_formatting :: () {
