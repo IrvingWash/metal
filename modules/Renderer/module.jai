@@ -22,10 +22,12 @@ Renderer :: struct {
     texture_descriptor_info: Descriptor_Info;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
-    samplers: [..]VK.Sampler;
 
     dummy_pipeline_info: Pipeline_Info;
     common_pipeline_info: Pipeline_Info;
+
+    samplers:       [..]VK.Sampler;
+    texture_images: [..]Image_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     should_recreate_swapchain: bool;
@@ -53,6 +55,12 @@ Create_Window_Surface :: #type (
 Get_Compiled_Shader :: #type (name: string) -> error: string, content: string;
 
 Create_Sampler_Params :: VK.Sampler_Create_Info;
+
+Image_Params :: struct {
+    width:  u32;
+    height: u32;
+    bytes:  []u8;
+}
 
 // =============================================================================
 // Public API
@@ -226,6 +234,20 @@ init :: (
 
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
+
+    for texture_image_info: renderer.texture_images {
+        destroy_image(
+            renderer.device,
+            renderer.allocator,
+            *texture_image_info,
+        );
+    }
+    array_free(renderer.texture_images);
+
+    for sampler: renderer.samplers {
+        VK.destroy_sampler(renderer.device, sampler);
+    }
+    array_free(renderer.samplers);
 
     destroy_pipeline(renderer.device, *renderer.common_pipeline_info);
     destroy_pipeline(renderer.device, *renderer.dummy_pipeline_info);
@@ -564,8 +586,54 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     return "";
 }
 
-create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> index: int, error: string {
-    result, sampler := VK.create_sampler(renderer.device, *create_info);
+create_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params) -> error: string, image_ids: [..]int {
+    image_ids: [..]int;
+
+    error, command_buffer := start_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+    ); 
+    if error {
+        return error, image_ids;
+    }
+
+    staging_buffers: [..]Buffer_Info;
+    staging_buffers.allocator = temp;
+    defer for buffer: staging_buffers {
+        VMA.destroy_buffer(renderer.allocator, buffer.buffer, buffer.allocation);
+    }
+
+    for image_params: image_params_list {
+        error, image, staging_buffer := create_texture_image(
+            renderer.device,
+            renderer.allocator,
+            command_buffer,
+            image_params,
+        );
+        if error {
+            return error, image_ids;
+        }
+
+        array_add(*image_ids, xx renderer.texture_images.count);
+        array_add(*renderer.texture_images, image);
+        array_add(*staging_buffers, staging_buffer);
+    }
+
+    error = submit_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+        renderer.graphics_queue_info.queue,
+        command_buffer,
+    );
+    if error {
+        return error, image_ids;
+    }
+
+    return "", image_ids;
+}
+
+create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: int {
+    result, sampler := VK.create_sampler(renderer.device, *params);
     if result != .SUCCESS {
         return
             tprint("Failed to create sampler: %", result),
@@ -594,6 +662,8 @@ DEFAULT_SURFACE_FORMAT :: VK.Surface_Format_Khr.{
 DEFAULT_PRESENT_MODE :: VK.Present_Mode_Khr.FIFO_KHR;
 
 DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
+
+DEFAULT_TEXTURE_IMAGE_FORMAT :: VK.Format.R8G8B8A8_SRGB;
 
 DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
@@ -645,6 +715,13 @@ Image_Info :: struct {
     format:     VK.Format;
 }
 
+Buffer_Info :: struct {
+    buffer:          VK.Buffer;
+    allocation:      VMA.Allocation;
+    allocation_info: VMA.Allocation_Info;
+    device_address:  u64;
+}
+
 Timeline_Semaphore_Info :: struct {
     semaphore:         VK.Semaphore;
     next_signal_value: u64;
@@ -666,6 +743,234 @@ Push_Constants :: struct @Gpu {
     vertex_buffer_address:   u64;
     material_buffer_address: u64;
     instance_buffer_address: u64;
+}
+
+submit_transient_command_buffer :: (
+    device:         VK.Device,
+    command_pool:   VK.Command_Pool,
+    queue:          VK.Queue,
+    command_buffer: VK.Command_Buffer,
+) -> error: string {
+    result := VK.end_command_buffer(command_buffer);
+    if result != .SUCCESS {
+        return tprint("Failed to end transient command buffer: %", result);
+    }
+
+    submit_info := VK.Submit_Info.{
+        command_buffer_count = 1,
+        p_command_buffers    = *command_buffer,
+    };
+
+    result = VK.queue_submit(queue, .[submit_info], null);
+    if result != .SUCCESS {
+        return tprint("Failed to submit transient command buffer: %", result);
+    }
+
+    result = VK.queue_wait_idle(queue);
+    if result != .SUCCESS {
+        return tprint("Failed to wait for transient command buffer submission: %", result);
+    }
+
+    VK.free_command_buffers(device, command_pool, .[command_buffer]);
+
+    return "";
+}
+
+// Creates the image and records the transition commands, but does not submit!
+create_texture_image :: (
+    device:         VK.Device,
+    allocator:      VMA.Allocator,
+    command_buffer: VK.Command_Buffer,
+    image_params:   Image_Params,
+) -> error: string, Image_Info, staging_buffer: Buffer_Info {
+    error, image_info := create_image(
+        device,
+        allocator,
+        DEFAULT_TEXTURE_IMAGE_FORMAT,
+        image_params.width,
+        image_params.height,
+        depth            = 1,
+        tiling           = .OPTIMAL,
+        usage            = .TRANSFER_DST | .SAMPLED,
+        allocation_flags = 0,
+        aspect_mask      = .COLOR,
+    );
+    if error {
+        return
+            error,
+            image_info,
+            .{};
+    }
+
+    { // Transfer to TRANSFER_DST_OPTIMAL
+        transfer_barrier := VK.Image_Memory_Barrier_2.{
+            src_stage_mask  = .NONE,
+            src_access_mask = .NONE,
+            dst_stage_mask  = .COPY,
+            dst_access_mask = .TRANSFER_WRITE,
+            old_layout      = .UNDEFINED,
+            new_layout      = .TRANSFER_DST_OPTIMAL,
+            image           = image_info.image,
+            subresource_range = {
+                aspect_mask = .COLOR,
+                level_count = 1,
+                layer_count = 1,
+            },
+        };
+
+        transfer_dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers    = *transfer_barrier,
+        };
+
+        VK.cmd_pipeline_barrier_2(command_buffer, *transfer_dependency_info);
+    }
+
+    error =, staging_buffer_info := create_buffer(
+        device,
+        allocator,
+        usage = .TRANSFER_SRC,
+        cast(u64, image_params.bytes.count),
+        memory_usage = .AUTO_PREFER_HOST,
+        mappable = true,
+    );
+    if error {
+        return
+            error,
+            image_info,
+            staging_buffer_info;
+    }
+
+    { // Copy image into buffer
+        error := map_copy_buffer_data(
+            allocator,
+            staging_buffer_info,
+            buffer_offset = 0,
+            image_params.bytes.data,
+            image_params.bytes.count,
+        );
+        if error {
+            return
+                error,
+                image_info,
+                staging_buffer_info;
+        }
+
+        buffer_image_copy := VK.Buffer_Image_Copy.{
+            image_subresource = {
+                aspect_mask      = .COLOR,
+                layer_count      = 1,
+            },
+            image_extent = {
+                width  = image_params.width,
+                height = image_params.height,
+                depth  = 1,
+            },
+        };
+
+        VK.cmd_copy_buffer_to_image(
+            command_buffer,
+            staging_buffer_info.buffer,
+            image_info.image,
+            dst_image_layout = .TRANSFER_DST_OPTIMAL,
+            region_count = 1,
+            *buffer_image_copy,
+        );
+    }
+
+    { // Transition into layout suitable for sampling
+        shader_read_barrier := VK.Image_Memory_Barrier_2.{
+            src_stage_mask  = .COPY,
+            src_access_mask = .TRANSFER_WRITE,
+            dst_stage_mask  = .FRAGMENT_SHADER,
+            dst_access_mask = .SHADER_READ,
+            old_layout      = .TRANSFER_DST_OPTIMAL,
+            new_layout      = .SHADER_READ_ONLY_OPTIMAL,
+            image           = image_info.image,
+            subresource_range = {
+                aspect_mask      = .COLOR,
+                level_count      = 1,
+                layer_count      = 1,
+            },
+        };
+
+        shader_read_dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers    = *shader_read_barrier,
+        };
+
+        VK.cmd_pipeline_barrier_2(
+            command_buffer,
+            *shader_read_dependency_info,
+        );
+    }
+
+    return
+        "",
+        image_info,
+        staging_buffer_info;
+}
+
+map_copy_buffer_data :: (
+    allocator:     VMA.Allocator,
+    buffer:        Buffer_Info,
+    buffer_offset: u64,
+    data:          *void,
+    byte_size:     int,
+) -> error: string {
+    result, buffer_pointer := VMA.map_memory(allocator, buffer.allocation);
+    if result != .SUCCESS {
+        return tprint("Failed to map memory");
+    }
+
+    memcpy(buffer_pointer + buffer_offset, data, byte_size);
+
+    VMA.unmap_memory(allocator, buffer.allocation);
+
+    return "";
+}
+
+create_buffer :: (
+    device:       VK.Device,
+    allocator:    VMA.Allocator,
+    usage:        VK.Buffer_Usage_Flags,
+    byte_size:    u64,
+    memory_usage: VMA.Memory_Usage,
+    mappable:     bool,
+) -> error: string, Buffer_Info {
+    buffer: Buffer_Info = ---;
+
+    buffer_create_info := VK.Buffer_Create_Info.{
+        size         = byte_size,
+        usage        = usage,
+        sharing_mode = .EXCLUSIVE,
+    };
+
+    allocation_create_info := VMA.Allocation_Create_Info.{
+        flags = ifx mappable then VMA.Allocation_Create_Flags.HOST_ACCESS_SEQUENTIAL_WRITE else 0,
+        usage = memory_usage,
+    };
+
+    result:, buffer.buffer, buffer.allocation, buffer.allocation_info = VMA.create_buffer(
+        allocator,
+        *buffer_create_info,
+        *allocation_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create buffer: %", result),
+            buffer;
+    }
+
+    if (usage & .SHADER_DEVICE_ADDRESS) {
+        vertex_buffer_device_address_info := VK.Buffer_Device_Address_Info.{
+            buffer = buffer.buffer,
+        };
+
+        buffer.device_address = VK.get_buffer_device_address(device, *vertex_buffer_device_address_info);
+    }
+
+    return "", buffer;
 }
 
 create_common_pipeline :: (
@@ -1112,6 +1417,33 @@ create_frame_resources :: (
     }
 
     return "", frame_resources;
+}
+
+start_transient_command_buffer :: (device: VK.Device, command_pool: VK.Command_Pool) -> error: string, VK.Command_Buffer {
+    command_buffer_allocate_info := VK.Command_Buffer_Allocate_Info.{
+        command_pool         = command_pool,
+        level                = .PRIMARY,
+        command_buffer_count = 1,
+    };
+
+    result, command_buffer := VK.allocate_command_buffer(device, *command_buffer_allocate_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to allocate transient command buffer: %", result),
+            command_buffer;
+    }
+
+    command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
+        flags = .ONE_TIME_SUBMIT,
+    };
+    result = VK.begin_command_buffer(command_buffer, *command_buffer_begin_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to begin transient command buffer: %", result),
+            command_buffer;
+    }
+
+    return "", command_buffer;
 }
 
 create_transient_command_pool :: (device: VK.Device, queue_family_index: u32) -> error: string, VK.Command_Pool {
