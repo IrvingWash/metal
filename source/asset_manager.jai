@@ -56,6 +56,18 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
 
     result_sampler_ids: [..]int;
     result_image_ids:   [..]int;
+    indices_offsets:    [..]u64;
+
+    for mesh: model_dto.meshes {
+        if mesh.indices.count > 0 {
+            error, indices_offset := Renderer.upload_indices(*state.renderer, mesh.indices);
+            if error {
+                return error;
+            }
+            array_add(*indices_offsets, indices_offset);
+        }
+    }
+
     for material: model_dto.materials {
         if material.pbr_metallic_roughness.base_color_texture.kind == .SOME {
             base_color_texture := material.pbr_metallic_roughness.base_color_texture.some;

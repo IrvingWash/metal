@@ -26,8 +26,12 @@ Renderer :: struct {
     dummy_pipeline_info: Pipeline_Info;
     common_pipeline_info: Pipeline_Info;
 
+    index_buffer_info: Buffer_Info;
+
     samplers:       [..]VK.Sampler;
     texture_images: [..]Image_Info;
+    indices:        [..]u32; // @Todo: maybe couple this with the buffer and the offset
+    indices_offset: u64;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     should_recreate_swapchain: bool;
@@ -227,8 +231,23 @@ init :: (
             renderer;
     }
 
+    error, renderer.index_buffer_info = create_buffer(
+        renderer.device,
+        renderer.allocator,
+        usage = .TRANSFER_DST | .INDEX_BUFFER,
+        INDEX_BUFFER_BYTE_SIZE,
+        memory_usage = .AUTO,
+        mappable = false,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     array_reserve(*renderer.samplers, MAX_TEXTURE_COUNT);
     array_reserve(*renderer.texture_images, MAX_TEXTURE_COUNT);
+    array_reserve(*renderer.indices, INDEX_BUFFER_BYTE_SIZE);
 
     return
         "",
@@ -238,6 +257,7 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
+    array_free(renderer.indices);
     for texture_image_info: renderer.texture_images {
         destroy_image(
             renderer.device,
@@ -251,6 +271,12 @@ deinit :: (renderer: *Renderer) {
         VK.destroy_sampler(renderer.device, sampler);
     }
     array_free(renderer.samplers);
+
+    VMA.destroy_buffer(
+        renderer.allocator,
+        renderer.index_buffer_info.buffer,
+        renderer.index_buffer_info.allocation,
+    );
 
     destroy_pipeline(renderer.device, *renderer.common_pipeline_info);
     destroy_pipeline(renderer.device, *renderer.dummy_pipeline_info);
@@ -589,6 +615,81 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     return "";
 }
 
+// @Todo: batching
+upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset: u64 {
+    byte_size := indices.count * size_of(u32);
+
+    memcpy(
+        *renderer.indices[renderer.indices_offset],
+        indices.data,
+        byte_size,
+    );
+
+    defer renderer.indices_offset += cast(u64, indices.count);
+
+    error, staging_buffer := create_buffer(
+        renderer.device,
+        renderer.allocator,
+        usage        = .TRANSFER_SRC,
+        byte_size    = cast(u64, byte_size),
+        memory_usage = .AUTO,
+        mappable     = true,
+    );
+    if error {
+        return error, renderer.indices_offset;
+    }
+    defer VMA.destroy_buffer(
+        renderer.allocator,
+        staging_buffer.buffer,
+        staging_buffer.allocation,
+    );
+
+    error = map_copy_buffer_data(
+        renderer.allocator,
+        staging_buffer,
+        buffer_offset = renderer.indices_offset,
+        renderer.indices.data,
+        byte_size,
+    );
+    if error {
+        return error, renderer.indices_offset;
+    }
+
+    error =, command_buffer := start_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+    );
+    if error {
+        return error, renderer.indices_offset;
+    }
+
+    buffer_copy := VK.Buffer_Copy.{
+        src_offset = 0,
+        dst_offset = renderer.indices_offset,
+        size       = staging_buffer.allocation_info.size,
+    };
+
+    VK.cmd_copy_buffer(
+        command_buffer,
+        staging_buffer.buffer,
+        renderer.index_buffer_info.buffer,
+        .[buffer_copy],
+    );
+
+    error = submit_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+        renderer.graphics_queue_info.queue,
+        command_buffer,
+    );
+    if error {
+        return error, renderer.indices_offset;
+    }
+
+    return "", renderer.indices_offset;
+}
+
+// @Todo: batching
 create_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params) -> error: string, image_ids: [..]int {
     image_ids: [..]int;
 
@@ -635,6 +736,7 @@ create_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params
     return "", image_ids;
 }
 
+// @Todo: can we batch this?
 create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: int {
     result, sampler := VK.create_sampler(renderer.device, *params);
     if result != .SUCCESS {
@@ -674,7 +776,9 @@ DEVICE_EXTENSIONS :: *u8.[
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
-MAX_TEXTURE_COUNT :: 256;
+MAX_TEXTURE_COUNT       :: 256;
+VERTEX_BUFFER_BYTE_SIZE :: 64 * 1024 * 1024;
+INDEX_BUFFER_BYTE_SIZE  :: 32 * 1024 * 1024;
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
