@@ -220,6 +220,12 @@ destroy_buffer :: (
     allocation: Allocation,
 ) -> void #foreign libvma "vmaDestroyBuffer";
 
+flush_allocation :: (
+    allocator:  Allocator,
+    allocation: Allocation,
+    offset:     Device_Size,
+    size:       Device_Size,
+) -> Result #foreign libvma "vmaFlushAllocation";
 
 
 #scope_file

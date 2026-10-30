@@ -51,7 +51,7 @@ Renderer :: struct {
 // Procedure pointer types
 // =============================================================================
 
-Get_Additional_Intance_Extensions :: #type () -> [..]*u8;
+Get_Additional_Instance_Extensions :: #type () -> [..]*u8;
 
 Get_Window_Render_Size :: #type (window: Window_Type) -> width: u32, height: u32;
 
@@ -77,7 +77,7 @@ Image_Params :: struct {
 
 init :: (
     window:                             Window_Type,
-    get_additional_instance_extensions: Get_Additional_Intance_Extensions,
+    get_additional_instance_extensions: Get_Additional_Instance_Extensions,
     window_render_size_getter:          Get_Window_Render_Size,
     create_window_surface:              Create_Window_Surface,
     get_compiled_shader:                Get_Compiled_Shader,
@@ -222,11 +222,16 @@ init :: (
         .[renderer.swapchain_info.config.image_format],
         renderer.depth_image_info.format,
     );
+    if error {
+        return
+            error,
+            renderer;
+    }
 
     error, renderer.common_pipeline_info = create_common_pipeline(
         renderer.device,
         renderer.get_compiled_shader,
-        .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targes
+        .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targets
         renderer.depth_image_info.format,
         .[renderer.texture_descriptor_info.layout],
     );
@@ -463,10 +468,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             },
             // Also transition the depth image
             {
-                src_stage_mask  = .EARLY_FRAGMENT_TESTS,
-                src_access_mask = 0,
+                src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
+                src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
                 dst_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
-                dst_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
+                dst_access_mask = .DEPTH_STENCIL_ATTACHMENT_READ | .DEPTH_STENCIL_ATTACHMENT_WRITE,
                 old_layout      = .UNDEFINED,
                 new_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
                 image           = renderer.depth_image_info.image,
@@ -523,6 +528,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             y      = 0,
             width  = cast(float, renderer.render_resolution.width), // @Todo: again not sure about these not being the swapchain image's extent. Same for scissor
             height = cast(float, renderer.render_resolution.height),
+            max_depth = 1,
         };
         VK.cmd_set_viewport(frame_resources.command_buffer, VK.Viewport.[viewport]);
 
@@ -657,7 +663,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         renderer.device,
         renderer.allocator,
         usage = .TRANSFER_SRC,
-        VERTEX_BUFFER_BYTE_SIZE,
+        cast(u64, byte_size),
         memory_usage = .AUTO,
         mappable = true,
     );
@@ -670,13 +676,16 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         staging_buffer.allocation,
     );
 
-    map_copy_buffer_data(
+    error = map_copy_buffer_data(
         renderer.allocator,
         staging_buffer,
         buffer_offset = 0,
         *renderer.vertices[renderer.vertices_offset],
-        VERTEX_BUFFER_BYTE_SIZE,
+        byte_size,
     );
+    if error {
+        return error, renderer.vertices_offset;
+    }
 
     error =, command_buffer := start_transient_command_buffer(
         renderer.device,
@@ -689,7 +698,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
     buffer_copy := VK.Buffer_Copy.{
         src_offset = 0,
         dst_offset = renderer.vertices_offset * size_of(Vertex),
-        size       = staging_buffer.allocation_info.size,
+        size       = cast(u64, byte_size),
     };
 
     VK.cmd_copy_buffer(
@@ -699,12 +708,15 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         .[buffer_copy],
     );
 
-    submit_transient_command_buffer(
+    error = submit_transient_command_buffer(
         renderer.device,
         renderer.transient_command_pool,
         renderer.graphics_queue_info.queue,
         command_buffer,
     );
+    if error {
+        return error, renderer.vertices_offset;
+    }
 
     return "", renderer.vertices_offset;
 }
@@ -760,7 +772,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
     buffer_copy := VK.Buffer_Copy.{
         src_offset = 0,
         dst_offset = renderer.indices_offset * size_of(u32),
-        size       = staging_buffer.allocation_info.size,
+        size       = cast(u64, byte_size),
     };
 
     VK.cmd_copy_buffer(
@@ -1128,6 +1140,16 @@ map_copy_buffer_data :: (
 
     VMA.unmap_memory(allocator, buffer.allocation);
 
+    result = VMA.flush_allocation(
+        allocator,
+        buffer.allocation,
+        buffer_offset,
+        cast(u64, byte_size),
+    );
+    if result != .SUCCESS {
+        return tprint("Failed to flush allocation: %", result);
+    }
+
     return "";
 }
 
@@ -1139,7 +1161,7 @@ create_buffer :: (
     memory_usage: VMA.Memory_Usage,
     mappable:     bool,
 ) -> error: string, Buffer_Info {
-    buffer: Buffer_Info = ---;
+    buffer: Buffer_Info;
 
     buffer_create_info := VK.Buffer_Create_Info.{
         size         = byte_size,
@@ -1546,6 +1568,8 @@ create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descript
                 tprint("Failed to allocate descriptor set for textures: %", result),
                 descriptor_info;
         }
+
+        descriptor_info.set = descriptor_sets[0];
     }
 
     return "", descriptor_info;
@@ -1580,7 +1604,7 @@ create_frame_resources :: (
         );
         if result != .SUCCESS {
             return
-                tprint("Failed to create image acquired semapohre: %", result),
+                tprint("Failed to create image acquired semaphore: %", result),
                 frame_resources;
         }
     }
@@ -1670,13 +1694,13 @@ create_timeline_semaphore :: (device: VK.Device) -> error: string, Timeline_Sema
         semaphore_type = .TIMELINE,
         initial_value  = FRAMES_IN_FLIGHT_COUNT,
     };
-    sempaphore_create_info := VK.Semaphore_Create_Info.{
+    semaphore_create_info := VK.Semaphore_Create_Info.{
         p_next = *semaphore_type_create_info,
     };
 
     result:, timeline_semaphore_info.semaphore = VK.create_semaphore(
         device,
-        *sempaphore_create_info,
+        *semaphore_create_info,
     );
     if result != .SUCCESS {
         return
@@ -2086,7 +2110,7 @@ create_surface :: (
         surface;
 }
 
-create_instance :: (get_additional_extensions: Get_Additional_Intance_Extensions) -> error: string, VK.Instance {
+create_instance :: (get_additional_extensions: Get_Additional_Instance_Extensions) -> error: string, VK.Instance {
     application_info := VK.Application_Info.{
         p_application_name = APPLICATION_NAME,
         api_version        = VULKAN_API_VERSION,
