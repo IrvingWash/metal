@@ -96,7 +96,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                     return error, renderer_model;
                 }
 
-                renderer_base_color_texture_id = Renderer.add_textures(
+                renderer_base_color_texture_id = Renderer.upload_textures(
                     *state.renderer,
                     .[{
                         image_index   = image_ids[0],
@@ -264,7 +264,7 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
             params.address_mode_v = .REPEAT;
     }
 
-    error, sampler_index := Renderer.create_sampler(
+    error, sampler_index := Renderer.upload_sampler(
         *state.renderer,
         params,
     );

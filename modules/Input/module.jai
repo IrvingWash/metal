@@ -36,6 +36,7 @@ get_events :: () -> []Event {
                     new_width = cast(u32, sdl_event.window.data1),
                     new_height = cast(u32, sdl_event.window.data2),
                 };
+                array_add(*result, event);
         }
     }
 

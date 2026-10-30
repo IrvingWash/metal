@@ -294,6 +294,13 @@ init :: (
     renderer.indices = NewArray(INDEX_BUFFER_BYTE_SIZE / size_of(u32), u32);
     renderer.vertices = NewArray(VERTEX_BUFFER_BYTE_SIZE / size_of(Vertex), Vertex);
 
+    error = create_fallbacks(*renderer);
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     return
         "",
         renderer;
@@ -754,7 +761,7 @@ finish_drawing :: (renderer: *Renderer, model: Model) -> error: string {
     return "";
 }
 
-add_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u32 {
+upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u32 {
     prev_count := renderer.textures.count;
 
     indices: [..]u32;
@@ -1065,7 +1072,7 @@ upload_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params
 }
 
 // @Todo: can we batch this?
-create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: u32 {
+upload_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: u32 {
     result, sampler := VK.create_sampler(renderer.device, *params);
     if result != .SUCCESS {
         return
@@ -1186,6 +1193,90 @@ Push_Constants :: struct @Gpu {
     vertex_buffer_address:   VK.Device_Address;
     material_buffer_address: VK.Device_Address;
     instance_buffer_address: VK.Device_Address;
+}
+
+create_fallbacks :: (renderer: *Renderer) -> error: string {
+    image_id: u32;
+    {
+        white: u32 = 0xFFFFFFFF;
+        bytes: [..]u8;
+        bytes.allocator = temp;
+        array_resize(*bytes, 4);
+        bytes.data = cast(*u8, *white);
+
+        white_pixel_image_params := Image_Params.{
+            width         = 1,
+            height        = 1,
+            bytes         = bytes,
+        };
+
+        error, image_ids := upload_texture_images(
+            renderer,
+            .[white_pixel_image_params],,
+            temp
+        );
+        if error {
+            return error;
+        }
+        if image_ids.count != 1 || image_ids[0] != 0 {
+            return "The ids of the fallback texture image should be the very first and the very only";
+        }
+
+        image_id = image_ids[0];
+    }
+
+    sampler_index: u32;
+    {
+        error:, sampler_index = upload_sampler(
+            renderer,
+            {
+                mag_filter     = .NEAREST,
+                min_filter     = .NEAREST,
+                address_mode_u = .REPEAT,
+                address_mode_v = .REPEAT,
+                address_mode_w = .REPEAT,
+                compare_enable = VK.FALSE,
+            },
+        );
+        if error {
+            return error;
+        }
+        if sampler_index != 0 {
+            return tprint("Fallback sampler index must have been 0, but it's %", sampler_index);
+        }
+    }
+
+    texture_index: u32;
+    {
+        texture_indices := upload_textures(
+            renderer,
+            .[{
+                image_index = image_id,
+                sampler_index = sampler_index,
+            }],,
+            temp
+        );
+        if texture_indices.count != 1 || texture_indices[0] != 0 {
+            return "Fallback texture should be the very first and very only";
+        }
+        texture_index = texture_indices[0];
+    }
+
+    error, material_ids := upload_materials(
+        renderer,
+        .[{
+            base_color_texture_index = texture_index,
+        }],,
+        temp
+    );
+    if error {
+        return error;
+    }
+    if material_ids.count != 1 || material_ids[0] != 0 {
+        return "Fallback material should be the very first and very only";
+    }
+
+    return "";
 }
 
 submit_transient_command_buffer :: (

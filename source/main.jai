@@ -67,7 +67,7 @@ process_input :: () {
             case .QUIT;
                 state.should_quit = true;
             case .WINDOW_PIXEL_SIZE_CHANGED;
-                // Do nothing
+                state.renderer.should_recreate_swapchain = true;
         }
     }
 }
