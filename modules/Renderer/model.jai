@@ -16,7 +16,7 @@ Mesh :: struct {
     index_start:  u32;
     index_count:  u32;
 
-    material_index: Option(u32);
+    material_index: u32;
 }
 
 Texture :: struct {

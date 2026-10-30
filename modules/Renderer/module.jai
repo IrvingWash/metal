@@ -23,7 +23,6 @@ Renderer :: struct {
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
-    dummy_pipeline_info: Pipeline_Info;
     common_pipeline_info: Pipeline_Info;
 
     // @Todo: think about what we can remove from this to keep inside a "Model"
@@ -46,13 +45,17 @@ Renderer :: struct {
     should_recreate_swapchain: bool;
     frame_index: u64;
 
+    projection_transform:       Matrix4;
+    view_transform:             Matrix4;
+    view_projection_transform: Matrix4;
+
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
     }
 }
 
 // =============================================================================
-// Procedure pointer types
+// Structs and procedure pointer types
 // =============================================================================
 
 Get_Additional_Instance_Extensions :: #type () -> [..]*u8;
@@ -73,6 +76,16 @@ Image_Params :: struct {
     width:  u32;
     height: u32;
     bytes:  []u8;
+}
+
+Camera :: struct {
+    position: Vector3;
+    target: Vector3;
+
+    z_near: float;
+    z_far:  float;
+
+    fov_vertical: float;
 }
 
 // =============================================================================
@@ -221,18 +234,6 @@ init :: (
         }
     }
 
-    error, renderer.dummy_pipeline_info = create_dummy_pipeline(
-        renderer.device,
-        renderer.get_compiled_shader,
-        .[renderer.swapchain_info.config.image_format],
-        renderer.depth_image_info.format,
-    );
-    if error {
-        return
-            error,
-            renderer;
-    }
-
     error, renderer.common_pipeline_info = create_common_pipeline(
         renderer.device,
         renderer.get_compiled_shader,
@@ -338,7 +339,6 @@ deinit :: (renderer: *Renderer) {
     );
 
     destroy_pipeline(renderer.device, *renderer.common_pipeline_info);
-    destroy_pipeline(renderer.device, *renderer.dummy_pipeline_info);
 
     for *frame_resources: renderer.frame_resources_list {
         destroy_frame_resources(
@@ -376,7 +376,7 @@ deinit :: (renderer: *Renderer) {
     renderer.* = {};
 }
 
-start_drawing :: (renderer: *Renderer) -> error: string {
+start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     if renderer.should_recreate_swapchain {
         VK.device_wait_idle(renderer.device);
 
@@ -410,13 +410,31 @@ start_drawing :: (renderer: *Renderer) -> error: string {
         renderer.should_recreate_swapchain = false;
     }
 
+    renderer.view_transform = make_look_at_matrix(
+        camera.position,
+        camera.target,
+        reference_up_vector = { 0, 1, 0 },
+        x_is_forward = false,
+    );
+    aspect_ratio := cast(float, renderer.render_resolution.width) / cast(float, renderer.render_resolution.height);
+    renderer.projection_transform = make_projection_matrix(
+        camera.fov_vertical,
+        aspect_ratio,
+        camera.z_near,
+        camera.z_far,
+        depth_range_01 = true,
+    );
+    renderer.view_projection_transform = renderer.projection_transform * renderer.view_transform;
+
     return "";
 }
 
 draw_model :: (renderer: *Renderer, model: Model) {
+    // Omitted for now
 }
 
-finish_drawing :: (renderer: *Renderer) -> error: string {
+// @Todo: remove model
+finish_drawing :: (renderer: *Renderer, model: Model) -> error: string {
     frame_resources_index := renderer.frame_index % FRAMES_IN_FLIGHT_COUNT;
     signal_value := renderer.timeline_semaphore_info.next_signal_value;
 
@@ -470,6 +488,28 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     }
     renderer.frame_index += 1;
     renderer.timeline_semaphore_info.next_signal_value += 1;
+
+    // @Todo: hardcoded because we use Suzanne, which has only 1 node
+    draw_index: int;
+    for mesh: model.nodes[0].meshes {
+        world_transform := model.nodes[0].local_transform;
+
+        frame_resources.indirect_draw_pointer[draw_index] = {
+            index_count    = mesh.index_count,
+            instance_count = 1,
+            first_index    = mesh.index_start,
+            vertex_offset  = cast(s32, mesh.vertex_start),
+            first_instance = cast(u32, draw_index),
+        };
+
+        frame_resources.instance_pointer[draw_index] = {
+            wvp_transform   = transpose(renderer.view_projection_transform * world_transform),
+            world_transform = transpose(world_transform),
+            material_index  = mesh.material_index,
+        };
+
+        draw_index += 1;
+    }
 
     { // Begin command buffer
         command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
@@ -550,15 +590,47 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             p_depth_attachment = *depth_rendering_attachment_info,
         };
 
+        VK.cmd_bind_descriptor_sets(
+            frame_resources.command_buffer,
+            pipeline_bind_point = .GRAPHICS,
+            renderer.common_pipeline_info.layout,
+            first_set = 0,
+            .[renderer.texture_descriptor_info.set],
+            .[],
+        );
+
+        push_constants: Push_Constants = {
+            vertex_buffer_address   = renderer.vertex_buffer_info.device_address,
+            material_buffer_address = renderer.material_buffer_info.device_address,
+            instance_buffer_address = frame_resources.instance_buffer_info.device_address,
+        };
+
+        VK.cmd_push_constants(
+            frame_resources.command_buffer,
+            renderer.common_pipeline_info.layout,
+            stage_flags = .VERTEX | .FRAGMENT,
+            offset = 0,
+            size_of(Push_Constants),
+            *push_constants,
+        );
+
+        VK.cmd_bind_index_buffer(
+            frame_resources.command_buffer,
+            renderer.index_buffer_info.buffer,
+            offset = 0,
+            index_type = .UINT32,
+        );
+
         VK.cmd_begin_rendering(frame_resources.command_buffer, *rendering_info);
     }
 
     { // Set viewport and scissor
         viewport := VK.Viewport.{
             x      = 0,
-            y      = 0,
+            y      = cast(float, renderer.render_resolution.height),
             width  = cast(float, renderer.render_resolution.width), // @Todo: again not sure about these not being the swapchain image's extent. Same for scissor
-            height = cast(float, renderer.render_resolution.height),
+            height = -cast(float, renderer.render_resolution.height),
+            min_depth = 0,
             max_depth = 1,
         };
         VK.cmd_set_viewport(frame_resources.command_buffer, VK.Viewport.[viewport]);
@@ -573,14 +645,18 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
 
-    VK.cmd_bind_pipeline(frame_resources.command_buffer, .GRAPHICS, renderer.dummy_pipeline_info.pipeline);
-
-    VK.cmd_draw(
+    VK.cmd_bind_pipeline(
         frame_resources.command_buffer,
-        vertex_count   = 3,
-        instance_count = 1,
-        first_vertex   = 0,
-        first_instance = 0,
+        .GRAPHICS,
+        renderer.common_pipeline_info.pipeline,
+    );
+
+    VK.cmd_draw_indexed_indirect(
+        frame_resources.command_buffer,
+        frame_resources.indirect_draw_buffer_info.buffer,
+        offset = 0,
+        draw_count = cast(u32, draw_index),
+        stride = size_of(VK.Draw_Indexed_Indirect_Command),
     );
 
     VK.cmd_end_rendering(frame_resources.command_buffer);
@@ -800,8 +876,6 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
         byte_size,
     );
 
-    renderer.vertices_offset += cast(u32, vertices.count);
-
     error, staging_buffer := create_buffer(
         renderer.device,
         renderer.allocator,
@@ -823,7 +897,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
         renderer.allocator,
         staging_buffer,
         buffer_offset = 0,
-        *renderer.vertices[renderer.vertices_offset],
+        vertices.data,
         byte_size,
     );
     if error {
@@ -840,7 +914,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
 
     buffer_copy := VK.Buffer_Copy.{
         src_offset = 0,
-        dst_offset = renderer.vertices_offset * size_of(Vertex),
+        dst_offset = start * size_of(Vertex),
         size       = cast(u64, byte_size),
     };
 
@@ -861,6 +935,8 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
         return error, start, count;
     }
 
+    renderer.vertices_offset += cast(u32, vertices.count);
+
     return "", start, count;
 }
 
@@ -876,8 +952,6 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
         indices.data,
         byte_size,
     );
-
-    renderer.indices_offset += cast(u32, indices.count);
 
     error, staging_buffer := create_buffer(
         renderer.device,
@@ -900,7 +974,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
         renderer.allocator,
         staging_buffer,
         buffer_offset = 0,
-        *renderer.indices[renderer.indices_offset],
+        indices.data,
         byte_size,
     );
     if error {
@@ -917,7 +991,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
 
     buffer_copy := VK.Buffer_Copy.{
         src_offset = 0,
-        dst_offset = renderer.indices_offset * size_of(u32),
+        dst_offset = start * size_of(u32),
         size       = cast(u64, byte_size),
     };
 
@@ -937,6 +1011,8 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
     if error {
         return error, start, count;
     }
+
+    renderer.indices_offset += cast(u32, indices.count);
 
     return "", start, count;
 }
@@ -1032,6 +1108,7 @@ MAX_TEXTURE_COUNT        :: 256;
 VERTEX_BUFFER_BYTE_SIZE  :: 64 * 1024 * 1024;
 INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
 MAX_INDIRECT_BUFFER_SIZE :: 4096 * size_of(VK.Draw_Indexed_Indirect_Command);
+MAX_INSTANCE_BUFFER_SIZE :: 4096 * size_of(Instance);
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
@@ -1094,6 +1171,9 @@ Frame_Resources :: struct {
 
     indirect_draw_buffer_info: Buffer_Info;
     indirect_draw_pointer:     *VK.Draw_Indexed_Indirect_Command;
+
+    instance_buffer_info:    Buffer_Info;
+    instance_pointer: *Instance;
 }
 
 Descriptor_Info :: struct {
@@ -1495,145 +1575,6 @@ create_common_pipeline :: (
     return "", pipeline_info;
 }
 
-create_dummy_pipeline :: (
-    device:                   VK.Device,
-    get_compiled_shader:      Get_Compiled_Shader,
-    color_attachment_formats: []VK.Format,
-    depth_attachment_format:  VK.Format,
-) -> error: string, Pipeline_Info {
-    pipeline_info: Pipeline_Info;
-
-    { // Layout
-        pipeline_layout_create_info := VK.Pipeline_Layout_Create_Info.{
-            set_layout_count          = 0,
-            push_constant_range_count = 0,
-        };
-
-        result:, pipeline_info.layout = VK.create_pipeline_layout(
-            device,
-            *pipeline_layout_create_info,
-        );
-        if result != .SUCCESS {
-            return
-                tprint("Failed to create pipeline layout: %", result),
-                pipeline_info;
-        }
-    }
-
-    error, vertex_shader := create_shader_module(device, "dummy.vertex.spv", get_compiled_shader);
-    if error {
-        return
-            error,
-            pipeline_info;
-    }
-    defer VK.destroy_shader_module(device, vertex_shader);
-
-    error =, fragment_shader := create_shader_module(device, "dummy.fragment.spv", get_compiled_shader);
-    if error {
-        return
-            error,
-            pipeline_info;
-    }
-    defer VK.destroy_shader_module(device, fragment_shader);
-
-    shader_stage_create_infos := VK.Pipeline_Shader_Stage_Create_Info.[
-        {
-            stage  = .VERTEX,
-            module = vertex_shader,
-            p_name = "main",
-        },
-        {
-            stage  = .FRAGMENT,
-            module = fragment_shader,
-            p_name = "main",
-        },
-    ];
-
-    vertex_input_state_create_info := VK.Pipeline_Vertex_Input_State_Create_Info.{};
-
-    input_assembly_state_create_info := VK.Pipeline_Input_Assembly_State_Create_Info.{
-        topology = .TRIANGLE_LIST,
-    };
-
-    depth_stencil_state_create_info := VK.Pipeline_Depth_Stencil_State_Create_Info.{
-        depth_test_enable   = VK.TRUE,
-        depth_write_enable  = VK.TRUE,
-        depth_compare_op    = .LESS,
-        stencil_test_enable = VK.FALSE,
-    };
-
-    viewport_state_create_info := VK.Pipeline_Viewport_State_Create_Info.{
-        viewport_count = 1,
-        p_viewports    = null,
-        scissor_count  = 1,
-        p_scissors     = null,
-    };
-
-    rasterization_state_create_info := VK.Pipeline_Rasterization_State_Create_Info.{
-        polygon_mode = .FILL,
-        cull_mode    = .BACK,
-        front_face   = .COUNTER_CLOCKWISE,
-        line_width   = 1,
-    };
-
-    multisample_state_create_info := VK.Pipeline_Multisample_State_Create_Info.{
-        rasterization_samples = ._1,
-    };
-
-    color_blend_attachment_states := VK.Pipeline_Color_Blend_Attachment_State.[
-        {
-            blend_enable = VK.FALSE,
-            color_write_mask = .R | .G | .B | .A,
-        },
-    ];
-
-    color_blend_state_create_info := VK.Pipeline_Color_Blend_State_Create_Info.{
-        attachment_count = color_blend_attachment_states.count,
-        p_attachments    = color_blend_attachment_states.data,
-    };
-
-    dynamic_states := VK.Dynamic_State.[
-        .VIEWPORT,
-        .SCISSOR,
-    ];
-
-    dynamic_state_create_info := VK.Pipeline_Dynamic_State_Create_Info.{
-        dynamic_state_count = dynamic_states.count,
-        p_dynamic_states    = dynamic_states.data,
-    };
-
-    rendering_create_info := VK.Pipeline_Rendering_Create_Info.{
-        color_attachment_count     = cast(u32, color_attachment_formats.count),
-        p_color_attachment_formats = color_attachment_formats.data,
-        depth_attachment_format    = depth_attachment_format,
-    };
-
-    pipeline_create_info := VK.Graphics_Pipeline_Create_Info.{
-        p_next                 = *rendering_create_info,
-        stage_count            = shader_stage_create_infos.count,
-        p_stages               = shader_stage_create_infos.data,
-        p_vertex_input_state   = *vertex_input_state_create_info,
-        p_input_assembly_state = *input_assembly_state_create_info,
-        p_viewport_state       = *viewport_state_create_info,
-        p_rasterization_state  = *rasterization_state_create_info,
-        p_multisample_state    = *multisample_state_create_info,
-        p_depth_stencil_state  = *depth_stencil_state_create_info,
-        p_color_blend_state    = *color_blend_state_create_info,
-        p_dynamic_state        = *dynamic_state_create_info,
-        layout                 = pipeline_info.layout,
-        render_pass            = null,
-    };
-
-    result:, pipeline_info.pipeline = VK.create_graphics_pipeline(device, null, *pipeline_create_info);
-    if result != .SUCCESS {
-        return
-            tprint("Failed to create dummy pipeline: %", result),
-            pipeline_info;
-    }
-
-    return "", pipeline_info;
-}
-
 destroy_pipeline :: (device: VK.Device, pipeline_info: *Pipeline_Info) {
     VK.destroy_pipeline(device, pipeline_info.pipeline);
     VK.destroy_pipeline_layout(device, pipeline_info.layout);
@@ -1737,9 +1678,18 @@ destroy_frame_resources :: (
 ) {
     VMA.unmap_memory(
         allocator,
-        frame_resources.indirect_draw_buffer_info.allocation,
+        frame_resources.instance_buffer_info.allocation,
+    );
+    VMA.destroy_buffer(
+        allocator,
+        frame_resources.instance_buffer_info.buffer,
+        frame_resources.instance_buffer_info.allocation,
     );
 
+    VMA.unmap_memory(
+        allocator,
+        frame_resources.indirect_draw_buffer_info.allocation,
+    );
     VMA.destroy_buffer(
         allocator,
         frame_resources.indirect_draw_buffer_info.buffer,
@@ -1811,7 +1761,7 @@ create_frame_resources :: (
         }
     }
 
-    { // Indirect draw buffers
+    { // Indirect draw buffer
         error:, frame_resources.indirect_draw_buffer_info = create_buffer(
             device,
             allocator,
@@ -1832,6 +1782,32 @@ create_frame_resources :: (
         if result != .SUCCESS {
             return
                 tprint("Failed to map indirect draw buffer memory: %", result),
+                frame_resources;
+        }
+    }
+
+    { // Instance buffer
+        error:, frame_resources.instance_buffer_info = create_buffer(
+            device,
+            allocator,
+            usage = .STORAGE_BUFFER | .SHADER_DEVICE_ADDRESS,
+            MAX_INSTANCE_BUFFER_SIZE,
+            memory_usage = .AUTO,
+            mappable = true,
+        );
+        if error {
+            return
+                tprint("Failed to create instance buffer for frame resources: %", error),
+                frame_resources;
+        }
+
+        result:, frame_resources.instance_pointer = VMA.map_memory(
+            allocator,
+            frame_resources.instance_buffer_info.allocation,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Fialed to map instance buffer memory: %", result),
                 frame_resources;
         }
     }

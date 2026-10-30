@@ -23,6 +23,12 @@ State :: struct {
     window:        *Windowing.Window;
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
+    camera:        Renderer.Camera = {
+        position     = { 3, 3, 5 },
+        z_near       = 0.1,
+        z_far        = 1000,
+        fov_vertical = 1.047198,
+    };
 
     should_quit: bool;
 }
@@ -45,9 +51,9 @@ main :: () {
     while !state.should_quit {
         process_input();
 
-        Renderer.start_drawing(*state.renderer);
+        Renderer.start_drawing(*state.renderer, state.camera);
         Renderer.draw_model(*state.renderer, suzanne_model);
-        Renderer.finish_drawing(*state.renderer);
+        Renderer.finish_drawing(*state.renderer, suzanne_model);
 
         reset_temporary_storage();
     }

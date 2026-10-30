@@ -136,7 +136,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
         defer array_add(*renderer_meshes, mesh);
 
         if mesh_dto.material_index.kind == .SOME {
-            mesh.material_index = some(uploaded_renderer_material_ids[mesh_dto.material_index.some]);
+            mesh.material_index = uploaded_renderer_material_ids[mesh_dto.material_index.some];
         }
 
         if mesh_dto.indices.count > 0 {
