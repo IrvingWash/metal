@@ -1,5 +1,9 @@
 #scope_module
 
+Model :: struct {
+    nodes: Node;
+}
+
 Node :: struct {
     local_transform: Matrix4 = Matrix4_Identity;
 

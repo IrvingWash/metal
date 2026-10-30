@@ -386,10 +386,7 @@ draw :: (renderer: *Renderer) {
 
 finish_drawing :: (renderer: *Renderer) -> error: string {
     frame_resources_index := renderer.frame_index % FRAMES_IN_FLIGHT_COUNT;
-    renderer.frame_index += 1;
-
     signal_value := renderer.timeline_semaphore_info.next_signal_value;
-    renderer.timeline_semaphore_info.next_signal_value += 1;
 
     { // Waiting for next available frame resources
         wait_value := signal_value - FRAMES_IN_FLIGHT_COUNT; // Because the inital value is offsetted by this
@@ -439,6 +436,8 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 }
         }
     }
+    renderer.frame_index += 1;
+    renderer.timeline_semaphore_info.next_signal_value += 1;
 
     { // Begin command buffer
         command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
@@ -1505,8 +1504,6 @@ create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descript
         descriptor_pool_create_info := VK.Descriptor_Pool_Create_Info.{
             flags           = .UPDATE_AFTER_BIND,
             max_sets        = 1, // Only one, set = 0
-            pool_size_count = descriptor_pool_sizes.count,
-            p_pool_sizes    = descriptor_pool_sizes.data,
             pool_size_count = descriptor_pool_sizes.count,
             p_pool_sizes    = descriptor_pool_sizes.data,
         };
