@@ -1,4 +1,4 @@
-compile_shaders :: (optimization_type: Optimization_Type, output_root: string) -> error: string {
+compile_glsl_shaders :: (optimization_type: Optimization_Type, output_root: string) -> error: string {
     output_path := tprint("%/shaders", output_root);
 
     ok := make_directory_if_it_does_not_exist(output_path, recursive = true);

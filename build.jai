@@ -7,7 +7,7 @@
 #import "File";
 #import "Process";
 
-#import,file "compile_shaders.jai";
+#import,file "compile_glsl_shaders.jai";
 
 Config :: struct {
     should_help:             bool;
@@ -65,7 +65,7 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
 
     #if !#exists(JAILS_DIAGNOSTICS_BUILD) {
         log("Compiling shaders...");
-        error = compile_shaders(config.optimization_type, output_path);
+        error = compile_glsl_shaders(config.optimization_type, output_path);
         if error {
             fail_compilation_with_message("Failed to compile shaders: %", error);
             return;
