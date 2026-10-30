@@ -30,7 +30,7 @@ Material :: struct @Gpu {
 
 Vertex :: struct @Gpu {
     position: Vector3;
-    color:    Vector3 = { 1, 1, 1 };
+    color:    Vector4 = { 1, 1, 1, 1 };
     normal:   Vector3;
     uv:       Vector2;
 }

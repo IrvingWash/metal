@@ -57,14 +57,41 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
     result_sampler_ids: [..]int;
     result_image_ids:   [..]int;
     indices_offsets:    [..]u64;
+    vertices_offsets:   [..]u64;
 
     for mesh: model_dto.meshes {
         if mesh.indices.count > 0 {
-            error, indices_offset := Renderer.upload_indices(*state.renderer, mesh.indices);
+            error, indices_offset := Renderer.upload_indices(
+                *state.renderer,
+                mesh.indices,
+            );
             if error {
                 return error;
             }
             array_add(*indices_offsets, indices_offset);
+        }
+
+        if mesh.vertices.count > 0 {
+            converted_vertices: [..]Renderer.Vertex;
+            converted_vertices.allocator = temp;
+            array_resize(*converted_vertices, mesh.vertices.count);
+            for vertex_dto: mesh.vertices {
+                converted_vertices[it_index] = {
+                    position = vertex_dto.position,
+                    color    = vertex_dto.color,
+                    normal   = vertex_dto.normal,
+                    uv       = vertex_dto.uv0,
+                };
+            }
+
+            error, vertices_offset := Renderer.upload_vertices(
+                *state.renderer,
+                converted_vertices,
+            );
+            if error {
+                return error;
+            }
+            array_add(*vertices_offsets, vertices_offset);
         }
     }
 

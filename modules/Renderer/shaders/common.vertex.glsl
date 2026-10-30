@@ -12,7 +12,7 @@ layout(push_constant, scalar) uniform Constants {
 
 struct Vertex {
     vec3 position;
-    vec3 color;
+    vec4 color;
     vec3 normal;
     vec2 uv;
 };
@@ -41,7 +41,7 @@ layout(buffer_reference, scalar) readonly buffer Instance_Buffer {
 };
 
 layout(location = 0) out Vertex_Output {
-         vec3 color;
+         vec4 color;
          vec3 normal;
          vec2 uv;
     flat uint base_color_texture_index;

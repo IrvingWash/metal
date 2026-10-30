@@ -27,11 +27,16 @@ Renderer :: struct {
     common_pipeline_info: Pipeline_Info;
 
     index_buffer_info: Buffer_Info;
+    vertex_buffer_info: Buffer_Info;
 
     samplers:       [..]VK.Sampler;
-    texture_images: [..]Image_Info;
-    indices:        [..]u32; // @Todo: maybe couple this with the buffer and the offset
+    texture_images: [..]Image_Info; // @Todo: maybe couple this with the descriptors and samplers
+
+    indices:        []u32; // @Todo: maybe couple this with the buffer and the offset
     indices_offset: u64;
+
+    vertices:        []Vertex; // @Todo: maybe couple this with the buffer and the offset
+    vertices_offset: u64;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     should_recreate_swapchain: bool;
@@ -244,10 +249,24 @@ init :: (
             error,
             renderer;
     }
+    error, renderer.vertex_buffer_info = create_buffer(
+        renderer.device,
+        renderer.allocator,
+        usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
+        VERTEX_BUFFER_BYTE_SIZE,
+        memory_usage = .AUTO,
+        mappable = false,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
 
     array_reserve(*renderer.samplers, MAX_TEXTURE_COUNT);
     array_reserve(*renderer.texture_images, MAX_TEXTURE_COUNT);
-    array_reserve(*renderer.indices, INDEX_BUFFER_BYTE_SIZE);
+    renderer.indices = NewArray(INDEX_BUFFER_BYTE_SIZE / size_of(u32), u32);
+    renderer.vertices = NewArray(VERTEX_BUFFER_BYTE_SIZE / size_of(Vertex), Vertex);
 
     return
         "",
@@ -257,7 +276,9 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
+    array_free(renderer.vertices);
     array_free(renderer.indices);
+
     for texture_image_info: renderer.texture_images {
         destroy_image(
             renderer.device,
@@ -272,6 +293,11 @@ deinit :: (renderer: *Renderer) {
     }
     array_free(renderer.samplers);
 
+    VMA.destroy_buffer(
+        renderer.allocator,
+        renderer.vertex_buffer_info.buffer,
+        renderer.vertex_buffer_info.allocation,
+    );
     VMA.destroy_buffer(
         renderer.allocator,
         renderer.index_buffer_info.buffer,
@@ -616,6 +642,74 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 }
 
 // @Todo: batching
+upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, offset: u64 {
+    byte_size := vertices.count * size_of(Vertex);
+
+    memcpy(
+        *renderer.vertices[renderer.vertices_offset],
+        vertices.data,
+        byte_size,
+    );
+
+    defer renderer.vertices_offset += cast(u64, vertices.count);
+
+    error, staging_buffer := create_buffer(
+        renderer.device,
+        renderer.allocator,
+        usage = .TRANSFER_SRC,
+        VERTEX_BUFFER_BYTE_SIZE,
+        memory_usage = .AUTO,
+        mappable = true,
+    );
+    if error {
+        return error, renderer.vertices_offset;
+    }
+    defer VMA.destroy_buffer(
+        renderer.allocator,
+        staging_buffer.buffer,
+        staging_buffer.allocation,
+    );
+
+    map_copy_buffer_data(
+        renderer.allocator,
+        staging_buffer,
+        buffer_offset = 0,
+        *renderer.vertices[renderer.vertices_offset],
+        VERTEX_BUFFER_BYTE_SIZE,
+    );
+
+    error =, command_buffer := start_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+    );
+    if error {
+        return error, renderer.vertices_offset;
+    }
+
+    buffer_copy := VK.Buffer_Copy.{
+        src_offset = 0,
+        dst_offset = renderer.vertices_offset * size_of(Vertex),
+        size       = staging_buffer.allocation_info.size,
+    };
+
+    VK.cmd_copy_buffer(
+        command_buffer,
+        staging_buffer.buffer,
+        renderer.vertex_buffer_info.buffer,
+        .[buffer_copy],
+    );
+
+    submit_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+        renderer.graphics_queue_info.queue,
+        command_buffer,
+    );
+
+    return "", renderer.vertices_offset;
+}
+
+// @Todo: batching
 upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset: u64 {
     byte_size := indices.count * size_of(u32);
 
@@ -647,8 +741,8 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
     error = map_copy_buffer_data(
         renderer.allocator,
         staging_buffer,
-        buffer_offset = renderer.indices_offset,
-        renderer.indices.data,
+        buffer_offset = 0,
+        *renderer.indices[renderer.indices_offset],
         byte_size,
     );
     if error {
@@ -665,7 +759,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
 
     buffer_copy := VK.Buffer_Copy.{
         src_offset = 0,
-        dst_offset = renderer.indices_offset,
+        dst_offset = renderer.indices_offset * size_of(u32),
         size       = staging_buffer.allocation_info.size,
     };
 
