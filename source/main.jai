@@ -30,6 +30,8 @@ State :: struct {
         fov_vertical = 1.047198,
     };
 
+    models: [..]Renderer.Model;
+
     should_quit: bool;
 }
 
@@ -47,17 +49,34 @@ main :: () {
 
     // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/viking_room/scene.gltf");
     // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Suzanne/gltf/Suzanne.gltf");
-    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/barn/scene.gltf");
+    // error, barn_model := asset_manager_upload_model(*state.asset_manager, "assets/models/barn/scene.gltf");
     // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/glb/Fox.glb");
     // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/gltf/Fox.gltf");
-    error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam/gundam.glb");
+    error, gundam_model1 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam1/gundam.glb");
     assert(!error, error);
+    array_add(*state.models, gundam_model1);
+    error =, gundam_model2 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam2/scene.gltf");
+    assert(!error, error);
+    array_add(*state.models, gundam_model2);
+    error =, gundam_model3 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam3/scene.gltf");
+    assert(!error, error);
+    array_add(*state.models, gundam_model3);
+    error =, gundam_model4 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam4/model.gltf");
+    assert(!error, error);
+    array_add(*state.models, gundam_model4);
+    error =, gundam_model5 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam5/scene.gltf");
+    assert(!error, error);
+    array_add(*state.models, gundam_model5);
+
+    did: bool;
 
     while !state.should_quit {
         process_input();
 
         Renderer.start_drawing(*state.renderer, state.camera);
-        Renderer.draw_model(*state.renderer, model);
+        for model: state.models {
+            Renderer.draw_model(*state.renderer, model);
+        }
         Renderer.finish_drawing(*state.renderer);
 
         reset_temporary_storage();
