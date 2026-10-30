@@ -26,17 +26,21 @@ Renderer :: struct {
     dummy_pipeline_info: Pipeline_Info;
     common_pipeline_info: Pipeline_Info;
 
-    index_buffer_info: Buffer_Info;
-    vertex_buffer_info: Buffer_Info;
-
+    // @Todo: think about what we can remove from this to keep inside a "Model"
     samplers:       [..]VK.Sampler;
     texture_images: [..]Image_Info; // @Todo: maybe couple this with the descriptors and samplers
+    textures:       [..]Texture;
+    materials:            [..]Material;
+    material_buffer_info: Buffer_Info;
 
+    // @Todo: If we upload assets only before rendering, do we sill need indices and vertices array?
+    index_buffer_info: Buffer_Info;
     indices:        []u32; // @Todo: maybe couple this with the buffer and the offset
-    indices_offset: u64;
+    indices_offset: u32;
 
+    vertex_buffer_info: Buffer_Info;
     vertices:        []Vertex; // @Todo: maybe couple this with the buffer and the offset
-    vertices_offset: u64;
+    vertices_offset: u32;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     should_recreate_swapchain: bool;
@@ -268,8 +272,23 @@ init :: (
             renderer;
     }
 
+    error, renderer.material_buffer_info = create_buffer(
+        renderer.device,
+        renderer.allocator,
+        usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
+        MAX_TEXTURE_COUNT * size_of(Material),
+        memory_usage = .AUTO,
+        mappable = false,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     array_reserve(*renderer.samplers, MAX_TEXTURE_COUNT);
     array_reserve(*renderer.texture_images, MAX_TEXTURE_COUNT);
+    array_reserve(*renderer.materials, MAX_TEXTURE_COUNT);
     renderer.indices = NewArray(INDEX_BUFFER_BYTE_SIZE / size_of(u32), u32);
     renderer.vertices = NewArray(VERTEX_BUFFER_BYTE_SIZE / size_of(Vertex), Vertex);
 
@@ -283,6 +302,8 @@ deinit :: (renderer: *Renderer) {
 
     array_free(renderer.vertices);
     array_free(renderer.indices);
+    array_free(renderer.materials);
+    array_free(renderer.textures);
 
     for texture_image_info: renderer.texture_images {
         destroy_image(
@@ -307,6 +328,12 @@ deinit :: (renderer: *Renderer) {
         renderer.allocator,
         renderer.index_buffer_info.buffer,
         renderer.index_buffer_info.allocation,
+    );
+
+    VMA.destroy_buffer(
+        renderer.allocator,
+        renderer.material_buffer_info.buffer,
+        renderer.material_buffer_info.allocation,
     );
 
     destroy_pipeline(renderer.device, *renderer.common_pipeline_info);
@@ -381,7 +408,7 @@ start_drawing :: (renderer: *Renderer) -> error: string {
     return "";
 }
 
-draw :: (renderer: *Renderer) {
+draw_model :: (renderer: *Renderer, model: Model) {
 }
 
 finish_drawing :: (renderer: *Renderer) -> error: string {
@@ -646,8 +673,117 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     return "";
 }
 
+add_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u32 {
+    prev_count := renderer.textures.count;
+
+    indices: [..]u32;
+
+    image_descriptors: [..]VK.Descriptor_Image_Info;
+    image_descriptors.allocator = temp;
+
+    for texture: textures {
+        array_add(*indices, cast(u32, renderer.textures.count));
+        array_add(*renderer.textures, texture);
+
+        array_add(
+            *image_descriptors,
+            {
+                sampler      = renderer.samplers[texture.sampler_index],
+                image_view   = renderer.texture_images[texture.image_index].image_view,
+                image_layout = .SHADER_READ_ONLY_OPTIMAL,
+            }
+        );
+    }
+
+    write_descriptor_set := VK.Write_Descriptor_Set.{
+        dst_set           = renderer.texture_descriptor_info.set,
+        dst_binding       = 0,
+        dst_array_element = cast(u32, prev_count),
+        descriptor_count  = xx        image_descriptors.count,
+        descriptor_type   = .COMBINED_IMAGE_SAMPLER,
+        p_image_info      = image_descriptors.data,
+    };
+
+    VK.update_descriptor_sets(renderer.device, .[write_descriptor_set], .[]);
+
+    return indices;
+}
+
+upload_materials :: (renderer: *Renderer, materials: []Material) -> error: string, indices: [..]u32 {
+    byte_size := materials.count * size_of(Material);
+    prev_count := renderer.materials.count;
+
+    indices: [..]u32;
+
+    for material: materials {
+        array_add(*indices, cast(u32, renderer.materials.count));
+        array_add(*renderer.materials, material);
+    }
+
+    error, staging_buffer := create_buffer(
+        renderer.device,
+        renderer.allocator,
+        usage = .TRANSFER_SRC,
+        cast(u64, byte_size),
+        memory_usage = .AUTO,
+        mappable = true,
+    );
+    if error {
+        return error, indices;
+    }
+    defer VMA.destroy_buffer(
+        renderer.allocator,
+        staging_buffer.buffer,
+        staging_buffer.allocation,
+    );
+
+    error = map_copy_buffer_data(
+        renderer.allocator,
+        staging_buffer,
+        buffer_offset = 0,
+        *materials.data,
+        byte_size,
+    );
+    if error {
+        return error, indices;
+    }
+
+    error =, command_buffer := start_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+    );
+    if error {
+        return error, indices;
+    }
+
+    buffer_copy := VK.Buffer_Copy.{
+        src_offset = 0,
+        dst_offset = cast(u64, prev_count * size_of(Material)),
+        size       = cast(u64, byte_size),
+    };
+
+    VK.cmd_copy_buffer(
+        command_buffer,
+        staging_buffer.buffer,
+        renderer.material_buffer_info.buffer,
+        .[buffer_copy],
+    );
+
+    error = submit_transient_command_buffer(
+        renderer.device,
+        renderer.transient_command_pool,
+        renderer.graphics_queue_info.queue,
+        command_buffer,
+    );
+    if error {
+        return error, indices;
+    }
+
+    return "", indices;
+}
+
 // @Todo: batching
-upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, offset: u64 {
+upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, offset: u32 {
     byte_size := vertices.count * size_of(Vertex);
 
     memcpy(
@@ -656,7 +792,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
         byte_size,
     );
 
-    defer renderer.vertices_offset += cast(u64, vertices.count);
+    defer renderer.vertices_offset += cast(u32, vertices.count);
 
     error, staging_buffer := create_buffer(
         renderer.device,
@@ -721,7 +857,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, o
 }
 
 // @Todo: batching
-upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset: u64 {
+upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset: u32 {
     byte_size := indices.count * size_of(u32);
 
     memcpy(
@@ -730,7 +866,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
         byte_size,
     );
 
-    defer renderer.indices_offset += cast(u64, indices.count);
+    defer renderer.indices_offset += cast(u32, indices.count);
 
     error, staging_buffer := create_buffer(
         renderer.device,
@@ -795,8 +931,8 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, offset
 }
 
 // @Todo: batching
-create_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params) -> error: string, image_ids: [..]int {
-    image_ids: [..]int;
+create_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params) -> error: string, image_ids: [..]u32 {
+    image_ids: [..]u32;
 
     error, command_buffer := start_transient_command_buffer(
         renderer.device,
@@ -842,12 +978,12 @@ create_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params
 }
 
 // @Todo: can we batch this?
-create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: int {
+create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: u32 {
     result, sampler := VK.create_sampler(renderer.device, *params);
     if result != .SUCCESS {
         return
             tprint("Failed to create sampler: %", result),
-            -1;
+            0;
     }
 
     array_add(
@@ -855,7 +991,7 @@ create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error:
         sampler,
     );
 
-    return "", renderer.samplers.count - 1;
+    return "", cast(u32, renderer.samplers.count - 1);
 }
 
 
@@ -931,12 +1067,12 @@ Buffer_Info :: struct {
     buffer:          VK.Buffer;
     allocation:      VMA.Allocation;
     allocation_info: VMA.Allocation_Info;
-    device_address:  u64;
+    device_address:  VK.Device_Address;
 }
 
 Timeline_Semaphore_Info :: struct {
     semaphore:         VK.Semaphore;
-    next_signal_value: u64;
+    next_signal_value: VK.Device_Address;
 }
 
 Frame_Resources :: struct {
@@ -952,9 +1088,9 @@ Descriptor_Info :: struct {
 }
 
 Push_Constants :: struct @Gpu {
-    vertex_buffer_address:   u64;
-    material_buffer_address: u64;
-    instance_buffer_address: u64;
+    vertex_buffer_address:   VK.Device_Address;
+    material_buffer_address: VK.Device_Address;
+    instance_buffer_address: VK.Device_Address;
 }
 
 submit_transient_command_buffer :: (

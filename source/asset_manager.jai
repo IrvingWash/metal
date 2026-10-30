@@ -54,10 +54,9 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
     model_dto := maybe_model_dto.some;
     defer destroy(*model_dto);
 
-    result_sampler_ids: [..]int;
-    result_image_ids:   [..]int;
-    indices_offsets:    [..]u64;
-    vertices_offsets:   [..]u64;
+    indices_offsets:    [..]u32;
+    vertices_offsets:   [..]u32;
+    material_ids:       [..]u32;
 
     for mesh: model_dto.meshes {
         if mesh.indices.count > 0 {
@@ -96,6 +95,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
     }
 
     for material: model_dto.materials {
+        base_color_texture_id: u32;
         if material.pbr_metallic_roughness.base_color_texture.kind == .SOME {
             base_color_texture := material.pbr_metallic_roughness.base_color_texture.some;
 
@@ -103,7 +103,6 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             if error {
                 return error;
             }
-            array_add(*result_sampler_ids, sampler_id);
 
             image := model_dto.images[base_color_texture.image_index];
 
@@ -119,8 +118,29 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             if error {
                 return error;
             }
-            array_add(*result_image_ids, ..image_ids);
+
+            base_color_texture_id = Renderer.add_textures(
+                *state.renderer,
+                .[{
+                    image_index   = image_ids[0],
+                    sampler_index = sampler_id,
+                }],,
+                temp
+            )[0];
         }
+
+        error, _material_ids := Renderer.upload_materials(
+            *state.renderer,
+            .[{
+                base_color_factor        = material.pbr_metallic_roughness.base_color_factor,
+                base_color_texture_index = base_color_texture_id,
+            }],,
+            temp
+        );
+        if error {
+            return error;
+        }
+        array_add(*material_ids, .._material_ids);
     }
 
     return "";
@@ -130,7 +150,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
 
 #scope_file
 
-create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, sampler_id: int {
+create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, sampler_id: u32 {
     params: Renderer.Create_Sampler_Params;
 
     if #complete texture_dto.mag_filter == {
@@ -189,7 +209,7 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
         params,
     );
     if error {
-        return error, -1;
+        return error, 0;
     }
 
     return "", sampler_index;

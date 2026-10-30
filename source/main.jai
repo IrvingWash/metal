@@ -46,7 +46,7 @@ main :: () {
         process_input();
 
         Renderer.start_drawing(*state.renderer);
-        Renderer.draw(*state.renderer);
+        Renderer.draw_model(*state.renderer, .{});
         Renderer.finish_drawing(*state.renderer);
 
         reset_temporary_storage();

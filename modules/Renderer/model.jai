@@ -14,10 +14,10 @@ Node :: struct {
 }
 
 Mesh :: struct {
-    vertex_start: u64;
-    vertex_count: u64;
-    index_start:  u64;
-    index_count:  u64;
+    vertex_start: u32;
+    vertex_count: u32;
+    index_start:  u32;
+    index_count:  u32;
 
     material_index: u32;
 }
