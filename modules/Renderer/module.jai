@@ -211,6 +211,7 @@ init :: (
     for *frame_resources: renderer.frame_resources_list {
         error:, frame_resources.* = create_frame_resources(
             renderer.device,
+            renderer.allocator,
             renderer.graphics_queue_info.family_index,
         );
         if error {
@@ -340,7 +341,11 @@ deinit :: (renderer: *Renderer) {
     destroy_pipeline(renderer.device, *renderer.dummy_pipeline_info);
 
     for *frame_resources: renderer.frame_resources_list {
-        destroy_frame_resources(renderer.device, frame_resources);
+        destroy_frame_resources(
+            renderer.device,
+            renderer.allocator,
+            frame_resources,
+        );
     }
 
     destroy_descriptor_info(renderer.device, *renderer.texture_descriptor_info);
@@ -1023,9 +1028,10 @@ DEVICE_EXTENSIONS :: *u8.[
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
-MAX_TEXTURE_COUNT       :: 256;
-VERTEX_BUFFER_BYTE_SIZE :: 64 * 1024 * 1024;
-INDEX_BUFFER_BYTE_SIZE  :: 32 * 1024 * 1024;
+MAX_TEXTURE_COUNT        :: 256;
+VERTEX_BUFFER_BYTE_SIZE  :: 64 * 1024 * 1024;
+INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
+MAX_INDIRECT_BUFFER_SIZE :: 4096 * size_of(VK.Draw_Indexed_Indirect_Command);
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
@@ -1085,6 +1091,9 @@ Frame_Resources :: struct {
     command_pool:             VK.Command_Pool;
     command_buffer:           VK.Command_Buffer;
     image_acquired_semaphore: VK.Semaphore;
+
+    indirect_draw_buffer_info: Buffer_Info;
+    indirect_draw_pointer:     *VK.Draw_Indexed_Indirect_Command;
 }
 
 Descriptor_Info :: struct {
@@ -1348,7 +1357,7 @@ create_common_pipeline :: (
 
     { // Layout
         push_constant_range := VK.Push_Constant_Range.{
-            stage_flags = .VERTEX,
+            stage_flags = .VERTEX | .FRAGMENT,
             offset      = 0,
             size        = size_of(Push_Constants),
         };
@@ -1721,16 +1730,38 @@ destroy_descriptor_info :: (device: VK.Device, descriptor_set_info: *Descriptor_
     descriptor_set_info.* = {};
 }
 
-destroy_frame_resources :: (device: VK.Device, frame_resources: *Frame_Resources) {
-    VK.destroy_semaphore(device, frame_resources.image_acquired_semaphore);
+destroy_frame_resources :: (
+    device:          VK.Device,
+    allocator:       VMA.Allocator,
+    frame_resources: *Frame_Resources,
+) {
+    VMA.unmap_memory(
+        allocator,
+        frame_resources.indirect_draw_buffer_info.allocation,
+    );
 
-    VK.destroy_command_pool(device, frame_resources.command_pool);
+    VMA.destroy_buffer(
+        allocator,
+        frame_resources.indirect_draw_buffer_info.buffer,
+        frame_resources.indirect_draw_buffer_info.allocation,
+    );
+
+    VK.destroy_semaphore(
+        device,
+        frame_resources.image_acquired_semaphore,
+    );
+
+    VK.destroy_command_pool(
+        device,
+        frame_resources.command_pool,
+    );
 
     frame_resources.* = {};
 }
 
 create_frame_resources :: (
-    device: VK.Device,
+    device:             VK.Device,
+    allocator:          VMA.Allocator,
     queue_family_index: u32,
 ) -> error: string, Frame_Resources {
     frame_resources: Frame_Resources;
@@ -1776,6 +1807,31 @@ create_frame_resources :: (
         if result != .SUCCESS {
             return
                 tprint("Failed to allocate a command buffer for a frame resources: %", result),
+                frame_resources;
+        }
+    }
+
+    { // Indirect draw buffers
+        error:, frame_resources.indirect_draw_buffer_info = create_buffer(
+            device,
+            allocator,
+            usage = .INDIRECT_BUFFER,
+            MAX_INDIRECT_BUFFER_SIZE,
+            memory_usage = .AUTO,
+            mappable = true,
+        );
+        if error {
+            return
+                tprint("Failed to create indirect draw buffer for frame resources: %", error),
+                frame_resources;
+        }
+        result:, frame_resources.indirect_draw_pointer = VMA.map_memory(
+            allocator,
+            frame_resources.indirect_draw_buffer_info.allocation,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to map indirect draw buffer memory: %", result),
                 frame_resources;
         }
     }
