@@ -207,7 +207,7 @@ parse_gltf :: (json: string) -> error: string, Gltf {
 #import "Basic";
 #import "File";
 #import "String";
-#import "Jaison";
+#import "vendored/Jaison";
 
 #load "glb.jai";
 #load "gltf_validator.jai";

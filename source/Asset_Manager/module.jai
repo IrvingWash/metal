@@ -72,7 +72,7 @@ upload_model :: (path: string) -> error: string {
 #import "String";
 #import "Math";
 #import "File";
-#import,dir "../Option";
+#import "Option";
 
 #load "model_dto.jai";
 #load "gltf_converter.jai";

@@ -77,25 +77,25 @@ Shader_Meta_Info :: struct {
 
 SHADER_META_INFOS :: Shader_Meta_Info.[
     {
-        relative_source_path = "source/Renderer/shaders/dummy.fragment.glsl",
+        relative_source_path = "modules/Renderer/shaders/dummy.fragment.glsl",
         compiled_name        = "dummy.fragment.spv",
         entry_point_name     = "main",
         kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
     },
     {
-        relative_source_path = "source/Renderer/shaders/dummy.vertex.glsl",
+        relative_source_path = "modules/Renderer/shaders/dummy.vertex.glsl",
         compiled_name        = "dummy.vertex.spv",
         entry_point_name     = "main",
         kind                 = Shaderc.Shader_Kind.VERTEX_SHADER,
     },
     {
-        relative_source_path = "source/Renderer/shaders/common.vertex.glsl",
+        relative_source_path = "modules/Renderer/shaders/common.vertex.glsl",
         compiled_name        = "common.vertex.spv",
         entry_point_name     = "main",
         kind                 = Shaderc.Shader_Kind.VERTEX_SHADER,
     },
     {
-        relative_source_path = "source/Renderer/shaders/common.fragment.glsl",
+        relative_source_path = "modules/Renderer/shaders/common.fragment.glsl",
         compiled_name        = "common.fragment.spv",
         entry_point_name     = "main",
         kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
@@ -106,4 +106,4 @@ SHADER_META_INFOS :: Shader_Meta_Info.[
 #import "File";
 #import "Compiler";
 #import "String";
-Shaderc :: #import "Shaderc";
+Shaderc :: #import "vendored/Shaderc";

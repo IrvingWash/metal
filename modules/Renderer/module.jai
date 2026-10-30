@@ -22,6 +22,7 @@ Renderer :: struct {
     texture_descriptor_info: Descriptor_Info;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
+    samplers: [..]VK.Sampler;
 
     dummy_pipeline_info: Pipeline_Info;
     common_pipeline_info: Pipeline_Info;
@@ -33,55 +34,6 @@ Renderer :: struct {
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
     }
-}
-
-Pipeline_Info :: struct {
-    pipeline: VK.Pipeline;
-    layout:   VK.Pipeline_Layout;
-}
-
-Queue_Info :: struct {
-    family_index: u32;
-    queue:        VK.Queue;
-}
-
-Swapchain_Info :: struct {
-    swapchain:                  VK.Swapchain_Khr;
-    config:                     VK.Swapchain_Create_Info_Khr;
-
-    images:                     [..]VK.Image;
-    image_views:                [..]VK.Image_View;
-    render_complete_semaphores: [..]VK.Semaphore;
-}
-
-Image_Info :: struct {
-    image:      VK.Image;
-    image_view: VK.Image_View;
-    allocation: VMA.Allocation;
-    format:     VK.Format;
-}
-
-Timeline_Semaphore_Info :: struct {
-    semaphore:         VK.Semaphore;
-    next_signal_value: u64;
-}
-
-Frame_Resources :: struct {
-    command_pool:             VK.Command_Pool;
-    command_buffer:           VK.Command_Buffer;
-    image_acquired_semaphore: VK.Semaphore;
-}
-
-Descriptor_Info :: struct {
-    pool:   VK.Descriptor_Pool;
-    layout: VK.Descriptor_Set_Layout;
-    set:    VK.Descriptor_Set;
-}
-
-Push_Constants :: struct @Gpu {
-    vertex_buffer_address:   u64;
-    material_buffer_address: u64;
-    instance_buffer_address: u64;
 }
 
 // =============================================================================
@@ -99,6 +51,8 @@ Create_Window_Surface :: #type (
 ) -> VK.Surface_Khr;
 
 Get_Compiled_Shader :: #type (name: string) -> error: string, content: string;
+
+Create_Sampler_Params :: VK.Sampler_Create_Info;
 
 // =============================================================================
 // Public API
@@ -610,6 +564,22 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     return "";
 }
 
+create_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> index: int, error: string {
+    result, sampler := VK.create_sampler(renderer.device, *create_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create sampler: %", result),
+            -1;
+    }
+
+    array_add(
+        *renderer.samplers,
+        sampler,
+    );
+
+    return "", renderer.samplers.count - 1;
+}
+
 
 
 #scope_file
@@ -647,6 +617,55 @@ MAX_TEXTURE_COUNT :: 256;
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
+}
+
+Pipeline_Info :: struct {
+    pipeline: VK.Pipeline;
+    layout:   VK.Pipeline_Layout;
+}
+
+Queue_Info :: struct {
+    family_index: u32;
+    queue:        VK.Queue;
+}
+
+Swapchain_Info :: struct {
+    swapchain:                  VK.Swapchain_Khr;
+    config:                     VK.Swapchain_Create_Info_Khr;
+
+    images:                     [..]VK.Image;
+    image_views:                [..]VK.Image_View;
+    render_complete_semaphores: [..]VK.Semaphore;
+}
+
+Image_Info :: struct {
+    image:      VK.Image;
+    image_view: VK.Image_View;
+    allocation: VMA.Allocation;
+    format:     VK.Format;
+}
+
+Timeline_Semaphore_Info :: struct {
+    semaphore:         VK.Semaphore;
+    next_signal_value: u64;
+}
+
+Frame_Resources :: struct {
+    command_pool:             VK.Command_Pool;
+    command_buffer:           VK.Command_Buffer;
+    image_acquired_semaphore: VK.Semaphore;
+}
+
+Descriptor_Info :: struct {
+    pool:   VK.Descriptor_Pool;
+    layout: VK.Descriptor_Set_Layout;
+    set:    VK.Descriptor_Set;
+}
+
+Push_Constants :: struct @Gpu {
+    vertex_buffer_address:   u64;
+    material_buffer_address: u64;
+    instance_buffer_address: u64;
 }
 
 create_common_pipeline :: (
@@ -1770,8 +1789,8 @@ create_shader_module :: (
 
 #import "Basic";
 #import "Math";
-VK  :: #import "Jai_Vulkan";
-VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
+VK  :: #import "vendored/Jai_Vulkan";
+VMA :: #import "vendored/Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
 #if DEBUG {
     #import "Print_Vars";

@@ -81,5 +81,5 @@ get_vulkan_instance_extensions :: () -> [..]*u8 {
 #scope_file
 
 #import "Basic";
-SDL :: #import "SDL3";
-VK  :: #import "Jai_Vulkan";
+SDL :: #import "vendored/SDL3";
+VK  :: #import "vendored/Jai_Vulkan";

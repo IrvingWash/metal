@@ -789,4 +789,4 @@ get_component_count_from_gltf_accessor_type :: (gltf_accessor_type: Gltf.Accesso
 }
 
 #import "stb_image";
-Gltf :: #import,dir "../Gltf";
+Gltf :: #import "Gltf";

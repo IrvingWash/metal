@@ -9,9 +9,9 @@
     #import "Print_Vars";
 }
 
-Windowing     :: #import,dir "Windowing";
-Input         :: #import,dir "Input";
-Renderer      :: #import,dir "Renderer"()(
+Windowing     :: #import "Windowing";
+Input         :: #import "Input";
+Renderer      :: #import "Renderer"()(
     Window_Type      = *Windowing.Window,
     APPLICATION_NAME = "metal",
     DEBUG            = DEBUG,
@@ -99,6 +99,12 @@ deinit :: () {
 get_compiled_shader :: (name: string) -> error: string, shader: string {
     error, shader := Asset_Manager.get_compiled_shader(state.asset_manager, name);
     return error, shader;
+}
+
+create_sampler :: (params: Renderer.Create_Sampler_Params) -> error: string, index: int {
+    error, index := Renderer.create_sampler(*state.renderer, params);
+
+    return error, index;
 }
 
 setup_formatting :: () {

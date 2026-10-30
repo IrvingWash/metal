@@ -52,8 +52,8 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
         return;
     }
 
-    log("Generating modules...");
     if config.should_generate_modules {
+        log("Generating modules...");
         error := generate_modules();
         if error {
             fail_compilation_with_message("Failed to generate modules: %", error);

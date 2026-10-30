@@ -41,8 +41,9 @@ The build artefacts are placed into `./bin/<OPTIMIZATION_TYPE>` directory
 
 ## Structure
 
-`source` - The game and our own modules
-`modules` - External dependencies and bindings
+`source`           - The game
+`modules`          - Sub projects
+`modules/vendored` - External modules
 
 ## Convensions
 - Files in Ada_Case are considered modules and must be `#import`ed

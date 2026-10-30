@@ -47,4 +47,4 @@ get_events :: () -> []Event {
 #scope_file
 
 #import "Basic";
-SDL :: #import "SDL3";
+SDL :: #import "vendored/SDL3";

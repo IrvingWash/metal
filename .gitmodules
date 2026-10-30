@@ -1,15 +1,15 @@
 [submodule "modules/Vulkan_Memory_Allocator/VulkanMemoryAllocator"]
-	path = modules/Vulkan_Memory_Allocator/VulkanMemoryAllocator
+	path = modules/vendored/Vulkan_Memory_Allocator/VulkanMemoryAllocator
 	url = git@github.com:GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
 [submodule "modules/Vulkan_Memory_Allocator/Vulkan-Headers"]
-	path = modules/Vulkan_Memory_Allocator/Vulkan-Headers
+	path = modules/vendored/Vulkan_Memory_Allocator/Vulkan-Headers
 	url = git@github.com:KhronosGroup/Vulkan-Headers.git
 [submodule "modules/SDL3/SDL"]
-	path = modules/SDL3/SDL
+	path = modules/vendored/SDL3/SDL
 	url = git@github.com:libsdl-org/SDL.git
 [submodule "modules/Jaison"]
-	path = modules/Jaison
+	path = modules/vendored/Jaison
 	url = git@github.com:rluba/jaison.git
 [submodule "modules/Shaderc/shaderc"]
-	path = modules/Shaderc/shaderc
+	path = modules/vendored/Shaderc/shaderc
 	url = git@github.com:google/shaderc.git
