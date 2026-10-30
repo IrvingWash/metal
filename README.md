@@ -44,7 +44,3 @@ The build artefacts are placed into `./bin/<OPTIMIZATION_TYPE>` directory
 `source`           - The game
 `modules`          - Sub projects
 `modules/vendored` - External modules
-
-## Convensions
-- Files in Ada_Case are considered modules and must be `#import`ed
-- Files in snake_case can be `#load`ed
