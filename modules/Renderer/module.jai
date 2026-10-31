@@ -21,7 +21,7 @@ Renderer :: struct {
 
     texture_descriptor_info: Descriptor_Info;
 
-    light_descriptor_info: Light_Descriptor_Info;
+    light_info: Light_Info;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
@@ -232,7 +232,7 @@ init :: (
             renderer;
     }
 
-    error, renderer.light_descriptor_info = create_light_descriptor_info(
+    error, renderer.light_info = create_light_info(
         renderer.device,
         renderer.allocator,
     );
@@ -260,7 +260,7 @@ init :: (
         renderer.get_compiled_shader,
         .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targets
         renderer.depth_image_info.format,
-        .[renderer.texture_descriptor_info.layout, renderer.light_descriptor_info.layout],
+        .[renderer.texture_descriptor_info.layout, renderer.light_info.layout],
     );
     if error {
         return
@@ -378,7 +378,7 @@ deinit :: (renderer: *Renderer) {
         );
     }
 
-    destroy_light_descriptor_info(renderer.device, renderer.allocator, renderer.light_descriptor_info);
+    destroy_light_info(renderer.device, renderer.allocator, renderer.light_info);
     destroy_descriptor_info(renderer.device, *renderer.texture_descriptor_info);
 
     destroy_image( // Depth image
@@ -484,6 +484,14 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         }
     }
 
+    renderer.light_info.pointers[frame_resources_index].* = renderer.light_info.directional_light;
+    VMA.flush_allocation(
+        renderer.allocator,
+        renderer.light_info.buffer_infos[frame_resources_index].allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
+
     frame_resources := renderer.frame_resources_list[frame_resources_index];
 
     { // Reset command pool
@@ -538,6 +546,18 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             );
         }
     }
+    VMA.flush_allocation(
+        renderer.allocator,
+        frame_resources.indirect_draw_buffer_info.allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
+    VMA.flush_allocation(
+        renderer.allocator,
+        frame_resources.instance_buffer_info.allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
 
     { // Begin command buffer
         command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
@@ -623,7 +643,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             pipeline_bind_point = .GRAPHICS,
             renderer.common_pipeline_info.layout,
             first_set = 0,
-            .[renderer.texture_descriptor_info.set, renderer.light_descriptor_info.sets[frame_resources_index]],
+            .[renderer.texture_descriptor_info.set, renderer.light_info.sets[frame_resources_index]],
             .[],
         );
 
@@ -780,6 +800,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     }
 
     return "";
+}
+
+set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
+    renderer.light_info.directional_light = light;
 }
 
 upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u32 {
@@ -1204,10 +1228,13 @@ Frame_Resources :: struct {
     instance_pointer: *Instance;
 }
 
-Light_Descriptor_Info :: struct {
+Light_Info :: struct {
+    directional_light: Directional_Light;
+
     pool:         VK.Descriptor_Pool;
     layout:       VK.Descriptor_Set_Layout;
     sets:         [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
+
     buffer_infos: [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     pointers:     [FRAMES_IN_FLIGHT_COUNT]*Directional_Light;
 }
@@ -1225,7 +1252,7 @@ Push_Constants :: struct @Gpu {
 }
 
 draw_node :: (
-    renderer: Renderer,
+    renderer: *Renderer,
     node: Node,
     draw_index: *int,
     nodes: []Node,
@@ -1744,12 +1771,12 @@ destroy_pipeline :: (device: VK.Device, pipeline_info: *Pipeline_Info) {
     pipeline_info.* = {};
 }
 
-destroy_light_descriptor_info :: (
+destroy_light_info :: (
     device: VK.Device,
     allocator: VMA.Allocator,
-    light_descriptor_info: Light_Descriptor_Info,
+    light_info: Light_Info,
 ) {
-    for buffer_info: light_descriptor_info.buffer_infos {
+    for buffer_info: light_info.buffer_infos {
         VMA.unmap_memory(allocator, buffer_info.allocation);
         VMA.destroy_buffer(
             allocator,
@@ -1757,12 +1784,12 @@ destroy_light_descriptor_info :: (
             buffer_info.allocation,
         );
     }
-    VK.destroy_descriptor_set_layout(device, light_descriptor_info.layout);
-    VK.destroy_descriptor_pool(device, light_descriptor_info.pool);
+    VK.destroy_descriptor_set_layout(device, light_info.layout);
+    VK.destroy_descriptor_pool(device, light_info.pool);
 }
 
-create_light_descriptor_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Light_Descriptor_Info {
-    light_descriptor_info: Light_Descriptor_Info;
+create_light_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Light_Info {
+    light_info: Light_Info;
 
     { // Pool
         descriptor_pool_sizes := VK.Descriptor_Pool_Size.[
@@ -1777,11 +1804,11 @@ create_light_descriptor_info :: (device: VK.Device, allocator: VMA.Allocator) ->
             pool_size_count = descriptor_pool_sizes.count,
             p_pool_sizes    = descriptor_pool_sizes.data,
         };
-        result:, light_descriptor_info.pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
+        result:, light_info.pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
         if result != .SUCCESS {
             return
                 tprint("Failed to create descriptor pool for light: %", result),
-                light_descriptor_info;
+                light_info;
         }
     }
 
@@ -1800,24 +1827,24 @@ create_light_descriptor_info :: (device: VK.Device, allocator: VMA.Allocator) ->
             p_bindings    = bindings.data,
         };
 
-        result:, light_descriptor_info.layout = VK.create_descriptor_set_layout(
+        result:, light_info.layout = VK.create_descriptor_set_layout(
             device,
             *descriptor_set_layout_create_info,
         );
         if result != .SUCCESS {
             return
                 tprint("Failed to create descriptor set layout for light: %", result),
-                light_descriptor_info;
+                light_info;
         }
     }
 
     { // Set
         layouts: [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set_Layout;
         for *layout: layouts {
-            layout.* = light_descriptor_info.layout;
+            layout.* = light_info.layout;
         }
         descriptor_set_allocate_info := VK.Descriptor_Set_Allocate_Info.{
-            descriptor_pool      = light_descriptor_info.pool,
+            descriptor_pool      = light_info.pool,
             descriptor_set_count = layouts.count,
             p_set_layouts        = layouts.data,
         };
@@ -1826,16 +1853,16 @@ create_light_descriptor_info :: (device: VK.Device, allocator: VMA.Allocator) ->
         if result != .SUCCESS {
             return
                 tprint("Failed to allocate descriptor set for light: %", result),
-                light_descriptor_info;
+                light_info;
         }
 
-        for *set: light_descriptor_info.sets {
+        for *set: light_info.sets {
             set.* = descriptor_sets[it_index];
         }
     }
 
     // Buffers
-    for *buffer_info: light_descriptor_info.buffer_infos {
+    for *buffer_info: light_info.buffer_infos {
         error, new_buffer_info := create_buffer(
             device,
             allocator,
@@ -1847,24 +1874,21 @@ create_light_descriptor_info :: (device: VK.Device, allocator: VMA.Allocator) ->
         if error {
             return
                 tprint("Failed to create light uniform buffer: %", error),
-                light_descriptor_info;
+                light_info;
         }
 
         buffer_info.* = new_buffer_info;
 
 
-        result:, light_descriptor_info.pointers[it_index] = VMA.map_memory(
+        result:, light_info.pointers[it_index] = VMA.map_memory(
             allocator,
             buffer_info.allocation,
         );
         if result != .SUCCESS {
             return
                 tprint("Failed to map light uniform buffer memory: %", result),
-                light_descriptor_info;
+                light_info;
         }
-
-        light_descriptor_info.pointers[it_index].* = Directional_Light.{};
-        VMA.flush_allocation(allocator, buffer_info.allocation, 0, VK.WHOLE_SIZE);
 
         descriptor_buffer_info := VK.Descriptor_Buffer_Info.{
             buffer = buffer_info.buffer,
@@ -1873,7 +1897,7 @@ create_light_descriptor_info :: (device: VK.Device, allocator: VMA.Allocator) ->
         };
 
         write_descriptor_set := VK.Write_Descriptor_Set.{
-            dst_set          = light_descriptor_info.sets[it_index],
+            dst_set          = light_info.sets[it_index],
             dst_binding      = 0,
             descriptor_count = 1,
             descriptor_type  = .UNIFORM_BUFFER,
@@ -1887,7 +1911,7 @@ create_light_descriptor_info :: (device: VK.Device, allocator: VMA.Allocator) ->
         );
     }
 
-    return "", light_descriptor_info;
+    return "", light_info;
 }
 
 create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descriptor_Info {
