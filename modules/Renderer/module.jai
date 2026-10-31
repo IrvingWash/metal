@@ -47,9 +47,7 @@ Renderer :: struct {
     should_recreate_swapchain: bool;
     frame_index: u64;
 
-    projection_transform:      Matrix4;
-    view_transform:            Matrix4;
-    view_projection_transform: Matrix4;
+    transforms: Transforms;
 
     models_this_frame: [..]Model;
 
@@ -443,21 +441,21 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         renderer.should_recreate_swapchain = false;
     }
 
-    renderer.view_transform = make_look_at_matrix(
+    renderer.transforms.view = make_look_at_matrix(
         camera.position,
         camera.target,
         camera.up,
         x_is_forward = false,
     );
     aspect_ratio := cast(float, renderer.render_resolution.width) / cast(float, renderer.render_resolution.height);
-    renderer.projection_transform = make_projection_matrix(
+    renderer.transforms.projection = make_projection_matrix(
         camera.fov_vertical,
         aspect_ratio,
         camera.z_near,
         camera.z_far,
         depth_range_01 = true,
     );
-    renderer.view_projection_transform = renderer.projection_transform * renderer.view_transform;
+    renderer.transforms.view_projection = renderer.transforms.projection * renderer.transforms.view;
 
     return "";
 }
@@ -1251,6 +1249,12 @@ Push_Constants :: struct @Gpu {
     instance_buffer_address: VK.Device_Address;
 }
 
+Transforms :: struct {
+    projection:      Matrix4;
+    view:            Matrix4;
+    view_projection: Matrix4;
+}
+
 draw_node :: (
     renderer: *Renderer,
     node: Node,
@@ -1271,7 +1275,7 @@ draw_node :: (
         };
 
         frame_resources.instance_pointer[draw_index.*] = {
-            wvp_transform   = transpose(renderer.view_projection_transform * world_transform),
+            wvp_transform   = transpose(renderer.transforms.view_projection * world_transform),
             world_transform = transpose(world_transform),
             material_index  = mesh.material_index,
         };
