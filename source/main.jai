@@ -2,7 +2,7 @@
 
 #import "Basic"()(
     MEMORY_DEBUGGER                 = DEBUG,
-    TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG && OS != .MACOS, // For some reason it crashes on Mac and Windows
+    TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG,
 );
 
 #if DEBUG {
