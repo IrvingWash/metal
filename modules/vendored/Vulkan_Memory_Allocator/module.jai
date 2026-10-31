@@ -273,9 +273,9 @@ vmaMapMemory :: (
             libvma :: #library,no_dll "./LINUX/libvma";
         }
     case .MACOS;
+        #library,system,link_always "c++";
+        #library,system,link_always "libvulkan";
         #if DEBUG {
-            #library,system,link_always "c++";
-            #library,system,link_always "libvulkan";
             libvma :: #library,no_dll "./MACOS/libvma_debug";
         } else {
             libvma :: #library,no_dll "./MACOS/libvma";
