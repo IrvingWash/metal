@@ -15,9 +15,9 @@ Renderer :: struct {
     timeline_semaphore_info: Timeline_Semaphore_Info;
     transient_command_pool:  VK.Command_Pool;
 
-    swapchain_info:    Swapchain_Info;
-    depth_image_info:  Image_Info;
-    render_resolution: VK.Extent_2D;
+    swapchain_info:   Swapchain_Info;
+    depth_image_info: Image_Info;
+    color_target:     Color_Target;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
@@ -79,6 +79,11 @@ Camera :: struct {
 Directional_Light :: struct @Gpu {
     direction: Vector3 = { 0, -1, 0 };
     color:     Vector3 = { 1, 1, 1 };
+}
+
+Color_Target :: struct {
+    image_info: Image_Info;
+    extent:     VK.Extent_2D;
 }
 
 // =============================================================================
@@ -191,15 +196,23 @@ init :: (
             renderer;
     }
 
-    // @Todo: will be replaced with a texture.
-    // For now, must be updated when swapchain is recreated
-    renderer.render_resolution = renderer.swapchain_info.config.image_extent;
+    error, renderer.color_target = create_color_target(
+        renderer.device,
+        renderer.allocator,
+        renderer.swapchain_info.config.image_extent.width,
+        renderer.swapchain_info.config.image_extent.height,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
 
     error, renderer.depth_image_info = create_depth_image(
         renderer.device,
         renderer.allocator,
-        renderer.render_resolution.width,
-        renderer.render_resolution.height,
+        renderer.color_target.extent.width,
+        renderer.color_target.extent.height,
     );
     if error {
         return
@@ -297,6 +310,7 @@ deinit :: (renderer: *Renderer) {
         renderer.allocator,
         *renderer.depth_image_info,
     );
+    destroy_image(renderer.device, renderer.allocator, *renderer.color_target.image_info);
     destroy_swapchain(renderer.device, *renderer.swapchain_info);
 
     VK.destroy_command_pool(renderer.device, renderer.transient_command_pool);
@@ -339,13 +353,13 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         }
 
         // @Todo: remove this
-        renderer.render_resolution = renderer.swapchain_info.config.image_extent;
+        renderer.color_target.extent = renderer.swapchain_info.config.image_extent;
 
         error, renderer.depth_image_info = create_depth_image(
             renderer.device,
             renderer.allocator,
-            renderer.render_resolution.width,
-            renderer.render_resolution.height,
+            renderer.color_target.extent.width,
+            renderer.color_target.extent.height,
         );
         if error {
             return error;
@@ -360,7 +374,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         camera.up,
         x_is_forward = false,
     );
-    aspect_ratio := cast(float, renderer.render_resolution.width) / cast(float, renderer.render_resolution.height);
+    aspect_ratio := cast(float, renderer.color_target.extent.width) / cast(float, renderer.color_target.extent.height);
     renderer.transforms.projection = make_projection_matrix(
         camera.fov_vertical,
         aspect_ratio,
@@ -541,7 +555,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         rendering_info := VK.Rendering_Info.{
             render_area = {
                 offset = { x = 0, y = 0 },
-                extent = renderer.render_resolution, // @Todo: I'm not sure here, but it looks like this shouldn't be tied to the swapchain image extent
+                extent = renderer.color_target.extent, // @Todo: I'm not sure here, but it looks like this shouldn't be tied to the swapchain image extent
             },
             layer_count = 1,
             color_attachment_count = 1,
@@ -589,9 +603,9 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     { // Set viewport and scissor
         viewport := VK.Viewport.{
             x      = 0,
-            y      = cast(float, renderer.render_resolution.height),
-            width  = cast(float, renderer.render_resolution.width), // @Todo: again not sure about these not being the swapchain image's extent. Same for scissor
-            height = -cast(float, renderer.render_resolution.height),
+            y      = cast(float, renderer.color_target.extent.height),
+            width  = cast(float, renderer.color_target.extent.width), // @Todo: again not sure about these not being the swapchain image's extent. Same for scissor
+            height = -cast(float, renderer.color_target.extent.height),
             min_depth = 0,
             max_depth = 1,
         };
@@ -602,7 +616,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 x = 0,
                 y = 0,
             },
-            extent = renderer.render_resolution,
+            extent = renderer.color_target.extent,
         };
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
@@ -936,6 +950,8 @@ DEFAULT_SURFACE_FORMAT :: VK.Surface_Format_Khr.{
     color_space = .SRGB_NONLINEAR_KHR,
 };
 
+DEFAULT_COLOR_TARGET_FORMAT :: VK.Format.R8G8B8A8_SRGB;
+
 DEFAULT_PRESENT_MODE :: VK.Present_Mode_Khr.FIFO_KHR;
 
 DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
@@ -1068,6 +1084,40 @@ Materials_Info :: struct {
     texture_count:  u32;
     material_count: u32;
     texture_descriptor_info: Descriptor_Info;
+}
+
+create_color_target :: (
+    device: VK.Device,
+    allocator: VMA.Allocator,
+    width: u32,
+    height: u32,
+) -> error: string, Color_Target {
+    color_target: Color_Target;
+
+    error:, color_target.image_info = create_image(
+        device,
+        allocator,
+        DEFAULT_COLOR_TARGET_FORMAT,
+        width,
+        height,
+        depth            = 1,
+        tiling           = .OPTIMAL,
+        usage            = .COLOR_ATTACHMENT | .TRANSFER_SRC,
+        allocation_flags = .DEDICATED_MEMORY,
+        aspect_mask      = .COLOR,
+    );
+
+    if error {
+        return
+            tprint("Failed to create color target: %", error),
+            color_target;
+    }
+
+    color_target.extent = { width, height };
+
+    return
+        "",
+        color_target;
 }
 
 upload_to_buffer :: (
@@ -2237,7 +2287,15 @@ create_depth_image :: (
             aspect_mask      = .DEPTH,
     );
 
-    return error, depth_image_info;
+    if error {
+        return
+            tprint("Failed to create depth image: %", error),
+            depth_image_info;
+    }
+
+    return
+        "",
+        depth_image_info;
 }
 
 create_swapchain :: (
