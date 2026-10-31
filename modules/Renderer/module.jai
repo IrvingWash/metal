@@ -726,17 +726,20 @@ set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
     renderer.light_info.directional_light = light;
 }
 
-upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u32 {
-    prev_count := renderer.materials_info.textures.count;
+upload_textures :: (renderer: *Renderer, textures: []Texture) -> error: string, texture_ids: [..]u32 {
+    prev_count := renderer.materials_info.texture_count;
 
-    indices: [..]u32;
+    texture_ids: [..]u32;
+
+    if renderer.materials_info.texture_count + textures.count > MAX_TEXTURE_COUNT {
+        return "Texture descriptor array is full", texture_ids;
+    }
 
     image_descriptors: [..]VK.Descriptor_Image_Info;
     image_descriptors.allocator = temp;
 
     for texture: textures {
-        array_add(*indices, cast(u32, renderer.materials_info.textures.count));
-        array_add(*renderer.materials_info.textures, texture);
+        array_add(*texture_ids, cast(u32, renderer.materials_info.texture_count));
 
         array_add(
             *image_descriptors,
@@ -746,6 +749,8 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u3
                 image_layout = .SHADER_READ_ONLY_OPTIMAL,
             }
         );
+
+        renderer.materials_info.texture_count += 1;
     }
 
     write_descriptor_set := VK.Write_Descriptor_Set.{
@@ -759,11 +764,11 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u3
 
     VK.update_descriptor_sets(renderer.device, .[write_descriptor_set], .[]);
 
-    return indices;
+    return "", texture_ids;
 }
 
 upload_materials :: (renderer: *Renderer, materials: []Material) -> error: string, material_ids: [..]u32 {
-    start := renderer.materials_info.materials.count;
+    start := renderer.materials_info.material_count;
 
     material_ids: [..]u32;
 
@@ -789,8 +794,8 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
     }
 
     for material: materials {
-        array_add(*material_ids, cast(u32, renderer.materials_info.materials.count));
-        array_add(*renderer.materials_info.materials, material);
+        array_add(*material_ids, cast(u32, renderer.materials_info.material_count));
+        renderer.materials_info.material_count += 1;
     }
 
     return "", material_ids;
@@ -907,6 +912,10 @@ upload_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params
 
 // @Todo: can we batch this?
 upload_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: u32 {
+    if renderer.materials_info.samplers.count >= MAX_SAMPLER_COUNT {
+        return "Max sampler count reached", 0;
+    }
+
     result, sampler := VK.create_sampler(renderer.device, *params);
     if result != .SUCCESS {
         return
@@ -946,6 +955,7 @@ DEVICE_EXTENSIONS :: *u8.[
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
 MAX_TEXTURE_COUNT        :: 256;
+MAX_SAMPLER_COUNT        :: 256;
 MAX_MATERIAL_COUNT       :: 256;
 MAX_DRAW_COUNT           :: 4096;
 MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
@@ -1058,13 +1068,11 @@ Geometry_Info :: struct {
 }
 
 Materials_Info :: struct {
-    samplers:       [..]VK.Sampler;
-
-    images:   [..]Image_Info;
-    textures: [..]Texture;
-
-    materials:            [..]Material;
+    samplers:             [..]VK.Sampler;
+    images:               [..]Image_Info;
     material_buffer_info: Buffer_Info;
+    texture_count:  u32;
+    material_count: u32;
 }
 
 upload_to_buffer :: (
@@ -1188,17 +1196,13 @@ create_materials_info :: (device: VK.Device, allocator: VMA.Allocator) -> error:
             materials_info;
     }
 
-    array_reserve(*materials_info.samplers, MAX_TEXTURE_COUNT);
+    array_reserve(*materials_info.samplers, MAX_SAMPLER_COUNT);
     array_reserve(*materials_info.images, MAX_TEXTURE_COUNT);
-    array_reserve(*materials_info.materials, MAX_MATERIAL_COUNT);
 
     return "", materials_info;
 }
 
 destroy_materials_info :: (device: VK.Device, allocator: VMA.Allocator, materials_info: *Materials_Info) {
-    array_free(materials_info.materials);
-    array_free(materials_info.textures);
-
     for sampler: materials_info.samplers {
         VK.destroy_sampler(device, sampler);
     }
@@ -1337,7 +1341,7 @@ create_fallbacks :: (renderer: *Renderer) -> error: string {
 
     texture_index: u32;
     {
-        texture_indices := upload_textures(
+        error, texture_indices := upload_textures(
             renderer,
             .[{
                 image_index = image_id,
@@ -1345,6 +1349,9 @@ create_fallbacks :: (renderer: *Renderer) -> error: string {
             }],,
             temp
         );
+        if error {
+            return error;
+        }
         if texture_indices.count != 1 || texture_indices[0] != 0 {
             return "Fallback texture should be the very first and very only";
         }

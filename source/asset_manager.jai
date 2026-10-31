@@ -96,14 +96,18 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                     return error, renderer_model;
                 }
 
-                renderer_base_color_texture_id = Renderer.upload_textures(
+                error =, renderer_base_color_texture_ids := Renderer.upload_textures(
                     *state.renderer,
                     .[{
                         image_index   = image_ids[0],
                         sampler_index = sampler_id,
                     }],,
                     temp
-                )[0];
+                );
+                if error {
+                    return error, renderer_model;
+                }
+                renderer_base_color_texture_id = renderer_base_color_texture_ids[0];
 
                 table_set(
                     *renderer_base_color_texture_id_by_image_dto_index,
