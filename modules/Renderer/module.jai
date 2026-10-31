@@ -2765,13 +2765,17 @@ find_physical_device :: (instance: VK.Instance, surface: VK.Surface_Khr) -> erro
         }
 
         if (
-            candidate_props.device_type == .DISCRETE_GPU
+            (candidate_props.device_type == .DISCRETE_GPU || candidate_props.device_type == .INTEGRATED_GPU)
             && candidate_props.api_version >= VULKAN_API_VERSION
             && supports_needed_surface_format
             && supports_default_present_mode
         ) {
             the_suitable_device = candidate;
-            break;
+
+            // If we got an integrated gpu, try more
+            if candidate_props.device_type == .DISCRETE_GPU {
+                break;
+            }
         }
     }
     if !the_suitable_device {

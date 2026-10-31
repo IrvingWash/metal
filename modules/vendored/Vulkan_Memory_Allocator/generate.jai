@@ -26,95 +26,94 @@ build_vma :: () -> error: string {
     optimized_relative_path := tprint("%/libvma", OS);
     debug_relative_path := tprint("%/libvma_debug", OS);
 
-    #if OS == {
-        case .LINUX;
-            ok := make_directiory_for_binaries();
-            if !ok return "Failed to create build directory";
+    #if OS_IS_UNIX {
+        ok := make_directiory_for_binaries();
+        if !ok return "Failed to create build directory";
 
-            extras: [..]string;
-            extras.allocator = temp;
-            array_add(
-                *extras,
-                "-I",
-                VULKAN_INCLUDE_PATH,
-                "-DVMA_IMPLEMENTATION",
-                "-x",
-                "c++",
-                "-std=c++17",
-                "-fno-exceptions",
-                "-fno-rtti",
+        extras: [..]string;
+        extras.allocator = temp;
+        array_add(
+            *extras,
+            "-I",
+            VULKAN_INCLUDE_PATH,
+            "-DVMA_IMPLEMENTATION",
+            "-x",
+            "c++",
+            "-std=c++17",
+            "-fno-exceptions",
+            "-fno-rtti",
+        );
+
+        { // Debug
+            ok := build_cpp_static_lib(
+                debug_relative_path,
+                SRC_PATH,
+                extra = extras,
+                debug = true,
+                working_directory = #filepath,
             );
-
-            { // Debug
-                ok := build_cpp_static_lib(
-                    debug_relative_path,
-                    SRC_PATH,
-                    extra = extras,
-                    debug = true,
-                    working_directory = #filepath,
-                );
-                if !ok {
-                    return "Failed to build static library (debug)";
-                }
+            if !ok {
+                return "Failed to build static library (debug)";
             }
+        }
 
-            { // Optimized
-                array_add(*extras, "-DNDEBUG");
+        { // Optimized
+            array_add(*extras, "-DNDEBUG");
 
-                ok := build_cpp_static_lib(
-                    optimized_relative_path,
-                    SRC_PATH,
-                    extra = extras,
-                    debug = false,
-                    working_directory = #filepath,
-                );
-                if !ok {
-                    return "Failed to build static library (optimized)";
-                }
-            }
-        case .WINDOWS;
-            ok := make_directiory_for_binaries();
-            if !ok return "Failed to create build directory";
-
-            extras: [..]string;
-            extras.allocator = temp;
-            array_add(
-                *extras,
-                "/I",
-                VULKAN_INCLUDE_PATH,
-                "/DVMA_IMPLEMENTATION",
-                "/DVMA_CALL_PRE=__declspec(dllexport)",
-                "/TP",
+            ok := build_cpp_static_lib(
+                optimized_relative_path,
+                SRC_PATH,
+                extra = extras,
+                debug = false,
+                working_directory = #filepath,
             );
-
-            { // Debug
-                ok = build_cpp_static_lib(
-                    debug_relative_path,
-                    SRC_PATH,
-                    extra = extras,
-                    debug = true,
-                    working_directory = #filepath,
-                );
-                if !ok {
-                    return "Failed to build static library (debug)";
-                }
+            if !ok {
+                return "Failed to build static library (optimized)";
             }
+        }
+    } else if OS == .WINDOWS {
+        ok := make_directiory_for_binaries();
+        if !ok return "Failed to create build directory";
 
-            { // Optimized
-                array_add(*extras, "/DNDEBUG");
+        extras: [..]string;
+        extras.allocator = temp;
+        array_add(
+            *extras,
+            "/I",
+            VULKAN_INCLUDE_PATH,
+            "/DVMA_IMPLEMENTATION",
+            "/DVMA_CALL_PRE=__declspec(dllexport)",
+            "/TP",
+        );
 
-                ok := build_cpp_static_lib(
-                    optimized_relative_path,
-                    SRC_PATH,
-                    extra = extras,
-                    debug = false,
-                    working_directory = #filepath,
-                );
-                if !ok {
-                    return "Failed to build static library (optimized)";
-                }
+        { // Debug
+            ok = build_cpp_static_lib(
+                debug_relative_path,
+                SRC_PATH,
+                extra = extras,
+                debug = true,
+                working_directory = #filepath,
+            );
+            if !ok {
+                return "Failed to build static library (debug)";
             }
-        case;
+        }
+
+        { // Optimized
+            array_add(*extras, "/DNDEBUG");
+
+            ok := build_cpp_static_lib(
+                optimized_relative_path,
+                SRC_PATH,
+                extra = extras,
+                debug = false,
+                working_directory = #filepath,
+            );
+            if !ok {
+                return "Failed to build static library (optimized)";
+            }
+        }
+    } else {
             assert(false, "Unsupported OS: '%'", OS);
     }
 
