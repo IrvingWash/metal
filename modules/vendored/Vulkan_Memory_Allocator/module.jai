@@ -272,6 +272,14 @@ vmaMapMemory :: (
         } else {
             libvma :: #library,no_dll "./LINUX/libvma";
         }
+    case .MACOS;
+        #if DEBUG {
+            #library,system,link_always "c++";
+            #library,system,link_always "libvulkan";
+            libvma :: #library,no_dll "./MACOS/libvma_debug";
+        } else {
+            libvma :: #library,no_dll "./MACOS/libvma";
+        }
     case .WINDOWS;
         #library,system,link_always "libcpmt";
         #if DEBUG {

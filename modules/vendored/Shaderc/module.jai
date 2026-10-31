@@ -485,6 +485,8 @@ parse_version_profile :: (str: *u8, version: *s32, profile: *Profile) -> bool #f
 #if OS == {
     case .LINUX;
         libshaderc :: #library,no_static_library "./LINUX/libshaderc_shared";
+    case .MACOS;
+        libshaderc :: #library,no_static_library "./MACOS/libshaderc_shared";
     case;
         #assert false, "Unsupported OS";
 }

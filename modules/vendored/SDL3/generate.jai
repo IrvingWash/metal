@@ -40,30 +40,31 @@ build :: () -> error: string {
     absolute_sdl_path := get_absolute_path(SDL_PATH);
 
     { // Configuring cmake
-        #if OS == {
-            case .LINUX;
-                config_command := string.[
-                    "cmake",
-                    "-S", absolute_sdl_path,
-                    "-B", absolute_artefact_path,
-                    tprint("-DCMAKE_INSTALL_PREFIX=%", absolute_install_path),
-                    tprint("-DCMAKE_PREFIX_PATH=%", absolute_install_path),
-                    "-DCMAKE_BUILD_TYPE=Release",
-                    "-DSDL_STATIC=ON",
-                    "-DSDL_SHARED=OFF",
-                ];
-            case .WINDOWS;
-                config_command := string.[
-                    "cmake",
-                    "-S", absolute_sdl_path,
-                    "-B", absolute_artefact_path,
-                    tprint("-DCMAKE_INSTALL_PREFIX=%", absolute_install_path),
-                    tprint("-DCMAKE_PREFIX_PATH=%", absolute_install_path),
-                    "-DSDL_STATIC=ON",
-                    "-DSDL_SHARED=OFF",
-                    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
-                    "-DSDL_LIBC=OFF",
-                ];
+        #if OS_IS_UNIX {
+            config_command := string.[
+                "cmake",
+                "-S", absolute_sdl_path,
+                "-B", absolute_artefact_path,
+                tprint("-DCMAKE_INSTALL_PREFIX=%", absolute_install_path),
+                tprint("-DCMAKE_PREFIX_PATH=%", absolute_install_path),
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DSDL_STATIC=ON",
+                "-DSDL_SHARED=OFF",
+            ];
+        } else if OS == .WINDOWS {
+            config_command := string.[
+                "cmake",
+                "-S", absolute_sdl_path,
+                "-B", absolute_artefact_path,
+                tprint("-DCMAKE_INSTALL_PREFIX=%", absolute_install_path),
+                tprint("-DCMAKE_PREFIX_PATH=%", absolute_install_path),
+                "-DSDL_STATIC=ON",
+                "-DSDL_SHARED=OFF",
+                "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                "-DSDL_LIBC=OFF",
+            ];
+        } else {
+            #assert false, "Unsupported OS";
         }
 
         result, _, error, _ := run_command(

@@ -5469,6 +5469,8 @@ vkCmdClearColorImage :: (
 #if OS == {
     case .LINUX;
         libvulkan :: #library,system "libvulkan";
+    case .MACOS;
+        libvulkan :: #library,system "libvulkan";
     case .WINDOWS;
         #library,system,no_static_library "vulkan-1";
         libvulkan :: #library,no_dll "./WINDOWS/vulkan-1";
