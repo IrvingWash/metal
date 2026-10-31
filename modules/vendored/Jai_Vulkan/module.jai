@@ -64,8 +64,9 @@ Pfn_Destroy_Debug_Utils_Messenger_Ext :: #type (
 ) #c_call;
 
 Extension_Names :: struct {
-    DEBUG_UTILS   :: "VK_EXT_debug_utils";
-    KHR_SWAPCHAIN :: "VK_KHR_swapchain";
+    DEBUG_UTILS    :: "VK_EXT_debug_utils";
+    KHR_SWAPCHAIN  :: "VK_KHR_swapchain";
+    LAYER_SETTINGS :: "VK_EXT_layer_settings";
 }
 
 Layer_Names :: struct {
@@ -73,7 +74,11 @@ Layer_Names :: struct {
 }
 
 Layer_Setting_Names :: struct {
-    VALIDATE_SYNC :: "validate_sync";
+    VALIDATE_SYNC           :: "validate_sync";
+    GPUAV                   :: "gpuav_enable";
+    VALIDATE_BEST_PRACTICES :: "validate_best_practices";
+    PRINTF_ENABLE           :: "printf_enable";
+    PRINTF_TO_STDOUT        :: "printf_to_stdout";
 }
 
 Device_Size :: #type u64;
