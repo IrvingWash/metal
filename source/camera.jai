@@ -60,10 +60,11 @@ fly :: (camera: *Camera, dt: float) {
     }
 
     { // Zoom
+        ZOOM_STRENGTH    :: 5;
         MAX_FOV_VERTICAL :: #run deg_to_rad(70);
         MIN_FOV_VERTICAL :: #run deg_to_rad(1);
 
-        camera.fov_vertical -= deg_to_rad(state.input_state.wheel.delta.y);
+        camera.fov_vertical -= deg_to_rad(state.input_state.wheel.delta.y) * ZOOM_STRENGTH;
         camera.fov_vertical = clamp(camera.fov_vertical, MIN_FOV_VERTICAL, MAX_FOV_VERTICAL);
     }
 

@@ -19,15 +19,13 @@ Renderer :: struct {
     depth_image_info:  Image_Info;
     render_resolution: VK.Extent_2D;
 
-    light_info: Light_Info;
-
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
-    common_pipeline_info: Pipeline_Info;
-
+    light_info: Light_Info;
     materials_info: Materials_Info;
-
     geometry_info: Geometry_Info;
+
+    common_pipeline_info: Pipeline_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     should_recreate_swapchain: bool;

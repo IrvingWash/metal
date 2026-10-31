@@ -54,12 +54,6 @@ main :: () {
         array_add(*state.models, model);
     }
 
-    // add_model("assets/models/Suzanne/gltf/Suzanne.gltf");
-    // add_model("assets/models/viking_room/scene.gltf");
-    // add_model("assets/models/gundam1/gundam.glb");
-    // add_model("assets/models/gundam2/scene.gltf");
-    // add_model("assets/models/gundam3/scene.gltf");
-    // add_model("assets/models/gundam4/model.gltf");
     add_model("assets/models/snowy_mountain/snowy_mountain.glb");
     state.models[0].transform = make_scale_matrix4({ 100, 100, 100 });
     add_model("assets/models/gundam5/scene.gltf");
