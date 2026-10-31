@@ -45,6 +45,8 @@ main :: () {
     init();
     defer deinit();
 
+    Renderer.set_directional_light(*state.renderer, { color = { 0.7, 0.7, 0.7 }, direction = { 1, -1, -1 } });
+
     // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/viking_room/scene.gltf");
     // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Suzanne/gltf/Suzanne.gltf");
     // error, barn_model := asset_manager_upload_model(*state.asset_manager, "assets/models/barn/scene.gltf");
@@ -91,7 +93,9 @@ process_input :: () {
 }
 
 update :: () {
-    update_camera(*state.camera, 0.016);
+    DELTA_TIME :: 0.016;
+
+    update_camera(*state.camera, DELTA_TIME);
 }
 
 render :: () {
