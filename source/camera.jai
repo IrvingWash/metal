@@ -59,6 +59,14 @@ fly :: (camera: *Camera, dt: float) {
         camera.up    = cross(camera.right, camera.front);
     }
 
+    { // Zoom
+        MAX_FOV_VERTICAL :: #run deg_to_rad(70);
+        MIN_FOV_VERTICAL :: #run deg_to_rad(1);
+
+        camera.fov_vertical -= deg_to_rad(state.input_state.wheel.delta.y);
+        camera.fov_vertical = clamp(camera.fov_vertical, MIN_FOV_VERTICAL, MAX_FOV_VERTICAL);
+    }
+
     if state.input_state.keys[Input.Scan_Code.W] & .DOWN {
         camera.position += camera.speed * camera.front * dt;
     }

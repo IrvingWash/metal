@@ -4,6 +4,7 @@ Input_State :: struct {
     window_events_this_frame: [..]Window_Event;
     keys:                     [SCAN_CODE_COUNT]Key_State;
     cursor:                   Cursor_State;
+    wheel:                    Wheel_State;
 }
 
 Window_Event :: union kind: Window_Event_Kind {
@@ -36,6 +37,10 @@ Cursor_State :: struct {
     delta:         Vector2;
 }
 
+Wheel_State :: struct {
+    delta: Vector2;
+}
+
 init :: () -> Input_State {
     input_state: Input_State;
 
@@ -62,6 +67,8 @@ update :: (input_state: *Input_State) {
     }
 
     input_state.cursor.delta = {};
+
+    input_state.wheel.delta = {};
 
     sdl_event: SDL.Event;
     while SDL.poll_event(*sdl_event) {
@@ -97,6 +104,11 @@ update :: (input_state: *Input_State) {
                 key := *input_state.keys[sdl_event.key.scancode];
                 key.* &= ~.DOWN;
                 key.* |= .RELEASED;
+            case .MOUSE_WHEEL;
+                input_state.wheel.delta += {
+                    sdl_event.wheel.x,
+                    sdl_event.wheel.y,
+                };
         }
     }
 }

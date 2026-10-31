@@ -28,7 +28,7 @@ void main() {
 vec3 do_light_stuff(vec3 normal, vec3 albedo) {
     vec3 n_normal = normalize(normal);
 
-    vec3 light_color = vec3(0.5, 0.1, 0.7);
+    vec3 light_color = vec3(1, 1, 1);
     vec3 light_direction = normalize(vec3(0, -1, -1));
 
     float light_alignment = max(dot(n_normal, -light_direction), 0);
