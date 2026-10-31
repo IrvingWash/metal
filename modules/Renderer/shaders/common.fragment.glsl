@@ -1,6 +1,7 @@
 #version 460
 
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_scalar_block_layout  : require
 
 layout(location = 0) in Vertex_Input {
          vec4 color;
@@ -11,6 +12,11 @@ layout(location = 0) in Vertex_Input {
 } vertex_input;
 
 layout(set = 0, binding = 0) uniform sampler2D textures[];
+
+layout(scalar, set = 1, binding = 0) uniform Directional_Light {
+    vec3 direction;
+    vec3 color;
+} directional_light;
 
 layout(location = 0) out vec4 fragment_color;
 
@@ -28,11 +34,10 @@ void main() {
 vec3 do_light_stuff(vec3 normal, vec3 albedo) {
     vec3 n_normal = normalize(normal);
 
-    vec3 light_color = vec3(1, 1, 1);
-    vec3 light_direction = normalize(vec3(0, -1, -1));
+    vec3 n_light_direction = normalize(directional_light.direction);
 
-    float light_alignment = max(dot(n_normal, -light_direction), 0);
+    float light_alignment = max(dot(n_normal, -n_light_direction), 0);
 
-    return albedo * light_alignment * light_color;
+    return albedo * light_alignment * directional_light.color;
 }
 
