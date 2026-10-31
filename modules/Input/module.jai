@@ -2,7 +2,8 @@
 
 Input_State :: struct {
     window_events_this_frame: [..]Window_Event;
-    key_states_this_frame:     [SCAN_CODE_COUNT]Key_State;
+    keys:                     [SCAN_CODE_COUNT]Key_State;
+    mouse:                    Mouse_State;
 }
 
 Window_Event :: union kind: Window_Event_Kind {
@@ -23,15 +24,26 @@ Window_Event_Kind :: enum {
 
 Scan_Code :: SDL.Scancode;
 
-Key_State :: enum {
-    RELEASED;
-    JUST_PRESSED;
-    HELD;
-    JUST_RELEASED;
+// @Todo: enum_flags
+Key_State :: struct {
+    down:     bool;
+    pressed:  bool;
+    released: bool;
+}
+
+Mouse_State :: struct {
+    position:      Vector2;
+    delta:         Vector2;
 }
 
 init :: () -> Input_State {
     input_state: Input_State;
+
+    {
+        x, y: float;
+        SDL.get_mouse_state(*x, *y);
+        input_state.mouse.position = { x, y };
+    }
 
     return input_state;
 }
@@ -43,60 +55,48 @@ deinit :: (input_state: *Input_State) {
 }
 
 update :: (input_state: *Input_State) {
-    { // Window_Event
-        array_reset_keeping_memory(*input_state.window_events_this_frame);
+    array_reset_keeping_memory(*input_state.window_events_this_frame);
 
-        sdl_event: SDL.Event;
-        while SDL.poll_event(*sdl_event) {
-            if sdl_event.type == {
-                case .QUIT;
-                    event: Window_Event;
-                    event.kind = .QUIT;
-                    event.quit = true;
-                    array_add(*input_state.window_events_this_frame, event);
-                case .WINDOW_PIXEL_SIZE_CHANGED;
-                    event: Window_Event;
-                    event.kind = .WINDOW_PIXEL_SIZE_CHANGED;
-                    event.window_pixel_size_changed = {
-                        new_width = cast(u32, sdl_event.window.data1),
-                        new_height = cast(u32, sdl_event.window.data2),
-                    };
-                    array_add(*input_state.window_events_this_frame, event);
-            }
-        }
+    for *key_state: input_state.keys {
+        key_state.pressed = false;
+        key_state.released = false;
     }
 
-    { // Key_State
-        prev_frame := input_state.key_states_this_frame;
-
-        sdl_key_states: []bool;
-        {
-            count: s32;
-            pointer := SDL.get_keyboard_state(*count);
-            sdl_key_states.count = count;
-            sdl_key_states.data = pointer;
-        }
-
-        for sdl_key_pressed: sdl_key_states {
-            if sdl_key_pressed {
-                if #complete prev_frame[it_index] == {
-                    case .JUST_RELEASED; #through;
-                    case .RELEASED;
-                        input_state.key_states_this_frame[it_index] = .JUST_PRESSED;
-                    case .HELD; #through;
-                    case .JUST_PRESSED;
-                        input_state.key_states_this_frame[it_index] = .HELD;
+    sdl_event: SDL.Event;
+    while SDL.poll_event(*sdl_event) {
+        if sdl_event.type == {
+            case .QUIT;
+                event: Window_Event;
+                event.kind = .QUIT;
+                event.quit = true;
+                array_add(*input_state.window_events_this_frame, event);
+            case .WINDOW_PIXEL_SIZE_CHANGED;
+                event: Window_Event;
+                event.kind = .WINDOW_PIXEL_SIZE_CHANGED;
+                event.window_pixel_size_changed = {
+                    new_width = cast(u32, sdl_event.window.data1),
+                    new_height = cast(u32, sdl_event.window.data2),
+                };
+                array_add(*input_state.window_events_this_frame, event);
+            case .MOUSE_MOTION;
+                input_state.mouse.position = {
+                    sdl_event.motion.x,
+                    sdl_event.motion.y,
+                };
+                input_state.mouse.delta = {
+                    sdl_event.motion.xrel,
+                    sdl_event.motion.yrel,
+                };
+            case .KEY_DOWN;
+                if !sdl_event.key.repeat {
+                    key := *input_state.keys[sdl_event.key.scancode];
+                    key.down    = true;
+                    key.pressed = true;
                 }
-            } else {
-                if #complete prev_frame[it_index] == {
-                    case .JUST_RELEASED; #through;
-                    case .RELEASED;
-                        input_state.key_states_this_frame[it_index] = .RELEASED;
-                    case .HELD; #through;
-                    case .JUST_PRESSED;
-                        input_state.key_states_this_frame[it_index] = .JUST_RELEASED;
-                }
-            }
+            case .KEY_UP;
+                key := *input_state.keys[sdl_event.key.scancode];
+                key.down     = false;
+                key.released = true;
         }
     }
 }
@@ -108,4 +108,5 @@ update :: (input_state: *Input_State) {
 SCAN_CODE_COUNT :: #run enum_highest_value(Scan_Code);
 
 #import "Basic";
+#import "Math";
 SDL :: #import "vendored/SDL3";

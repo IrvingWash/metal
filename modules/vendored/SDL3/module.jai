@@ -34,7 +34,13 @@ Init_Flags :: enum_flags u64 {
 
 Pen_Input_Flags :: enum_flags u32 {}
 
-Mouse_Button_Flags :: enum_flags u32 {};
+Mouse_Button_Flags :: enum_flags u32 {
+    LEFT   :: 1 << 0;
+    MIDDLE :: 1 << 1;
+    RIGHT  :: 1 << 2;
+    X      :: 1 << 3;
+    Y      :: 1 << 4;
+}
 
 Pen_Axis :: enum u32 {
     PRESSURE            :: 0;
@@ -999,6 +1005,7 @@ destroy_window :: (window: *Window) -> void #foreign libsdl3 "SDL_DestroyWindow"
 
 poll_event :: (event: *Event) -> bool #foreign libsdl3 "SDL_PollEvent";
 get_keyboard_state :: (numkeys: *s32) -> *bool #foreign libsdl3 "SDL_GetKeyboardState";
+get_mouse_state :: (x: *float, y: *float) -> Mouse_Button_Flags #foreign libsdl3 "SDL_GetMouseState";
 
 get_window_size_in_pixels :: (window: *Window) -> width: s32, height: s32 {
     w, h: s32;
