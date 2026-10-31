@@ -3,7 +3,7 @@
 Input_State :: struct {
     window_events_this_frame: [..]Window_Event;
     keys:                     [SCAN_CODE_COUNT]Key_State;
-    mouse:                    Mouse_State;
+    cursor:                   Cursor_State;
 }
 
 Window_Event :: union kind: Window_Event_Kind {
@@ -25,13 +25,13 @@ Window_Event_Kind :: enum {
 Scan_Code :: SDL.Scancode;
 
 // @Todo: enum_flags
-Key_State :: struct {
-    down:     bool;
-    pressed:  bool;
-    released: bool;
+Key_State :: enum_flags {
+    DOWN;
+    PRESSED;
+    RELEASED;
 }
 
-Mouse_State :: struct {
+Cursor_State :: struct {
     position:      Vector2;
     delta:         Vector2;
 }
@@ -42,7 +42,7 @@ init :: () -> Input_State {
     {
         x, y: float;
         SDL.get_mouse_state(*x, *y);
-        input_state.mouse.position = { x, y };
+        input_state.cursor.position = { x, y };
     }
 
     return input_state;
@@ -58,9 +58,10 @@ update :: (input_state: *Input_State) {
     array_reset_keeping_memory(*input_state.window_events_this_frame);
 
     for *key_state: input_state.keys {
-        key_state.pressed = false;
-        key_state.released = false;
+        key_state.* &= ~(.PRESSED | .RELEASED);
     }
+
+    input_state.cursor.delta = {};
 
     sdl_event: SDL.Event;
     while SDL.poll_event(*sdl_event) {
@@ -79,26 +80,35 @@ update :: (input_state: *Input_State) {
                 };
                 array_add(*input_state.window_events_this_frame, event);
             case .MOUSE_MOTION;
-                input_state.mouse.position = {
+                input_state.cursor.position = {
                     sdl_event.motion.x,
                     sdl_event.motion.y,
                 };
-                input_state.mouse.delta = {
+                input_state.cursor.delta += {
                     sdl_event.motion.xrel,
                     sdl_event.motion.yrel,
                 };
             case .KEY_DOWN;
                 if !sdl_event.key.repeat {
                     key := *input_state.keys[sdl_event.key.scancode];
-                    key.down    = true;
-                    key.pressed = true;
+                    key.* |= .DOWN | .PRESSED;
                 }
             case .KEY_UP;
                 key := *input_state.keys[sdl_event.key.scancode];
-                key.down     = false;
-                key.released = true;
+                key.* &= ~.DOWN;
+                key.* |= .RELEASED;
         }
     }
+}
+
+set_cursor_capture :: (input_state: *Input_State, should_capture: bool) -> error: string {
+    ok := SDL.capture_mouse(should_capture);
+    if !ok {
+        error := SDL.get_error();
+        return to_string(error);
+    }
+
+    return "";
 }
 
 

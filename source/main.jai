@@ -91,7 +91,7 @@ process_input :: () {
 }
 
 update :: () {
-    update_camera(*state.camera);
+    update_camera(*state.camera, 0.016);
 }
 
 render :: () {
@@ -107,12 +107,20 @@ init :: () {
     assert(ok, "Failed to create window");
     state.window = Windowing.create_window("metal", 800, 600, .RESIZABLE | .VULKAN);
     assert(state.window != null, "Failed to create window");
+    error := Windowing.set_window_relative_cursor_mode(state.window, enabled = true);
+    if error {
+        log("Failed to enable window relative cursor mode: %", error, flags = .WARNING);
+    }
 
     state.input_state = Input.init();
+    error = Input.set_cursor_capture(*state.input_state, should_capture = true);
+    if error {
+        log("Failed to enable cursor capture: %", error, flags = .WARNING);
+    }
 
     state.asset_manager = init_asset_manager();
 
-    error:, state.renderer = Renderer.init(
+    error, state.renderer = Renderer.init(
         state.window,
         Windowing.get_vulkan_instance_extensions,
         Windowing.get_renderable_size,

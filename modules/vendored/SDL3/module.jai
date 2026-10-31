@@ -1006,6 +1006,9 @@ destroy_window :: (window: *Window) -> void #foreign libsdl3 "SDL_DestroyWindow"
 poll_event :: (event: *Event) -> bool #foreign libsdl3 "SDL_PollEvent";
 get_keyboard_state :: (numkeys: *s32) -> *bool #foreign libsdl3 "SDL_GetKeyboardState";
 get_mouse_state :: (x: *float, y: *float) -> Mouse_Button_Flags #foreign libsdl3 "SDL_GetMouseState";
+capture_mouse :: (enabled: bool) -> bool #foreign libsdl3 "SDL_CaptureMouse";
+
+set_window_relative_mouse_mode :: (window: *Window, enabled: bool) -> bool #foreign libsdl3 "SDL_SetWindowRelativeMouseMode";
 
 get_window_size_in_pixels :: (window: *Window) -> width: s32, height: s32 {
     w, h: s32;
@@ -1027,6 +1030,8 @@ create_vulkan_surface :: (
 
     return ok, surface;
 }
+
+get_error :: () -> *u8 #foreign libsdl3 "SDL_GetError";
 
 #scope_file
 
