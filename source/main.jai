@@ -23,6 +23,7 @@ Renderer      :: #import "Renderer"()(
 
 State :: struct {
     window:        *Windowing.Window;
+    input_state:   Input.Input_State;
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
     camera:        Camera;
@@ -77,10 +78,10 @@ main :: () {
 }
 
 process_input :: () {
-    events := Input.get_events(,, temp);
+    Input.update(*state.input_state);
 
-    for event: events {
-        if #complete event.kind == {
+    for event: state.input_state.window_events_this_frame {
+        if event.kind == {
             case .QUIT;
                 state.should_quit = true;
             case .WINDOW_PIXEL_SIZE_CHANGED;
@@ -107,7 +108,7 @@ init :: () {
     state.window = Windowing.create_window("metal", 800, 600, .RESIZABLE | .VULKAN);
     assert(state.window != null, "Failed to create window");
 
-    Input.init();
+    state.input_state = Input.init();
 
     state.asset_manager = init_asset_manager();
 
@@ -126,7 +127,7 @@ deinit :: () {
 
     deinit_asset_manager(*state.asset_manager);
 
-    Input.deinit();
+    Input.deinit(*state.input_state);
 
     Windowing.destroy_window(state.window);
     Windowing.deinit();

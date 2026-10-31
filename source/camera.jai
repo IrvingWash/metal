@@ -33,24 +33,22 @@ update_camera :: (camera: *Camera) {
 #scope_file
 
 fly :: (camera: *Camera) {
-    key_state := Input.get_keyboard_state();
-
-    if key_state[Input.Scan_Code.W] {
+    if state.input_state.key_states_this_frame[Input.Scan_Code.W] {
         camera.position += camera.speed * camera.front;
     }
-    if key_state[Input.Scan_Code.S] {
+    if state.input_state.key_states_this_frame[Input.Scan_Code.S] {
         camera.position -= camera.speed * camera.front;
     }
-    if key_state[Input.Scan_Code.A] {
+    if state.input_state.key_states_this_frame[Input.Scan_Code.A] {
         camera.position -= normalize(cross(camera.front, camera.up)) * camera.speed;
     }
-    if key_state[Input.Scan_Code.D] {
+    if state.input_state.key_states_this_frame[Input.Scan_Code.D] {
         camera.position += normalize(cross(camera.front, camera.up)) * camera.speed;
     }
-    if key_state[Input.Scan_Code.E] {
+    if state.input_state.key_states_this_frame[Input.Scan_Code.E] {
         camera.position += normalize(cross(camera.right, camera.front)) * camera.speed;
     }
-    if key_state[Input.Scan_Code.Q] {
+    if state.input_state.key_states_this_frame[Input.Scan_Code.Q] {
         camera.position -= normalize(cross(camera.right, camera.front)) * camera.speed;
     }
 }
