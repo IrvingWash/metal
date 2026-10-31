@@ -31,6 +31,8 @@ State :: struct {
     models: [..]Renderer.Model;
 
     should_quit: bool;
+
+    last_frame_time: float;
 }
 
 state: State;
@@ -60,9 +62,11 @@ main :: () {
     add_model("assets/models/gundam2/scene.gltf");
 
     while !state.should_quit {
+        dt := calculate_delta_time();
+
         process_input();
 
-        update();
+        update(dt);
 
         render();
 
@@ -83,10 +87,8 @@ process_input :: () {
     }
 }
 
-update :: () {
-    DELTA_TIME :: 0.016;
-
-    update_camera(*state.camera, DELTA_TIME);
+update :: (dt: float) {
+    update_camera(*state.camera, dt);
 }
 
 render :: () {
@@ -135,6 +137,16 @@ deinit :: () {
 
     Windowing.destroy_window(state.window);
     Windowing.deinit();
+}
+
+calculate_delta_time :: () -> float {
+    now := cast(float, seconds_since_init());
+
+    dt  := now - state.last_frame_time;
+
+    state.last_frame_time = now;
+
+    return dt;
 }
 
 get_compiled_shader :: (name: string) -> error: string, shader: string {
