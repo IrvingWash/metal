@@ -27,12 +27,7 @@ Renderer :: struct {
 
     common_pipeline_info: Pipeline_Info;
 
-    // @Todo: think about what we can remove from this to keep inside a "Model"
-    samplers:       [..]VK.Sampler;
-    texture_images: [..]Image_Info; // @Todo: maybe couple this with the descriptors and samplers
-    textures:       [..]Texture;
-    materials:            [..]Material;
-    material_buffer_info: Buffer_Info;
+    materials_info: Materials_Info;
 
     geometry_info: Geometry_Info;
 
@@ -259,23 +254,12 @@ init :: (
             renderer;
     }
 
-    error, renderer.material_buffer_info = create_buffer(
-        renderer.device,
-        renderer.allocator,
-        usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
-        MAX_MATERIAL_COUNT * size_of(Material),
-        memory_usage = .AUTO,
-        mappable = false,
-    );
+    error, renderer.materials_info = create_materials_info(renderer.device, renderer.allocator);
     if error {
         return
             error,
             renderer;
     }
-
-    array_reserve(*renderer.samplers, MAX_TEXTURE_COUNT);
-    array_reserve(*renderer.texture_images, MAX_TEXTURE_COUNT);
-    array_reserve(*renderer.materials, MAX_MATERIAL_COUNT);
 
     error, renderer.geometry_info = create_geometry_info(renderer.device, renderer.allocator);
     if error {
@@ -302,28 +286,7 @@ deinit :: (renderer: *Renderer) {
     array_free(renderer.models_this_frame);
 
     destroy_geometry_info(renderer.allocator, *renderer.geometry_info);
-    array_free(renderer.materials);
-    array_free(renderer.textures);
-
-    for texture_image_info: renderer.texture_images {
-        destroy_image(
-            renderer.device,
-            renderer.allocator,
-            *texture_image_info,
-        );
-    }
-    array_free(renderer.texture_images);
-
-    for sampler: renderer.samplers {
-        VK.destroy_sampler(renderer.device, sampler);
-    }
-    array_free(renderer.samplers);
-
-    VMA.destroy_buffer(
-        renderer.allocator,
-        renderer.material_buffer_info.buffer,
-        renderer.material_buffer_info.allocation,
-    );
+    destroy_materials_info(renderer.device, renderer.allocator, *renderer.materials_info);
 
     destroy_pipeline(renderer.device, *renderer.common_pipeline_info);
 
@@ -606,7 +569,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
         push_constants: Push_Constants = {
             vertex_buffer_address   = renderer.geometry_info.vertex_buffer_info.device_address,
-            material_buffer_address = renderer.material_buffer_info.device_address,
+            material_buffer_address = renderer.materials_info.material_buffer_info.device_address,
             instance_buffer_address = frame_resources.instance_buffer_info.device_address,
         };
 
@@ -764,7 +727,7 @@ set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
 }
 
 upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u32 {
-    prev_count := renderer.textures.count;
+    prev_count := renderer.materials_info.textures.count;
 
     indices: [..]u32;
 
@@ -772,14 +735,14 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u3
     image_descriptors.allocator = temp;
 
     for texture: textures {
-        array_add(*indices, cast(u32, renderer.textures.count));
-        array_add(*renderer.textures, texture);
+        array_add(*indices, cast(u32, renderer.materials_info.textures.count));
+        array_add(*renderer.materials_info.textures, texture);
 
         array_add(
             *image_descriptors,
             {
-                sampler      = renderer.samplers[texture.sampler_index],
-                image_view   = renderer.texture_images[texture.image_index].image_view,
+                sampler      = renderer.materials_info.samplers[texture.sampler_index],
+                image_view   = renderer.materials_info.images[texture.image_index].image_view,
                 image_layout = .SHADER_READ_ONLY_OPTIMAL,
             }
         );
@@ -800,7 +763,7 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u3
 }
 
 upload_materials :: (renderer: *Renderer, materials: []Material) -> error: string, material_ids: [..]u32 {
-    start := renderer.materials.count;
+    start := renderer.materials_info.materials.count;
 
     material_ids: [..]u32;
 
@@ -818,7 +781,7 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
         renderer.transient_command_pool,
         bytes_to_upload,
         dst_offset = cast(u64, start * size_of(Material)),
-        renderer.material_buffer_info.buffer,
+        renderer.materials_info.material_buffer_info.buffer,
         renderer.graphics_queue_info.queue,
     );
     if error {
@@ -826,8 +789,8 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
     }
 
     for material: materials {
-        array_add(*material_ids, cast(u32, renderer.materials.count));
-        array_add(*renderer.materials, material);
+        array_add(*material_ids, cast(u32, renderer.materials_info.materials.count));
+        array_add(*renderer.materials_info.materials, material);
     }
 
     return "", material_ids;
@@ -924,8 +887,8 @@ upload_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params
             return error, image_ids;
         }
 
-        array_add(*image_ids, xx renderer.texture_images.count);
-        array_add(*renderer.texture_images, image);
+        array_add(*image_ids, xx renderer.materials_info.images.count);
+        array_add(*renderer.materials_info.images, image);
         array_add(*staging_buffers, staging_buffer);
     }
 
@@ -952,11 +915,11 @@ upload_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error:
     }
 
     array_add(
-        *renderer.samplers,
+        *renderer.materials_info.samplers,
         sampler,
     );
 
-    return "", cast(u32, renderer.samplers.count - 1);
+    return "", cast(u32, renderer.materials_info.samplers.count - 1);
 }
 
 
@@ -984,8 +947,9 @@ FRAMES_IN_FLIGHT_COUNT :: 2;
 
 MAX_TEXTURE_COUNT        :: 256;
 MAX_MATERIAL_COUNT       :: 256;
-MAX_INDIRECT_BUFFER_SIZE :: 4096 * size_of(VK.Draw_Indexed_Indirect_Command);
-MAX_INSTANCE_BUFFER_SIZE :: 4096 * size_of(Instance);
+MAX_DRAW_COUNT           :: 4096;
+MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
+MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
@@ -1093,6 +1057,16 @@ Geometry_Info :: struct {
     INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
 }
 
+Materials_Info :: struct {
+    samplers:       [..]VK.Sampler;
+
+    images:   [..]Image_Info;
+    textures: [..]Texture;
+
+    materials:            [..]Material;
+    material_buffer_info: Buffer_Info;
+}
+
 upload_to_buffer :: (
     device:          VK.Device,
     allocator:       VMA.Allocator,
@@ -1197,6 +1171,57 @@ create_geometry_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: 
     return "", geometry_info;
 }
 
+create_materials_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Materials_Info {
+    materials_info: Materials_Info;
+
+    error:, materials_info.material_buffer_info = create_buffer(
+        device,
+        allocator,
+        usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
+        MAX_MATERIAL_COUNT * size_of(Material),
+        memory_usage = .AUTO,
+        mappable = false,
+    );
+    if error {
+        return
+            error,
+            materials_info;
+    }
+
+    array_reserve(*materials_info.samplers, MAX_TEXTURE_COUNT);
+    array_reserve(*materials_info.images, MAX_TEXTURE_COUNT);
+    array_reserve(*materials_info.materials, MAX_MATERIAL_COUNT);
+
+    return "", materials_info;
+}
+
+destroy_materials_info :: (device: VK.Device, allocator: VMA.Allocator, materials_info: *Materials_Info) {
+    array_free(materials_info.materials);
+    array_free(materials_info.textures);
+
+    for sampler: materials_info.samplers {
+        VK.destroy_sampler(device, sampler);
+    }
+    array_free(materials_info.samplers);
+
+    for image_info: materials_info.images {
+        destroy_image(
+            device,
+            allocator,
+            *image_info,
+        );
+    }
+    array_free(materials_info.images);
+
+    VMA.destroy_buffer(
+        allocator,
+        materials_info.material_buffer_info.buffer,
+        materials_info.material_buffer_info.allocation,
+    );
+
+    materials_info.* = {};
+}
+
 destroy_geometry_info :: (allocator: VMA.Allocator, geometry_info: *Geometry_Info) {
     VMA.destroy_buffer(
         allocator,
@@ -1221,6 +1246,11 @@ draw_node :: (
     parent_transform: Matrix4,
 ) {
     world_transform := parent_transform * node.local_transform;
+
+    assert(
+        draw_index.* + node.meshes.count <= MAX_DRAW_COUNT,
+        "Indirect buffer size is full",
+    );
 
     for mesh: node.meshes {
         frame_resources.indirect_draw_pointer[draw_index.*] = {
