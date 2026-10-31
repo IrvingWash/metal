@@ -72,6 +72,10 @@ Layer_Names :: struct {
     VALIDATION :: "VK_LAYER_KHRONOS_validation";
 }
 
+Layer_Setting_Names :: struct {
+    VALIDATE_SYNC :: "validate_sync";
+}
+
 Device_Size :: #type u64;
 
 Allocation_Callbacks :: struct {
@@ -1222,6 +1226,21 @@ Blit_Image_Info_2 :: struct {
     region_count:     u32;
     p_regions:        *Image_Blit_2;
     filter:           Filter;
+}
+
+Layer_Setting_EXT :: struct {
+    p_layer_name:   *u8;
+    p_setting_name: *u8;
+    type:           Layer_Setting_Type_EXT;
+    value_count:    u32;
+    p_values:       *void;
+}
+
+Layer_Settings_Create_Info_EXT :: struct {
+    s_type         := Structure_Type.LAYER_SETTINGS_CREATE_INFO_EXT;
+    p_next:        *void;
+    setting_count: u32;
+    p_settings:    *Layer_Setting_EXT;
 }
 
 Dependency_Flags :: enum_flags u32 {
@@ -4403,6 +4422,17 @@ Index_Type :: enum u32 {
     NONE_NV   :: NONE_KHR;
     UINT8_EXT :: UINT8;
     UINT8_KHR :: UINT8;
+}
+
+Layer_Setting_Type_EXT :: enum u32 {
+    BOOL32_EXT  :: 0;
+    INT32_EXT   :: 1;
+    INT64_EXT   :: 2;
+    UINT32_EXT  :: 3;
+    UINT64_EXT  :: 4;
+    FLOAT32_EXT :: 5;
+    FLOAT64_EXT :: 6;
+    STRING_EXT  :: 7;
 }
 
 make_version :: (major: u32, minor: u32, patch: u32) -> u32 {

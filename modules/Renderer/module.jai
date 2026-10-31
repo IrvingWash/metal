@@ -812,7 +812,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         semaphore_signals := VK.Semaphore_Submit_Info.[
             {
                 semaphore = renderer.swapchain_info.render_complete_semaphores[swapchain_image_index],
-                stage_mask = .ALL_TRANSFER,
+                stage_mask = .ALL_COMMANDS,
             },
             {
                 semaphore  = renderer.timeline_semaphore_info.semaphore,
@@ -2840,7 +2840,22 @@ create_instance :: (get_additional_extensions: Get_Additional_Instance_Extension
         pp_enabled_extension_names = extensions.data,
     };
     #if DEBUG {
-        instance_create_info.p_next = *DEBUG_UTILS_MESSENGER_CREATE_INFO;
+        debug_utils_messenger_create_info := DEBUG_UTILS_MESSENGER_CREATE_INFO;
+        enable := VK.TRUE;
+        settings := VK.Layer_Setting_EXT.{
+            p_layer_name   = VK.Layer_Names.VALIDATION,
+            p_setting_name = VK.Layer_Setting_Names.VALIDATE_SYNC,
+            type           = .BOOL32_EXT,
+            value_count    = 1,
+            p_values       = *enable,
+        };
+        settings_create_info := VK.Layer_Settings_Create_Info_EXT.{
+            setting_count = 1,
+            p_settings    = *settings,
+        };
+        debug_utils_messenger_create_info.p_next = *settings_create_info;
+
+        instance_create_info.p_next = *debug_utils_messenger_create_info;
     }
 
     result, instance := VK.create_instance(*instance_create_info);
