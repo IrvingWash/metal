@@ -34,14 +34,7 @@ Renderer :: struct {
     materials:            [..]Material;
     material_buffer_info: Buffer_Info;
 
-    // @Todo: If we upload assets only before rendering, do we sill need indices and vertices array?
-    index_buffer_info: Buffer_Info;
-    indices:        []u32; // @Todo: maybe couple this with the buffer and the offset
-    indices_offset: u32;
-
-    vertex_buffer_info: Buffer_Info;
-    vertices:        []Vertex; // @Todo: maybe couple this with the buffer and the offset
-    vertices_offset: u32;
+    geometry_info: Geometry_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     should_recreate_swapchain: bool;
@@ -266,33 +259,6 @@ init :: (
             renderer;
     }
 
-    error, renderer.index_buffer_info = create_buffer(
-        renderer.device,
-        renderer.allocator,
-        usage = .TRANSFER_DST | .INDEX_BUFFER,
-        INDEX_BUFFER_BYTE_SIZE,
-        memory_usage = .AUTO,
-        mappable = false,
-    );
-    if error {
-        return
-            error,
-            renderer;
-    }
-    error, renderer.vertex_buffer_info = create_buffer(
-        renderer.device,
-        renderer.allocator,
-        usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
-        VERTEX_BUFFER_BYTE_SIZE,
-        memory_usage = .AUTO,
-        mappable = false,
-    );
-    if error {
-        return
-            error,
-            renderer;
-    }
-
     error, renderer.material_buffer_info = create_buffer(
         renderer.device,
         renderer.allocator,
@@ -310,8 +276,13 @@ init :: (
     array_reserve(*renderer.samplers, MAX_TEXTURE_COUNT);
     array_reserve(*renderer.texture_images, MAX_TEXTURE_COUNT);
     array_reserve(*renderer.materials, MAX_TEXTURE_COUNT);
-    renderer.indices = NewArray(INDEX_BUFFER_BYTE_SIZE / size_of(u32), u32);
-    renderer.vertices = NewArray(VERTEX_BUFFER_BYTE_SIZE / size_of(Vertex), Vertex);
+
+    error, renderer.geometry_info = create_geometry_info(renderer.device, renderer.allocator);
+    if error {
+        return
+            error,
+            renderer;
+    }
 
     error = create_fallbacks(*renderer);
     if error {
@@ -330,8 +301,7 @@ deinit :: (renderer: *Renderer) {
 
     array_free(renderer.models_this_frame);
 
-    array_free(renderer.vertices);
-    array_free(renderer.indices);
+    destroy_geometry_info(renderer.allocator, *renderer.geometry_info);
     array_free(renderer.materials);
     array_free(renderer.textures);
 
@@ -348,17 +318,6 @@ deinit :: (renderer: *Renderer) {
         VK.destroy_sampler(renderer.device, sampler);
     }
     array_free(renderer.samplers);
-
-    VMA.destroy_buffer(
-        renderer.allocator,
-        renderer.vertex_buffer_info.buffer,
-        renderer.vertex_buffer_info.allocation,
-    );
-    VMA.destroy_buffer(
-        renderer.allocator,
-        renderer.index_buffer_info.buffer,
-        renderer.index_buffer_info.allocation,
-    );
 
     VMA.destroy_buffer(
         renderer.allocator,
@@ -646,7 +605,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         );
 
         push_constants: Push_Constants = {
-            vertex_buffer_address   = renderer.vertex_buffer_info.device_address,
+            vertex_buffer_address   = renderer.geometry_info.vertex_buffer_info.device_address,
             material_buffer_address = renderer.material_buffer_info.device_address,
             instance_buffer_address = frame_resources.instance_buffer_info.device_address,
         };
@@ -662,7 +621,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
         VK.cmd_bind_index_buffer(
             frame_resources.command_buffer,
-            renderer.index_buffer_info.buffer,
+            renderer.geometry_info.index_buffer_info.buffer,
             offset = 0,
             index_type = .UINT32,
         );
@@ -917,14 +876,8 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
 upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, start: u32, count: u32 {
     byte_size := vertices.count * size_of(Vertex);
 
-    start := renderer.vertices_offset;
+    start := renderer.geometry_info.vertices_offset;
     count := cast(u32, vertices.count);
-
-    memcpy(
-        *renderer.vertices[renderer.vertices_offset],
-        vertices.data,
-        byte_size,
-    );
 
     error, staging_buffer := create_buffer(
         renderer.device,
@@ -971,7 +924,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
     VK.cmd_copy_buffer(
         command_buffer,
         staging_buffer.buffer,
-        renderer.vertex_buffer_info.buffer,
+        renderer.geometry_info.vertex_buffer_info.buffer,
         .[buffer_copy],
     );
 
@@ -985,7 +938,7 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
         return error, start, count;
     }
 
-    renderer.vertices_offset += cast(u32, vertices.count);
+    renderer.geometry_info.vertices_offset += cast(u32, vertices.count);
 
     return "", start, count;
 }
@@ -994,14 +947,8 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
 upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start: u32, count: u32 {
     byte_size := indices.count * size_of(u32);
 
-    start := renderer.indices_offset;
+    start := renderer.geometry_info.indices_offset;
     count := cast(u32, indices.count);
-
-    memcpy(
-        *renderer.indices[renderer.indices_offset],
-        indices.data,
-        byte_size,
-    );
 
     error, staging_buffer := create_buffer(
         renderer.device,
@@ -1048,7 +995,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
     VK.cmd_copy_buffer(
         command_buffer,
         staging_buffer.buffer,
-        renderer.index_buffer_info.buffer,
+        renderer.geometry_info.index_buffer_info.buffer,
         .[buffer_copy],
     );
 
@@ -1062,7 +1009,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
         return error, start, count;
     }
 
-    renderer.indices_offset += cast(u32, indices.count);
+    renderer.geometry_info.indices_offset += cast(u32, indices.count);
 
     return "", start, count;
 }
@@ -1155,8 +1102,6 @@ DEVICE_EXTENSIONS :: *u8.[
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
 MAX_TEXTURE_COUNT        :: 256;
-VERTEX_BUFFER_BYTE_SIZE  :: 64 * 1024 * 1024;
-INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
 MAX_INDIRECT_BUFFER_SIZE :: 4096 * size_of(VK.Draw_Indexed_Indirect_Command);
 MAX_INSTANCE_BUFFER_SIZE :: 4096 * size_of(Instance);
 
@@ -1253,6 +1198,66 @@ Transforms :: struct {
     projection:      Matrix4;
     view:            Matrix4;
     view_projection: Matrix4;
+}
+
+Geometry_Info :: struct {
+    // @Todo: If we upload assets only before rendering, do we sill need indices and vertices array?
+    index_buffer_info: Buffer_Info;
+    indices_offset: u32;
+
+    vertex_buffer_info: Buffer_Info;
+    vertices_offset: u32;
+
+    VERTEX_BUFFER_BYTE_SIZE  :: 64 * 1024 * 1024;
+    INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
+}
+
+create_geometry_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Geometry_Info {
+    geometry_info: Geometry_Info;
+
+    error:, geometry_info.index_buffer_info = create_buffer(
+        device,
+        allocator,
+        usage = .TRANSFER_DST | .INDEX_BUFFER,
+        Geometry_Info.INDEX_BUFFER_BYTE_SIZE,
+        memory_usage = .AUTO,
+        mappable = false,
+    );
+    if error {
+        return
+            error,
+            geometry_info;
+    }
+    error, geometry_info.vertex_buffer_info = create_buffer(
+        device,
+        allocator,
+        usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
+        Geometry_Info.VERTEX_BUFFER_BYTE_SIZE,
+        memory_usage = .AUTO,
+        mappable = false,
+    );
+    if error {
+        return
+            error,
+            geometry_info;
+    }
+
+    return "", geometry_info;
+}
+
+destroy_geometry_info :: (allocator: VMA.Allocator, geometry_info: *Geometry_Info) {
+    VMA.destroy_buffer(
+        allocator,
+        geometry_info.index_buffer_info.buffer,
+        geometry_info.index_buffer_info.allocation,
+    );
+    VMA.destroy_buffer(
+        allocator,
+        geometry_info.vertex_buffer_info.buffer,
+        geometry_info.vertex_buffer_info.allocation,
+    );
+
+    geometry_info.* = {};
 }
 
 draw_node :: (
