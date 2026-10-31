@@ -1,0 +1,11 @@
+// raddbg 0.9.29 project file
+
+name: metal
+tab_width: 4
+target:
+{
+  executable: "bin/VERY_DEBUG/metal"
+  working_directory: "../metal"
+  enabled: 1
+  label: VERY_DEBUG
+}
