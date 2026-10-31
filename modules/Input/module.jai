@@ -12,11 +12,26 @@ Event :: union kind: Event_Kind {
 Event_Kind :: enum {
     QUIT;
     WINDOW_PIXEL_SIZE_CHANGED;
-};
+}
+
+Scan_Code :: SDL.Scancode;
 
 init :: () {}
 
 deinit :: () {}
+
+// @Todo: return an enum PRESS, DOWN, UP, etc
+get_keyboard_state :: () -> []bool {
+    count: s32;
+
+    states := SDL.get_keyboard_state(*count);
+
+    result: []bool;
+    result.count = count;
+    result.data = states;
+
+    return result;
+}
 
 get_events :: () -> []Event {
     result: [..]Event;

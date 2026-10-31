@@ -84,6 +84,8 @@ Camera :: struct {
     position: Vector3;
     target: Vector3;
 
+    up: Vector3;
+
     z_near: float;
     z_far:  float;
 
@@ -426,7 +428,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     renderer.view_transform = make_look_at_matrix(
         camera.position,
         camera.target,
-        reference_up_vector = { 0, 1, 0 },
+        camera.up,
         x_is_forward = false,
     );
     aspect_ratio := cast(float, renderer.render_resolution.width) / cast(float, renderer.render_resolution.height);

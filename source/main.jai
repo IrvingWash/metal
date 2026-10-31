@@ -16,19 +16,16 @@ Renderer      :: #import "Renderer"()(
     APPLICATION_NAME = "metal",
     DEBUG            = DEBUG,
 );
+#import "More_Math";
 
 #load "asset_manager.jai";
+#load "camera.jai";
 
 State :: struct {
     window:        *Windowing.Window;
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
-    camera:        Renderer.Camera = {
-        position     = { 0, 3, 5 },
-        z_near       = 0.1,
-        z_far        = 1000,
-        fov_vertical = 1.047198,
-    };
+    camera:        Camera;
 
     models: [..]Renderer.Model;
 
@@ -68,16 +65,12 @@ main :: () {
     assert(!error, error);
     array_add(*state.models, gundam_model5);
 
-    did: bool;
-
     while !state.should_quit {
         process_input();
 
-        Renderer.start_drawing(*state.renderer, state.camera);
-        for model: state.models {
-            Renderer.draw_model(*state.renderer, model);
-        }
-        Renderer.finish_drawing(*state.renderer);
+        update();
+
+        render();
 
         reset_temporary_storage();
     }
@@ -94,6 +87,18 @@ process_input :: () {
                 state.renderer.should_recreate_swapchain = true;
         }
     }
+}
+
+update :: () {
+    update_camera(*state.camera);
+}
+
+render :: () {
+    Renderer.start_drawing(*state.renderer, state.camera);
+    for model: state.models {
+        Renderer.draw_model(*state.renderer, model);
+    }
+    Renderer.finish_drawing(*state.renderer);
 }
 
 init :: () {
