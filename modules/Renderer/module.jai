@@ -19,8 +19,6 @@ Renderer :: struct {
     depth_image_info:  Image_Info;
     render_resolution: VK.Extent_2D;
 
-    texture_descriptor_info: Descriptor_Info;
-
     light_info: Light_Info;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
@@ -211,13 +209,6 @@ init :: (
             renderer;
     }
 
-    error, renderer.texture_descriptor_info = create_texture_descriptor_info(renderer.device);
-    if error {
-        return
-            error,
-            renderer;
-    }
-
     error, renderer.light_info = create_light_info(
         renderer.device,
         renderer.allocator,
@@ -241,19 +232,6 @@ init :: (
         }
     }
 
-    error, renderer.common_pipeline_info = create_common_pipeline(
-        renderer.device,
-        renderer.get_compiled_shader,
-        .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targets
-        renderer.depth_image_info.format,
-        .[renderer.texture_descriptor_info.layout, renderer.light_info.layout],
-    );
-    if error {
-        return
-            error,
-            renderer;
-    }
-
     error, renderer.materials_info = create_materials_info(renderer.device, renderer.allocator);
     if error {
         return
@@ -269,6 +247,22 @@ init :: (
     }
 
     error = create_fallbacks(*renderer);
+    if error {
+        return
+            error,
+            renderer;
+    }
+
+    error, renderer.common_pipeline_info = create_common_pipeline(
+        renderer.device,
+        renderer.get_compiled_shader,
+        .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targets
+        renderer.depth_image_info.format,
+        .[
+            renderer.materials_info.texture_descriptor_info.layout,
+            renderer.light_info.layout,
+        ],
+    );
     if error {
         return
             error,
@@ -299,7 +293,6 @@ deinit :: (renderer: *Renderer) {
     }
 
     destroy_light_info(renderer.device, renderer.allocator, renderer.light_info);
-    destroy_descriptor_info(renderer.device, *renderer.texture_descriptor_info);
 
     destroy_image( // Depth image
         renderer.device,
@@ -563,7 +556,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             pipeline_bind_point = .GRAPHICS,
             renderer.common_pipeline_info.layout,
             first_set = 0,
-            .[renderer.texture_descriptor_info.set, renderer.light_info.sets[frame_resources_index]],
+            .[
+                renderer.materials_info.texture_descriptor_info.set,
+                renderer.light_info.sets[frame_resources_index],
+            ],
             .[],
         );
 
@@ -754,7 +750,7 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> error: string, 
     }
 
     write_descriptor_set := VK.Write_Descriptor_Set.{
-        dst_set           = renderer.texture_descriptor_info.set,
+        dst_set           = renderer.materials_info.texture_descriptor_info.set,
         dst_binding       = 0,
         dst_array_element = cast(u32, prev_count),
         descriptor_count  = xx        image_descriptors.count,
@@ -1073,6 +1069,7 @@ Materials_Info :: struct {
     material_buffer_info: Buffer_Info;
     texture_count:  u32;
     material_count: u32;
+    texture_descriptor_info: Descriptor_Info;
 }
 
 upload_to_buffer :: (
@@ -1182,7 +1179,14 @@ create_geometry_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: 
 create_materials_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Materials_Info {
     materials_info: Materials_Info;
 
-    error:, materials_info.material_buffer_info = create_buffer(
+    error:, materials_info.texture_descriptor_info = create_texture_descriptor_info(device);
+    if error {
+        return
+            error,
+            materials_info;
+    }
+
+    error, materials_info.material_buffer_info = create_buffer(
         device,
         allocator,
         usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
@@ -1222,6 +1226,8 @@ destroy_materials_info :: (device: VK.Device, allocator: VMA.Allocator, material
         materials_info.material_buffer_info.buffer,
         materials_info.material_buffer_info.allocation,
     );
+
+    destroy_descriptor_info(device, *materials_info.texture_descriptor_info);
 
     materials_info.* = {};
 }
