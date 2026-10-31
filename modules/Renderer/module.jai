@@ -876,7 +876,7 @@ upload_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params
     }
 
     for image_params: image_params_list {
-        error, image, staging_buffer := create_texture_image(
+        error, image, staging_buffer := create_texture_image_and_record_transition(
             renderer.device,
             renderer.allocator,
             command_buffer,
@@ -1411,7 +1411,7 @@ submit_transient_command_buffer :: (
 }
 
 // Creates the image and records the transition commands, but does not submit!
-create_texture_image :: (
+create_texture_image_and_record_transition :: (
     device:         VK.Device,
     allocator:      VMA.Allocator,
     command_buffer: VK.Command_Buffer,
