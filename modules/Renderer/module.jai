@@ -263,7 +263,7 @@ init :: (
         renderer.device,
         renderer.allocator,
         usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
-        MAX_TEXTURE_COUNT * size_of(Material),
+        MAX_MATERIAL_COUNT * size_of(Material),
         memory_usage = .AUTO,
         mappable = false,
     );
@@ -275,7 +275,7 @@ init :: (
 
     array_reserve(*renderer.samplers, MAX_TEXTURE_COUNT);
     array_reserve(*renderer.texture_images, MAX_TEXTURE_COUNT);
-    array_reserve(*renderer.materials, MAX_TEXTURE_COUNT);
+    array_reserve(*renderer.materials, MAX_MATERIAL_COUNT);
 
     error, renderer.geometry_info = create_geometry_info(renderer.device, renderer.allocator);
     if error {
@@ -799,217 +799,98 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> indices: [..]u3
     return indices;
 }
 
-upload_materials :: (renderer: *Renderer, materials: []Material) -> error: string, indices: [..]u32 {
-    byte_size := materials.count * size_of(Material);
-    prev_count := renderer.materials.count;
+upload_materials :: (renderer: *Renderer, materials: []Material) -> error: string, material_ids: [..]u32 {
+    start := renderer.materials.count;
 
-    indices: [..]u32;
+    material_ids: [..]u32;
+
+    if start + materials.count > MAX_MATERIAL_COUNT {
+        return "Material buffer is full", material_ids;
+    }
+
+    bytes_to_upload: []u8;
+    bytes_to_upload.count = materials.count * size_of(Material);
+    bytes_to_upload.data  = cast(*u8, materials.data);
+
+    error := upload_to_buffer(
+        renderer.device,
+        renderer.allocator,
+        renderer.transient_command_pool,
+        bytes_to_upload,
+        dst_offset = cast(u64, start * size_of(Material)),
+        renderer.material_buffer_info.buffer,
+        renderer.graphics_queue_info.queue,
+    );
+    if error {
+        return error, material_ids;
+    }
 
     for material: materials {
-        array_add(*indices, cast(u32, renderer.materials.count));
+        array_add(*material_ids, cast(u32, renderer.materials.count));
         array_add(*renderer.materials, material);
     }
 
-    error, staging_buffer := create_buffer(
-        renderer.device,
-        renderer.allocator,
-        usage = .TRANSFER_SRC,
-        cast(u64, byte_size),
-        memory_usage = .AUTO,
-        mappable = true,
-    );
-    if error {
-        return error, indices;
-    }
-    defer VMA.destroy_buffer(
-        renderer.allocator,
-        staging_buffer.buffer,
-        staging_buffer.allocation,
-    );
-
-    error = map_copy_buffer_data(
-        renderer.allocator,
-        staging_buffer,
-        buffer_offset = 0,
-        materials.data,
-        byte_size,
-    );
-    if error {
-        return error, indices;
-    }
-
-    error =, command_buffer := start_transient_command_buffer(
-        renderer.device,
-        renderer.transient_command_pool,
-    );
-    if error {
-        return error, indices;
-    }
-
-    buffer_copy := VK.Buffer_Copy.{
-        src_offset = 0,
-        dst_offset = cast(u64, prev_count * size_of(Material)),
-        size       = cast(u64, byte_size),
-    };
-
-    VK.cmd_copy_buffer(
-        command_buffer,
-        staging_buffer.buffer,
-        renderer.material_buffer_info.buffer,
-        .[buffer_copy],
-    );
-
-    error = submit_transient_command_buffer(
-        renderer.device,
-        renderer.transient_command_pool,
-        renderer.graphics_queue_info.queue,
-        command_buffer,
-    );
-    if error {
-        return error, indices;
-    }
-
-    return "", indices;
+    return "", material_ids;
 }
 
 // @Todo: batching
 upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, start: u32, count: u32 {
-    byte_size := vertices.count * size_of(Vertex);
-
     start := renderer.geometry_info.vertices_offset;
     count := cast(u32, vertices.count);
 
-    error, staging_buffer := create_buffer(
-        renderer.device,
-        renderer.allocator,
-        usage = .TRANSFER_SRC,
-        cast(u64, byte_size),
-        memory_usage = .AUTO,
-        mappable = true,
-    );
-    if error {
-        return error, start, count;
-    }
-    defer VMA.destroy_buffer(
-        renderer.allocator,
-        staging_buffer.buffer,
-        staging_buffer.allocation,
-    );
-
-    error = map_copy_buffer_data(
-        renderer.allocator,
-        staging_buffer,
-        buffer_offset = 0,
-        vertices.data,
-        byte_size,
-    );
-    if error {
-        return error, start, count;
+    if (start + count) * size_of(Vertex) > Geometry_Info.VERTEX_BUFFER_BYTE_SIZE {
+        return "Vertex buffer is full", start, count;
     }
 
-    error =, command_buffer := start_transient_command_buffer(
+    bytes_to_upload: []u8;
+    bytes_to_upload.count = vertices.count * size_of(Vertex);
+    bytes_to_upload.data = cast(*u8, vertices.data);
+
+    error := upload_to_buffer(
         renderer.device,
+        renderer.allocator,
         renderer.transient_command_pool,
-    );
-    if error {
-        return error, start, count;
-    }
-
-    buffer_copy := VK.Buffer_Copy.{
-        src_offset = 0,
+        bytes_to_upload,
         dst_offset = start * size_of(Vertex),
-        size       = cast(u64, byte_size),
-    };
-
-    VK.cmd_copy_buffer(
-        command_buffer,
-        staging_buffer.buffer,
         renderer.geometry_info.vertex_buffer_info.buffer,
-        .[buffer_copy],
-    );
-
-    error = submit_transient_command_buffer(
-        renderer.device,
-        renderer.transient_command_pool,
         renderer.graphics_queue_info.queue,
-        command_buffer,
     );
     if error {
         return error, start, count;
     }
 
-    renderer.geometry_info.vertices_offset += cast(u32, vertices.count);
+    renderer.geometry_info.vertices_offset += count;
 
     return "", start, count;
 }
 
 // @Todo: batching
 upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start: u32, count: u32 {
-    byte_size := indices.count * size_of(u32);
-
     start := renderer.geometry_info.indices_offset;
     count := cast(u32, indices.count);
 
-    error, staging_buffer := create_buffer(
+    if (start + count) * size_of(u32) > Geometry_Info.INDEX_BUFFER_BYTE_SIZE {
+        return "Index buffer is full", start, count;
+    } 
+
+    bytes_to_upload: []u8;
+    bytes_to_upload.count = indices.count * size_of(u32);
+    bytes_to_upload.data = cast(*u8, indices.data);
+
+    error := upload_to_buffer(
         renderer.device,
         renderer.allocator,
-        usage        = .TRANSFER_SRC,
-        byte_size    = cast(u64, byte_size),
-        memory_usage = .AUTO,
-        mappable     = true,
-    );
-    if error {
-        return error, start, count;
-    }
-    defer VMA.destroy_buffer(
-        renderer.allocator,
-        staging_buffer.buffer,
-        staging_buffer.allocation,
-    );
-
-    error = map_copy_buffer_data(
-        renderer.allocator,
-        staging_buffer,
-        buffer_offset = 0,
-        indices.data,
-        byte_size,
-    );
-    if error {
-        return error, start, count;
-    }
-
-    error =, command_buffer := start_transient_command_buffer(
-        renderer.device,
         renderer.transient_command_pool,
-    );
-    if error {
-        return error, start, count;
-    }
-
-    buffer_copy := VK.Buffer_Copy.{
-        src_offset = 0,
+        bytes_to_upload,
         dst_offset = start * size_of(u32),
-        size       = cast(u64, byte_size),
-    };
-
-    VK.cmd_copy_buffer(
-        command_buffer,
-        staging_buffer.buffer,
         renderer.geometry_info.index_buffer_info.buffer,
-        .[buffer_copy],
-    );
-
-    error = submit_transient_command_buffer(
-        renderer.device,
-        renderer.transient_command_pool,
         renderer.graphics_queue_info.queue,
-        command_buffer,
     );
     if error {
         return error, start, count;
     }
 
-    renderer.geometry_info.indices_offset += cast(u32, indices.count);
+    renderer.geometry_info.indices_offset += count;
 
     return "", start, count;
 }
@@ -1102,6 +983,7 @@ DEVICE_EXTENSIONS :: *u8.[
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
 MAX_TEXTURE_COUNT        :: 256;
+MAX_MATERIAL_COUNT       :: 256;
 MAX_INDIRECT_BUFFER_SIZE :: 4096 * size_of(VK.Draw_Indexed_Indirect_Command);
 MAX_INSTANCE_BUFFER_SIZE :: 4096 * size_of(Instance);
 
@@ -1201,7 +1083,6 @@ Transforms :: struct {
 }
 
 Geometry_Info :: struct {
-    // @Todo: If we upload assets only before rendering, do we sill need indices and vertices array?
     index_buffer_info: Buffer_Info;
     indices_offset: u32;
 
@@ -1210,6 +1091,77 @@ Geometry_Info :: struct {
 
     VERTEX_BUFFER_BYTE_SIZE  :: 64 * 1024 * 1024;
     INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
+}
+
+upload_to_buffer :: (
+    device:          VK.Device,
+    allocator:       VMA.Allocator,
+    command_pool:    VK.Command_Pool,
+    bytes_to_upload: []u8,
+    dst_offset:      u64,
+    dst_buffer:      VK.Buffer,
+    queue:           VK.Queue,
+) -> error: string {
+    error, staging_buffer := create_buffer(
+        device,
+        allocator,
+        usage        = .TRANSFER_SRC,
+        byte_size    = cast(u64, bytes_to_upload.count),
+        memory_usage = .AUTO,
+        mappable     = true,
+    );
+    if error {
+        return error;
+    }
+    defer VMA.destroy_buffer(
+        allocator,
+        staging_buffer.buffer,
+        staging_buffer.allocation,
+    );
+
+    error = map_copy_buffer_data(
+        allocator,
+        staging_buffer,
+        buffer_offset = 0,
+        bytes_to_upload.data,
+        bytes_to_upload.count,
+    );
+    if error {
+        return error;
+    }
+
+    error =, command_buffer := start_transient_command_buffer(
+        device,
+        command_pool,
+    );
+    if error {
+        return error;
+    }
+
+    buffer_copy := VK.Buffer_Copy.{
+        src_offset = 0,
+        dst_offset = dst_offset,
+        size       = cast(u64, bytes_to_upload.count),
+    };
+
+    VK.cmd_copy_buffer(
+        command_buffer,
+        staging_buffer.buffer,
+        dst_buffer,
+        .[buffer_copy],
+    );
+
+    error = submit_transient_command_buffer(
+        device,
+        command_pool,
+        queue,
+        command_buffer,
+    );
+    if error {
+        return error;
+    }
+
+    return "";
 }
 
 create_geometry_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Geometry_Info {
