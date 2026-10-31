@@ -46,27 +46,24 @@ main :: () {
     defer deinit();
 
     Renderer.set_directional_light(*state.renderer, { color = { 0.7, 0.7, 0.7 }, direction = { 1, -1, -1 } });
+    state.renderer.normalized_clear_color = {0.3, 0.1, 0.1, 1};
 
-    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/viking_room/scene.gltf");
-    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Suzanne/gltf/Suzanne.gltf");
-    // error, barn_model := asset_manager_upload_model(*state.asset_manager, "assets/models/barn/scene.gltf");
-    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/glb/Fox.glb");
-    // error, model := asset_manager_upload_model(*state.asset_manager, "assets/models/Fox/gltf/Fox.gltf");
-    error, gundam_model1 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam1/gundam.glb");
-    assert(!error, error);
-    array_add(*state.models, gundam_model1);
-    error =, gundam_model2 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam2/scene.gltf");
-    assert(!error, error);
-    array_add(*state.models, gundam_model2);
-    error =, gundam_model3 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam3/scene.gltf");
-    assert(!error, error);
-    array_add(*state.models, gundam_model3);
-    error =, gundam_model4 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam4/model.gltf");
-    assert(!error, error);
-    array_add(*state.models, gundam_model4);
-    error =, gundam_model5 := asset_manager_upload_model(*state.asset_manager, "assets/models/gundam5/scene.gltf");
-    assert(!error, error);
-    array_add(*state.models, gundam_model5);
+    add_model :: (path: string) {
+        error, model := asset_manager_upload_model(*state.asset_manager, path);
+        assert(!error, error);
+        array_add(*state.models, model);
+    }
+
+    // add_model("assets/models/Suzanne/gltf/Suzanne.gltf");
+    // add_model("assets/models/viking_room/scene.gltf");
+    // add_model("assets/models/gundam1/gundam.glb");
+    // add_model("assets/models/gundam2/scene.gltf");
+    // add_model("assets/models/gundam3/scene.gltf");
+    // add_model("assets/models/gundam4/model.gltf");
+    add_model("assets/models/snowy_mountain/snowy_mountain.glb");
+    state.models[0].transform = make_scale_matrix4({ 100, 100, 100 });
+    add_model("assets/models/gundam5/scene.gltf");
+    add_model("assets/models/gundam2/scene.gltf");
 
     while !state.should_quit {
         process_input();

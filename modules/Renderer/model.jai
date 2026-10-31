@@ -1,5 +1,6 @@
 Model :: struct {
-    nodes: [..]Node;
+    nodes:     [..]Node;
+    transform: Matrix4 = Matrix4_Identity;
 }
 
 Node :: struct {

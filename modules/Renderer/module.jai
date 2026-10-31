@@ -542,7 +542,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 *draw_index,
                 model.nodes,
                 *frame_resources,
-                Matrix4_Identity,
+                model.transform,
             );
         }
     }
