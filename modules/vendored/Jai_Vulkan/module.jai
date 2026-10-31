@@ -1202,6 +1202,28 @@ Memory_Requirements_2 :: struct {
     memory_requirements: Memory_Requirements;
 }
 
+Image_Blit_2 :: struct {
+    s_type           := Structure_Type.IMAGE_BLIT_2;
+    p_next:          *void;
+    src_subresource: Image_Subresource_Layers;
+    src_offsets:     [2]Offset_3D;
+    dst_subresource: Image_Subresource_Layers;
+    dst_offsets:     [2]Offset_3D;
+}
+
+
+Blit_Image_Info_2 :: struct {
+    s_type            := Structure_Type.BLIT_IMAGE_INFO_2;
+    p_next:           *void;
+    src_image:        Image;
+    src_image_layout: Image_Layout;
+    dst_image:        Image;
+    dst_image_layout: Image_Layout;
+    region_count:     u32;
+    p_regions:        *Image_Blit_2;
+    filter:           Filter;
+}
+
 Dependency_Flags :: enum_flags u32 {
     BY_REGION                                          :: 1;
     DEVICE_GROUP                                       :: 4;
@@ -5099,6 +5121,28 @@ get_physical_device_surface_present_modes_khr :: (
     return result, present_modes;
 }
 
+cmd_clear_color_image :: inline (
+    command_buffer: Command_Buffer,
+    image:          Image,
+    image_layout:   Image_Layout,
+    p_color:        *Clear_Color_Value,
+    ranges:         []Image_Subresource_Range,
+) {
+    vkCmdClearColorImage(
+        command_buffer,
+        image,
+        image_layout,
+        p_color,
+        cast(u32, ranges.count),
+        ranges.data,
+    );
+}
+
+cmd_blit_image_2 :: (
+    command_buffer: Command_Buffer,
+    p_blit_image_info: *Blit_Image_Info_2,
+) -> void #foreign "vkCmdBlitImage2";
+
 
 
 #scope_file
@@ -5377,6 +5421,15 @@ vkGetPhysicalDeviceSurfacePresentModesKHR :: (
     p_present_mode_count: *u32,
     p_present_modes:      *Present_Mode_Khr,
 ) -> Result #foreign libvulkan;
+
+vkCmdClearColorImage :: (
+    command_buffer: Command_Buffer,
+    image:          Image,
+    image_layout:   Image_Layout,
+    p_color:        *Clear_Color_Value,
+    range_count:    u32,
+    p_ranges:       *Image_Subresource_Range,
+) -> void #foreign libvulkan;
 
 #if OS == {
     case .LINUX;

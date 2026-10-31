@@ -78,7 +78,7 @@ process_input :: () {
             case .QUIT;
                 state.should_quit = true;
             case .WINDOW_PIXEL_SIZE_CHANGED;
-                state.renderer.should_recreate_swapchain = true;
+                state.renderer.swapchain_info.should_recreate = true;
         }
     }
 }
@@ -123,6 +123,7 @@ init :: () {
         get_compiled_shader,
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
+    Renderer.set_render_resolution(*state.renderer, 1920, 1080);
 }
 
 deinit :: () {

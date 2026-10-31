@@ -13,5 +13,3 @@
     - `materials`
     - `indices`
     - `vertices`
-
-- Create render target

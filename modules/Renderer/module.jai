@@ -2,7 +2,7 @@
 
 Renderer :: struct {
     window:                 Window_Type;
-    get_window_render_size: Get_Window_Render_Size;
+    get_window_render_size: Get_Window_Render_Size; // @Todo: maybe remove this, so Renderer doesn't know
     get_compiled_shader:    Get_Compiled_Shader;
 
     instance:            VK.Instance;
@@ -28,7 +28,6 @@ Renderer :: struct {
     common_pipeline_info: Pipeline_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
-    should_recreate_swapchain: bool;
     frame_index: u64;
 
     transforms: Transforms;
@@ -82,8 +81,9 @@ Directional_Light :: struct @Gpu {
 }
 
 Color_Target :: struct {
-    image_info: Image_Info;
-    extent:     VK.Extent_2D;
+    image_info:      Image_Info;
+    extent:          VK.Extent_2D;
+    should_recreate: bool;
 }
 
 // =============================================================================
@@ -267,7 +267,7 @@ init :: (
     error, renderer.common_pipeline_info = create_common_pipeline(
         renderer.device,
         renderer.get_compiled_shader,
-        .[renderer.swapchain_info.config.image_format], // @Todo: this will change when we have render targets
+        .[renderer.color_target.image_info.format],
         renderer.depth_image_info.format,
         .[
             renderer.materials_info.texture_descriptor_info.layout,
@@ -335,11 +335,10 @@ deinit :: (renderer: *Renderer) {
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     array_reset_keeping_memory(*renderer.models_this_frame);
 
-    if renderer.should_recreate_swapchain {
+    if renderer.swapchain_info.should_recreate {
         VK.device_wait_idle(renderer.device);
 
         destroy_swapchain(renderer.device, *renderer.swapchain_info);
-        destroy_image(renderer.device, renderer.allocator, *renderer.depth_image_info);
 
         error:, renderer.swapchain_info = create_swapchain(
             renderer.physical_device,
@@ -352,20 +351,39 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
             return error;
         }
 
-        // @Todo: remove this
-        renderer.color_target.extent = renderer.swapchain_info.config.image_extent;
+        renderer.swapchain_info.should_recreate = false;
+    }
 
-        error, renderer.depth_image_info = create_depth_image(
+    if renderer.color_target.should_recreate {
+        VK.device_wait_idle(renderer.device);
+
+        error, new_color_target := create_color_target(
             renderer.device,
             renderer.allocator,
             renderer.color_target.extent.width,
             renderer.color_target.extent.height,
         );
         if error {
-            return error;
+            return tprint("Failed to create new color target: %", error);
         }
 
-        renderer.should_recreate_swapchain = false;
+        error =, new_depth_image := create_depth_image(
+            renderer.device,
+            renderer.allocator,
+            renderer.color_target.extent.width,
+            renderer.color_target.extent.height,
+        );
+        if error {
+            return tprint("Failed to create new depth image: %", error);
+        }
+
+        destroy_image(renderer.device, renderer.allocator, *renderer.color_target.image_info);
+        destroy_image(renderer.device, renderer.allocator, *renderer.depth_image_info);
+
+        renderer.color_target = new_color_target;
+        renderer.depth_image_info = new_depth_image;
+
+        renderer.color_target.should_recreate = false; // Just in case
     }
 
     renderer.transforms.view = make_look_at_matrix(
@@ -441,10 +459,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         );
         if result == {
             case .ERROR_OUT_OF_DATE_KHR;
-                renderer.should_recreate_swapchain = true;
+                renderer.swapchain_info.should_recreate = true;
                 return "";
             case .SUBOPTIMAL_KHR;
-                renderer.should_recreate_swapchain = true;
+                renderer.swapchain_info.should_recreate = true;
             case;
                 if result != .SUCCESS {
                     return "Failed to acquire next swapchain image";
@@ -494,16 +512,16 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         }
     }
 
-    { // Transition the swapchain image into a renderable layout, so we can draw on it.
+    { // Transition the color target image into a renderable layout, so we can draw on it.
         render_layout_barriers := VK.Image_Memory_Barrier_2.[
             {
-                src_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
+                src_stage_mask    = .BLIT, // For synchronization
                 src_access_mask   = 0,
                 dst_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
                 dst_access_mask   = .COLOR_ATTACHMENT_WRITE,
                 old_layout        = .UNDEFINED,
                 new_layout        = .COLOR_ATTACHMENT_OPTIMAL,
-                image             = renderer.swapchain_info.images[swapchain_image_index],
+                image             = renderer.color_target.image_info.image,
                 subresource_range = {
                     aspect_mask      = .COLOR,
                     level_count      = 1,
@@ -537,7 +555,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
     { // Specify the color and depth attachments and begin rendering
         color_rendering_attachment_info := VK.Rendering_Attachment_Info.{
-            image_view                 = renderer.swapchain_info.image_views[swapchain_image_index],
+            image_view                 = renderer.color_target.image_info.image_view,
             image_layout               = .COLOR_ATTACHMENT_OPTIMAL,
             load_op                    = .CLEAR,
             store_op                   = .STORE,
@@ -555,7 +573,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         rendering_info := VK.Rendering_Info.{
             render_area = {
                 offset = { x = 0, y = 0 },
-                extent = renderer.color_target.extent, // @Todo: I'm not sure here, but it looks like this shouldn't be tied to the swapchain image extent
+                extent = renderer.color_target.extent,
             },
             layer_count = 1,
             color_attachment_count = 1,
@@ -604,7 +622,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         viewport := VK.Viewport.{
             x      = 0,
             y      = cast(float, renderer.color_target.extent.height),
-            width  = cast(float, renderer.color_target.extent.width), // @Todo: again not sure about these not being the swapchain image's extent. Same for scissor
+            width  = cast(float, renderer.color_target.extent.width),
             height = -cast(float, renderer.color_target.extent.height),
             min_depth = 0,
             max_depth = 1,
@@ -637,28 +655,147 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
     VK.cmd_end_rendering(frame_resources.command_buffer);
 
-    { // Transition the swapchain image we used for rendering back into the presentable layout
-        present_layout_barrier := VK.Image_Memory_Barrier_2.{
-            src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
-            src_access_mask = .COLOR_ATTACHMENT_WRITE,
-            dst_stage_mask  = .NONE,
-            dst_access_mask = 0,
-            old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
-            new_layout      = .PRESENT_SRC_KHR,
-            image           = renderer.swapchain_info.images[swapchain_image_index],
+    { // Color target to src, swapchain image to dst
+        barriers := VK.Image_Memory_Barrier_2.[
+            {
+                src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
+                src_access_mask = .COLOR_ATTACHMENT_WRITE,
+                dst_stage_mask  = .BLIT,
+                dst_access_mask = .TRANSFER_READ,
+                old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
+                new_layout      = .TRANSFER_SRC_OPTIMAL,
+                image           = renderer.color_target.image_info.image,
+                subresource_range = {
+                    aspect_mask = .COLOR,
+                    level_count = 1,
+                    layer_count = 1,
+                },
+            },
+            {
+                src_stage_mask    = .ALL_TRANSFER,
+                src_access_mask   = 0,
+                dst_stage_mask    = .ALL_TRANSFER,
+                dst_access_mask   = .TRANSFER_WRITE,
+                old_layout        = .UNDEFINED,
+                new_layout        = .TRANSFER_DST_OPTIMAL,
+                image             = renderer.swapchain_info.images[swapchain_image_index],
+                subresource_range = {
+                    aspect_mask = .COLOR,
+                    level_count = 1,
+                    layer_count = 1,
+                },
+            },
+        ];
+
+        dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = barriers.count,
+            p_image_memory_barriers    = barriers.data,
+        };
+
+        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
+    }
+
+    { // Clear for letterboxing
+        clear_color: VK.Clear_Color_Value;
+        clear_color._float32 = .[0, 0, 0, 1];
+        VK.cmd_clear_color_image(
+            frame_resources.command_buffer,
+            renderer.swapchain_info.images[swapchain_image_index],
+            image_layout = .TRANSFER_DST_OPTIMAL,
+            *clear_color,
+            .[{
+                    aspect_mask = .COLOR,
+                    level_count = 1,
+                    layer_count = 1,
+            }],
+        );
+
+        barrier := VK.Image_Memory_Barrier_2.{
+            src_stage_mask    = .CLEAR,
+            src_access_mask   = .TRANSFER_WRITE,
+            dst_stage_mask    = .BLIT,
+            dst_access_mask   = .TRANSFER_WRITE,
+            old_layout        = .TRANSFER_DST_OPTIMAL,
+            new_layout        = .TRANSFER_DST_OPTIMAL,
+            image             = renderer.swapchain_info.images[swapchain_image_index],
             subresource_range = {
-                aspect_mask      = .COLOR,
-                level_count      = 1,
-                layer_count      = 1,
+                aspect_mask = .COLOR,
+                level_count = 1,
+                layer_count = 1,
+            },
+        };
+        dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers    = *barrier,
+        };
+
+        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
+    }
+
+    { // Scaling and bliting
+        // @Todo: make this nicer
+        left_x, left_y, right_x, right_y := scale_keeping_ratio_and_get_rect(
+            renderer.color_target.extent,
+            renderer.swapchain_info.config.image_extent,
+        );
+
+        region := VK.Image_Blit_2.{
+            src_subresource = {
+                aspect_mask = .COLOR,
+                layer_count = 1,
+            },
+            src_offsets     = .[
+                .{ 0, 0, 0 },
+                .{
+                    cast(s32, renderer.color_target.extent.width),
+                    cast(s32, renderer.color_target.extent.height),
+                    1,
+                },
+            ],
+            dst_subresource = {
+                aspect_mask = .COLOR,
+                layer_count = 1,
+            },
+            dst_offsets     = .[
+                .{ left_x, left_y, 0 },
+                .{ right_x, right_y, 1 },
+            ],
+        };
+
+        blit_info := VK.Blit_Image_Info_2.{
+            src_image        = renderer.color_target.image_info.image,
+            src_image_layout = .TRANSFER_SRC_OPTIMAL,
+            dst_image        = renderer.swapchain_info.images[swapchain_image_index],
+            dst_image_layout = .TRANSFER_DST_OPTIMAL,
+            region_count     = 1,
+            p_regions        = *region,
+            filter           = .LINEAR,
+        };
+        VK.cmd_blit_image_2(frame_resources.command_buffer, *blit_info);
+    }
+
+    { // Swapchain image to presentable
+        barrier := VK.Image_Memory_Barrier_2.{
+            src_stage_mask    = .BLIT,
+            src_access_mask   = .TRANSFER_WRITE,
+            dst_stage_mask    = .NONE,
+            dst_access_mask   = 0,
+            old_layout        = .TRANSFER_DST_OPTIMAL,
+            new_layout        = .PRESENT_SRC_KHR,
+            image             = renderer.swapchain_info.images[swapchain_image_index],
+            subresource_range = {
+                aspect_mask = .COLOR,
+                level_count = 1,
+                layer_count = 1,
             },
         };
 
-        present_dependency_info := VK.Dependency_Info.{
+        dependency_info := VK.Dependency_Info.{
             image_memory_barrier_count = 1,
-            p_image_memory_barriers = *present_layout_barrier,
+            p_image_memory_barriers = *barrier,
         };
 
-        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *present_dependency_info);
+        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
     }
 
     result := VK.end_command_buffer(frame_resources.command_buffer);
@@ -669,13 +806,13 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     { // Submitting
         image_acquired_wait_info := VK.Semaphore_Submit_Info.{
             semaphore  = frame_resources.image_acquired_semaphore,
-            stage_mask = .COLOR_ATTACHMENT_OUTPUT,
+            stage_mask = .ALL_TRANSFER,
         };
 
         semaphore_signals := VK.Semaphore_Submit_Info.[
             {
                 semaphore = renderer.swapchain_info.render_complete_semaphores[swapchain_image_index],
-                stage_mask = .ALL_GRAPHICS,
+                stage_mask = .ALL_TRANSFER,
             },
             {
                 semaphore  = renderer.timeline_semaphore_info.semaphore,
@@ -716,10 +853,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         result := VK.queue_present_khr(renderer.graphics_queue_info.queue, *present_info);
         if result == {
             case .ERROR_OUT_OF_DATE_KHR;
-                renderer.should_recreate_swapchain = true;
+                renderer.swapchain_info.should_recreate = true;
                 return "";
             case .SUBOPTIMAL_KHR;
-                renderer.should_recreate_swapchain = true;
+                renderer.swapchain_info.should_recreate = true;
             case;
                 if result != .SUCCESS {
                     return "Failed to present";
@@ -728,6 +865,19 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     }
 
     return "";
+}
+
+set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
+    if (
+        width == renderer.color_target.extent.width
+        && height == renderer.color_target.extent.height
+    )
+    {
+        return;
+    }
+
+    renderer.color_target.should_recreate = true;
+    renderer.color_target.extent = { width, height };
 }
 
 set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
@@ -847,7 +997,7 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
 
     if (start + count) * size_of(u32) > Geometry_Info.INDEX_BUFFER_BYTE_SIZE {
         return "Index buffer is full", start, count;
-    } 
+    }
 
     bytes_to_upload: []u8;
     bytes_to_upload.count = indices.count * size_of(u32);
@@ -878,7 +1028,7 @@ upload_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params
     error, command_buffer := start_transient_command_buffer(
         renderer.device,
         renderer.transient_command_pool,
-    ); 
+    );
     if error {
         return error, image_ids;
     }
@@ -1002,8 +1152,9 @@ Swapchain_Info :: struct {
     config:                     VK.Swapchain_Create_Info_Khr;
 
     images:                     [..]VK.Image;
-    image_views:                [..]VK.Image_View;
     render_complete_semaphores: [..]VK.Semaphore;
+
+    should_recreate: bool;
 }
 
 Image_Info :: struct {
@@ -2357,7 +2508,7 @@ create_swapchain :: (
             image_color_space  = DEFAULT_SURFACE_FORMAT.color_space,
             image_extent       = image_extent,
             image_array_layers = 1,
-            image_usage        = .COLOR_ATTACHMENT,
+            image_usage        = .TRANSFER_DST,
             image_sharing_mode = .EXCLUSIVE,
             pre_transform      = surface_capabilities.current_transform,
             composite_alpha    = .OPAQUE_KHR,
@@ -2380,24 +2531,6 @@ create_swapchain :: (
                 tprint("Failed to get swapchain images: %", result),
                 swapchain_info;
         }
-    }
-
-    // Image views
-    for image: swapchain_info.images {
-        error, image_view := create_image_view(
-            device,
-            image,
-            swapchain_info.config.image_format,
-            .COLOR,
-        );
-        if error {
-            return error, swapchain_info;
-        }
-
-        array_add(
-            *swapchain_info.image_views,
-            image_view,
-        );
     }
 
     // Render complete semaphores
@@ -2425,11 +2558,6 @@ destroy_swapchain :: (device: VK.Device, swapchain_info: *Swapchain_Info) {
         VK.destroy_semaphore(device, semaphore);
     }
     array_free(swapchain_info.render_complete_semaphores);
-
-    for image_view: swapchain_info.image_views {
-        VK.destroy_image_view(device, image_view);
-    }
-    array_free(swapchain_info.image_views);
 
     array_free(swapchain_info.images);
 
@@ -2905,6 +3033,21 @@ create_shader_module :: (
 
         return VK.FALSE;
     }
+}
+
+scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> left_x: s32, left_y: s32, right_x: s32, right_y: s32 {
+    scale := min(
+        cast(float, dst.width)  / cast(float, src.width),
+        cast(float, dst.height) / cast(float, src.height),
+    );
+
+    width  := cast(s32, cast(float, src.width)  * scale);
+    height := cast(s32, cast(float, src.height) * scale);
+
+    left_x := (cast(s32, dst.width)  - width)  / 2;
+    left_y := (cast(s32, dst.height) - height) / 2;
+
+    return left_x, left_y, left_x + width, left_y + height;
 }
 
 #import "Basic";
