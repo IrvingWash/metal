@@ -42,9 +42,9 @@ fly :: (camera: *Camera, dt: float) {
         SENSITIVITY :: 0.01;
         WORLD_UP    :: Vector3.{ 0, 1, 0 };
 
-        camera.yaw   += state.input_state.cursor.delta.x * SENSITIVITY;
+        camera.yaw   += state.input_state.cursor.delta.x * SENSITIVITY * camera.fov_vertical;
         camera.pitch = clamp(
-            (camera.pitch + state.input_state.cursor.delta.y * SENSITIVITY),
+            (camera.pitch + state.input_state.cursor.delta.y * SENSITIVITY * camera.fov_vertical),
             -MAX_PITCH,
             MAX_PITCH,
         );

@@ -45,8 +45,8 @@ main :: () {
     init();
     defer deinit();
 
-    Renderer.set_directional_light(*state.renderer, { color = { 0.7, 0.7, 0.7 }, direction = { 1, -1, -1 } });
-    state.renderer.normalized_clear_color = {0.3, 0.1, 0.1, 1};
+    Renderer.set_directional_light(*state.renderer, { color = {0.9, 0.7, 0.7}, direction = { 1, -1, -1 } });
+    state.renderer.normalized_clear_color = { 0.3, 0.1, 0.1, 1 };
 
     add_model :: (path: string) {
         error, model := asset_manager_upload_model(*state.asset_manager, path);
