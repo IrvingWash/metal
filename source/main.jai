@@ -71,6 +71,7 @@ main :: () {
     state.models[0].transform = make_scale_matrix4({ 100, 100, 100 });
     add_model("assets/models/gundam5/scene.gltf");
     add_model("assets/models/gundam2/scene.gltf");
+    add_model("assets/models/damaged_helmet/scene.glb");
 
     while !state.should_quit {
         dt := calculate_delta_time();

@@ -683,7 +683,7 @@ parse_gltf_indices :: (
     return result;
 }
 
-convert_gltf_wrap_mode :: (gltf_wrap_mode: Gltf.Sampler.Wrap_Mode) -> Wrap_Mode {
+convert_gltf_wrap_mode :: (gltf_wrap_mode: Gltf.Sampler.Wrap_Mode) -> Wrap_Mode_Dto {
     if #complete gltf_wrap_mode == {
         case .CLAMP_TO_EDGE;
             return .CLAMP_TO_EDGE;
@@ -694,7 +694,7 @@ convert_gltf_wrap_mode :: (gltf_wrap_mode: Gltf.Sampler.Wrap_Mode) -> Wrap_Mode 
     }
 }
 
-convert_gltf_mag_filter :: (gltf_mag_filter: Gltf.Sampler.Mag_Filter) -> Mag_Filter {
+convert_gltf_mag_filter :: (gltf_mag_filter: Gltf.Sampler.Mag_Filter) -> Mag_Filter_Dto {
     if #complete gltf_mag_filter == {
         case .UNDEFINED;
             return .UNDEFINED;
@@ -705,7 +705,7 @@ convert_gltf_mag_filter :: (gltf_mag_filter: Gltf.Sampler.Mag_Filter) -> Mag_Fil
     }
 }
 
-convert_gltf_min_filter :: (gltf_min_filter: Gltf.Sampler.Min_Filter) -> Min_Filter {
+convert_gltf_min_filter :: (gltf_min_filter: Gltf.Sampler.Min_Filter) -> Min_Filter_Dto {
     if #complete gltf_min_filter == {
         case .UNDEFINED;
             return .UNDEFINED;
@@ -724,7 +724,7 @@ convert_gltf_min_filter :: (gltf_min_filter: Gltf.Sampler.Min_Filter) -> Min_Fil
     }
 }
 
-convert_gltf_topology_mode :: (gltf_topology: Gltf.Mesh.Primitive.Topology_Mode) -> Topology_Mode {
+convert_gltf_topology_mode :: (gltf_topology: Gltf.Mesh.Primitive.Topology_Mode) -> Topology_Mode_Dto {
     if #complete gltf_topology == {
         case .POINTS;
             return .POINTS;
@@ -743,7 +743,7 @@ convert_gltf_topology_mode :: (gltf_topology: Gltf.Mesh.Primitive.Topology_Mode)
     }
 }
 
-convert_gltf_alpha_mode :: (gltf_alpha_mode: Gltf.Material.Alpha_Mode) -> Alpha_Mode {
+convert_gltf_alpha_mode :: (gltf_alpha_mode: Gltf.Material.Alpha_Mode) -> Alpha_Mode_Dto {
     if #complete gltf_alpha_mode == {
         case .OPAQUE;
             return .OPAQUE;

@@ -74,7 +74,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
         material.roughness_factor  = pbr.roughness_factor;
         material.emissive_factor   = material_dto.emissive_factor;
         material.alpha_cutoff      = material_dto.alpha_cutoff;
-        material.alpha_mode        = xx material_dto.alpha_mode;
+        material.alpha_mode        = convert_alpha_mode_dto(material_dto.alpha_mode);
         material.base_color_texture_index         = Renderer.FALLBACK_COLOR_TEXTURE_ID;
         material.normal_texture_index             = Renderer.FALLBACK_NORMAL_TEXTURE_ID;
         material.metallic_roughness_texture_index = Renderer.FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID;
@@ -217,6 +217,17 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
 
 
 #scope_file
+
+convert_alpha_mode_dto :: (dto_alpha_mode: Alpha_Mode_Dto) -> Renderer.Alpha_Mode {
+    if #complete dto_alpha_mode == {
+        case .OPAQUE;
+            return .OPAQUE;
+        case .MASK;
+            return .MASK;
+        case .BLEND;
+            return .BLEND;
+    }
+}
 
 create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, sampler_id: u32 {
     params: Renderer.Create_Sampler_Params;

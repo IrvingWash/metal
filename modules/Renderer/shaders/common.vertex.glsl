@@ -15,6 +15,7 @@ struct Vertex {
     vec4 color;
     vec3 normal;
     vec2 uv;
+    vec4 tangent;
 };
 
 layout(buffer_reference, scalar) readonly buffer Vertex_Buffer {
