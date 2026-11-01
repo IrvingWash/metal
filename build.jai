@@ -140,6 +140,9 @@ build :: (
         build_options.intermediate_path      = output_path;
         build_options.output_path            = output_path;
         build_options.dead_code_elimination  = .ALL;
+        #if OS == .MACOS { // Seems lld is broken in this compiler version, so doing this manually
+            build_options.additional_linker_arguments = string.["-rpath", "~/VulkanSDK/1.4.363.0/macOS/lib"];
+        };
         set_optimization(
             *build_options,
             config.optimization_type,
