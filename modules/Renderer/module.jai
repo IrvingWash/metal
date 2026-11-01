@@ -87,7 +87,7 @@ Camera :: struct {
 }
 
 Directional_Light :: struct @Gpu {
-    direction: Vector3 = { 0, -1, 0 };
+    direction: Vector3 = { 0, -1, -1 };
     color:     Vector3 = { 1, 1, 1 };
 }
 

@@ -52,7 +52,7 @@ Vertex_Dto :: struct {
     normal:   Vector3;
     uv0:      Vector2;
     uv1:      Vector2;
-    tangent:  Vector4 = { 0, 0, 0, 1 };
+    tangent:  Vector4 = { 1, 0, 0, 1 };
     color:    Vector4 = { 1, 1, 1, 1 };
 }
 

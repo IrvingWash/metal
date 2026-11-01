@@ -58,19 +58,12 @@ main :: () {
         cast(u32, display_info.height * display_info.dpi),
     );
 
-    Renderer.set_directional_light(*state.renderer, { color = {0.9, 0.7, 0.7}, direction = { 1, -1, -1 } });
-    state.renderer.normalized_clear_color = { 0.3, 0.1, 0.1, 1 };
-
     add_model :: (path: string) {
         error, model := asset_manager_upload_model(*state.asset_manager, path);
         assert(!error, error);
         array_add(*state.models, model);
     }
 
-    add_model("assets/models/snowy_mountain/snowy_mountain.glb");
-    state.models[0].transform = make_scale_matrix4({ 100, 100, 100 });
-    add_model("assets/models/gundam5/scene.gltf");
-    add_model("assets/models/gundam2/scene.gltf");
     add_model("assets/models/damaged_helmet/scene.glb");
 
     while !state.should_quit {

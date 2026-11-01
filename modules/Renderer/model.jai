@@ -51,7 +51,7 @@ Vertex :: struct @Gpu {
     color:    Vector4 = { 1, 1, 1, 1 };
     normal:   Vector3;
     uv:       Vector2;
-    tangent:  Vector4 = { 0, 0, 0, 1 };
+    tangent:  Vector4 = { 1, 0, 0, 1 };
 }
 
 Instance :: struct @Gpu {

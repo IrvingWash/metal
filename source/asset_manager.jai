@@ -83,20 +83,45 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
 
         error: string;
         if pbr.base_color_texture.kind == .SOME {
+            assert(
+                pbr.base_color_texture.some.tex_coord == 0,
+                "Base color texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
             error, material.base_color_texture_index =
-                get_or_upload_texture(*texture_cache, *model_dto, pbr.base_color_texture.some, .SRGB);
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    pbr.base_color_texture.some,
+                    .SRGB,
+                );
             if error {
                 return error, renderer_model;
             }
         }
         if pbr.metallic_roughness_texture.kind == .SOME {
+            assert(
+                pbr.metallic_roughness_texture.some.tex_coord == 0,
+                "Metallic roughness texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
             error, material.metallic_roughness_texture_index =
-                get_or_upload_texture(*texture_cache, *model_dto, pbr.metallic_roughness_texture.some, .UNORM);
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    pbr.metallic_roughness_texture.some,
+                    .UNORM,
+                );
             if error {
                 return error, renderer_model;
             }
         }
         if material_dto.normal_texture.kind == .SOME {
+            assert(
+                material_dto.normal_texture.some.texture.tex_coord == 0,
+                "Normal texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
             normal_texture_dto := material_dto.normal_texture.some;
             material.normal_scale = normal_texture_dto.scale;
             error, material.normal_texture_index = get_or_upload_texture(
@@ -110,17 +135,37 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             }
         }
         if material_dto.occlusion_texture.kind == .SOME {
+            assert(
+                material_dto.occlusion_texture.some.texture.tex_coord == 0,
+                "Occlusion texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
             occlusion_texture_dto := material_dto.occlusion_texture.some;
             material.occlusion_strength = occlusion_texture_dto.strength;
             error, material.occlusion_texture_index =
-                get_or_upload_texture(*texture_cache, *model_dto, occlusion_texture_dto.texture, .UNORM);
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    occlusion_texture_dto.texture,
+                    .UNORM,
+                );
             if error {
                 return error, renderer_model;
             }
         }
         if material_dto.emissive_texture.kind == .SOME {
+            assert(
+                material_dto.emissive_texture.some.tex_coord == 0,
+                "Emissive texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
             error, material.emissive_texture_index =
-                get_or_upload_texture(*texture_cache, *model_dto, material_dto.emissive_texture.some, .SRGB);
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    material_dto.emissive_texture.some,
+                    .SRGB,
+                );
             if error {
                 return error, renderer_model;
             }
@@ -170,6 +215,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                     color    = vertex_dto.color,
                     normal   = vertex_dto.normal,
                     uv       = vertex_dto.uv0,
+                    tangent  = vertex_dto.tangent,
                 };
             }
 
