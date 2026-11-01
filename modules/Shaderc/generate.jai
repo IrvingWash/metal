@@ -4,7 +4,7 @@
 #import "Basic";
 #import "File";
 
-SHADERC_PATH            :: #run path_join(#filepath, "shaderc",, temp);
+SHADERC_PATH :: #run path_join(#filepath, "..", "vendored", "shaderc",, temp);
 
 BINARY_OUTPUT_PATH   :: #run path_join(#filepath, tprint("%", OS),, temp);
 CMAKE_ARTEFACTS_PATH :: #run path_join(#filepath, "cmake_build",, temp);

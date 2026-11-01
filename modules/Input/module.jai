@@ -131,4 +131,4 @@ SCAN_CODE_COUNT :: #run enum_highest_value(Scan_Code);
 
 #import "Basic";
 #import "Math";
-SDL :: #import "vendored/SDL3";
+SDL :: #import "SDL3";

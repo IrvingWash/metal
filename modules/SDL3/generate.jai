@@ -4,8 +4,9 @@
 #import "Compiler";
 #import "Process";
 #import "File";
+#import "String";
 
-SDL_PATH :: "./SDL";
+SDL_PATH :: #run path_join(#filepath, "..", "vendored", "SDL");
 
 #run {
     set_build_options_dc({

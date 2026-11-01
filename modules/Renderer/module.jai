@@ -3107,8 +3107,8 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
 
 #import "Basic";
 #import "Math";
-VK  :: #import "vendored/Jai_Vulkan";
-VMA :: #import "vendored/Vulkan_Memory_Allocator"(DEBUG = DEBUG);
+VK  :: #import "Jai_Vulkan";
+VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
 #if DEBUG {
     #import "Print_Vars";

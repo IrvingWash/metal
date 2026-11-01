@@ -291,4 +291,4 @@ vmaMapMemory :: (
         assert(false, "Unsupported OS: %", OS);
 }
 
-#import "vendored/Jai_Vulkan";
+#import "Jai_Vulkan";
