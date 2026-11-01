@@ -1121,6 +1121,9 @@ MAX_DRAW_COUNT           :: 4096;
 MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
 MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
+
+HAVE_MORE_DEBUG :: DEBUG && false;
+
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
         VK.Extension_Names.DEBUG_UTILS,
@@ -1760,9 +1763,6 @@ map_copy_buffer_data :: (
     }
 
     memcpy(buffer_pointer + buffer_offset, data, byte_size);
-
-    VMA.unmap_memory(allocator, buffer.allocation);
-
     result = VMA.flush_allocation(
         allocator,
         buffer.allocation,
@@ -1772,6 +1772,7 @@ map_copy_buffer_data :: (
     if result != .SUCCESS {
         return tprint("Failed to flush allocation: %", result);
     }
+    VMA.unmap_memory(allocator, buffer.allocation);
 
     return "";
 }
@@ -2847,48 +2848,50 @@ create_instance :: (get_additional_extensions: Get_Additional_Instance_Extension
     #if DEBUG {
         debug_utils_messenger_create_info := DEBUG_UTILS_MESSENGER_CREATE_INFO;
         enable := VK.TRUE;
-        settings := VK.Layer_Setting_EXT.[
-            {
-                p_layer_name   = VK.Layer_Names.VALIDATION,
-                p_setting_name = VK.Layer_Setting_Names.VALIDATE_SYNC,
-                type           = .BOOL32_EXT,
-                value_count    = 1,
-                p_values       = *enable,
-            },
-            {
-                p_layer_name   = VK.Layer_Names.VALIDATION,
-                p_setting_name = VK.Layer_Setting_Names.GPUAV,
-                type           = .BOOL32_EXT,
-                value_count    = 1,
-                p_values       = *enable,
-            },
-            {
-                p_layer_name   = VK.Layer_Names.VALIDATION,
-                p_setting_name = VK.Layer_Setting_Names.VALIDATE_BEST_PRACTICES,
-                type           = .BOOL32_EXT,
-                value_count    = 1,
-                p_values       = *enable,
-            },
-            {
-                p_layer_name   = VK.Layer_Names.VALIDATION,
-                p_setting_name = VK.Layer_Setting_Names.PRINTF_ENABLE,
-                type           = .BOOL32_EXT,
-                value_count    = 1,
-                p_values       = *enable,
-            },
-            {
-                p_layer_name   = VK.Layer_Names.VALIDATION,
-                p_setting_name = VK.Layer_Setting_Names.PRINTF_TO_STDOUT,
-                type           = .BOOL32_EXT,
-                value_count    = 1,
-                p_values       = *enable,
-            },
-        ];
-        settings_create_info := VK.Layer_Settings_Create_Info_EXT.{
-            setting_count = settings.count,
-            p_settings    = settings.data,
-        };
-        debug_utils_messenger_create_info.p_next = *settings_create_info;
+        #if HAVE_MORE_DEBUG {
+            settings := VK.Layer_Setting_EXT.[
+                {
+                    p_layer_name   = VK.Layer_Names.VALIDATION,
+                    p_setting_name = VK.Layer_Setting_Names.VALIDATE_SYNC,
+                    type           = .BOOL32_EXT,
+                    value_count    = 1,
+                    p_values       = *enable,
+                },
+                {
+                    p_layer_name   = VK.Layer_Names.VALIDATION,
+                    p_setting_name = VK.Layer_Setting_Names.GPUAV,
+                    type           = .BOOL32_EXT,
+                    value_count    = 1,
+                    p_values       = *enable,
+                },
+                {
+                    p_layer_name   = VK.Layer_Names.VALIDATION,
+                    p_setting_name = VK.Layer_Setting_Names.VALIDATE_BEST_PRACTICES,
+                    type           = .BOOL32_EXT,
+                    value_count    = 1,
+                    p_values       = *enable,
+                },
+                {
+                    p_layer_name   = VK.Layer_Names.VALIDATION,
+                    p_setting_name = VK.Layer_Setting_Names.PRINTF_ENABLE,
+                    type           = .BOOL32_EXT,
+                    value_count    = 1,
+                    p_values       = *enable,
+                },
+                {
+                    p_layer_name   = VK.Layer_Names.VALIDATION,
+                    p_setting_name = VK.Layer_Setting_Names.PRINTF_TO_STDOUT,
+                    type           = .BOOL32_EXT,
+                    value_count    = 1,
+                    p_values       = *enable,
+                },
+            ];
+            settings_create_info := VK.Layer_Settings_Create_Info_EXT.{
+                setting_count = settings.count,
+                p_settings    = settings.data,
+            };
+            debug_utils_messenger_create_info.p_next = *settings_create_info;
+        }
 
         instance_create_info.p_next = *debug_utils_messenger_create_info;
     }

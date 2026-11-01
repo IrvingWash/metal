@@ -286,5 +286,5 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
 #import "Option";
 #import "Hash_Table";
 
-#load "asset_manager/model_dto.jai";
-#load "asset_manager/gltf_converter.jai";
+#load "convertation/model_dto.jai";
+#load "convertation/gltf_converter.jai";
