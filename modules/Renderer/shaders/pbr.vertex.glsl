@@ -15,19 +15,11 @@ struct Vertex {
     vec4 color;
     vec3 normal;
     vec2 uv;
+    vec4 tangent;
 };
 
 layout(buffer_reference, scalar) readonly buffer Vertex_Buffer {
     Vertex vertices[];
-};
-
-struct Material {
-    vec4 base_color_factor;
-    uint base_color_texture_index;
-};
-
-layout(buffer_reference, scalar) readonly buffer Material_Buffer {
-    Material materials[];
 };
 
 struct Instance {
@@ -42,26 +34,29 @@ layout(buffer_reference, scalar) readonly buffer Instance_Buffer {
 
 layout(location = 0) out Vertex_Output {
          vec4 color;
-         vec3 normal;
+         vec3 world_space_normal;
+         vec4 world_space_tangent;
          vec2 uv;
-    flat uint base_color_texture_index;
-    flat vec4 material_base_color_factor;
+         vec3 fragment_world_position;
+    flat uint material_index;
 } vertex_output;
 
 void main() {
     Vertex_Buffer   vertex_buffer   = Vertex_Buffer(constants.vertex_buffer_address);
     Instance_Buffer instance_buffer = Instance_Buffer(constants.instance_buffer_address);
-    Material_Buffer material_buffer = Material_Buffer(constants.material_buffer_address);
 
     Vertex   vertex   = vertex_buffer.vertices[gl_VertexIndex];
     Instance instance = instance_buffer.instances[gl_InstanceIndex];
-    Material material = material_buffer.materials[instance.material_index];
 
     gl_Position = instance.wvp_transform * vec4(vertex.position, 1);
 
     vertex_output.color                      = vertex.color;
     vertex_output.uv                         = vertex.uv;
-    vertex_output.base_color_texture_index   = material.base_color_texture_index;
-    vertex_output.material_base_color_factor = material.base_color_factor;
-    vertex_output.normal                     = mat3x3(transpose(inverse(instance.world_transform))) * vertex.normal;
+    vertex_output.material_index             = instance.material_index;
+    vertex_output.fragment_world_position    = (instance.world_transform * vec4(vertex.position, 1)).xyz;
+    vertex_output.world_space_normal         = mat3x3(transpose(inverse(instance.world_transform))) * vertex.normal; // @Todo: upload the matrix from CPU
+    vertex_output.world_space_tangent        = vec4(
+        mat3(instance.world_transform) * vertex.tangent.xyz,
+        vertex.tangent.w
+    );
 }

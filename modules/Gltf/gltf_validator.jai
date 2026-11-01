@@ -30,6 +30,14 @@ validate_gltf :: (gltf: Gltf, gltf_identifier: string) -> error: string {
                 }
             }
 
+            if primitive.attributes._normal == SENTINEL {
+                log("GLTF Validator: % doesn't have normals", gltf_identifier, flags = .WARNING); // @Todo: make this better. Return warnings?
+            }
+
+            if primitive.attributes._tangent == SENTINEL {
+                log("GLTF Validator: % doesn't have tangents", gltf_identifier, flags = .WARNING);
+            }
+
             if primitive._indices != SENTINEL {
                 indices_accessor := gltf.accessors[primitive._indices];
 

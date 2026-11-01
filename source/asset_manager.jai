@@ -64,68 +64,117 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
 
     uploaded_renderer_material_ids: [..]u32;
     uploaded_renderer_material_ids.allocator = temp;
-    renderer_base_color_texture_id_by_image_dto_index: Table(u32, u32);
-    renderer_base_color_texture_id_by_image_dto_index.allocator = temp;
+    texture_cache: Texture_Cache;
     for material_dto: model_dto.materials {
-        renderer_base_color_texture_id: u32;
-        if material_dto.pbr_metallic_roughness.base_color_texture.kind == .SOME {
-            base_color_texture_dto := material_dto.pbr_metallic_roughness.base_color_texture.some;
+        pbr := material_dto.pbr_metallic_roughness;
 
-            found, renderer_texture_id := table_find(
-                *renderer_base_color_texture_id_by_image_dto_index,
-                base_color_texture_dto.image_index,
+        material: Renderer.Material;
+        material.base_color_factor = pbr.base_color_factor;
+        material.metallic_factor   = pbr.metallic_factor;
+        material.roughness_factor  = pbr.roughness_factor;
+        material.emissive_factor   = material_dto.emissive_factor;
+        material.alpha_cutoff      = material_dto.alpha_cutoff;
+        material.alpha_mode        = convert_alpha_mode_dto(material_dto.alpha_mode);
+        material.base_color_texture_index         = Renderer.FALLBACK_COLOR_TEXTURE_ID;
+        material.normal_texture_index             = Renderer.FALLBACK_NORMAL_TEXTURE_ID;
+        material.metallic_roughness_texture_index = Renderer.FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID;
+        material.occlusion_texture_index          = Renderer.FALLBACK_OCCLUSION_TEXTURE_ID;
+        material.emissive_texture_index           = Renderer.FALLBACK_EMISSIVE_TEXTURE_ID;
+
+        error: string;
+        if pbr.base_color_texture.kind == .SOME {
+            assert(
+                pbr.base_color_texture.some.tex_coord == 0,
+                "Base color texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
             );
-            if !found {
-                error, sampler_id := create_sampler_from_texture_dto(base_color_texture_dto);
-                if error {
-                    return error, renderer_model;
-                }
-
-                image_dto := model_dto.images[base_color_texture_dto.image_index];
-
-                error =, image_ids := Renderer.upload_texture_images(
-                    *state.renderer,
-                    .[{
-                        width  = image_dto.width,
-                        height = image_dto.height,
-                        bytes  = image_dto.bytes,
-                    }],,
-                    temp
+            error, material.base_color_texture_index =
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    pbr.base_color_texture.some,
+                    .SRGB,
                 );
-                if error {
-                    return error, renderer_model;
-                }
-
-                error =, renderer_base_color_texture_ids := Renderer.upload_textures(
-                    *state.renderer,
-                    .[{
-                        image_index   = image_ids[0],
-                        sampler_index = sampler_id,
-                    }],,
-                    temp
+            if error {
+                return error, renderer_model;
+            }
+        }
+        if pbr.metallic_roughness_texture.kind == .SOME {
+            assert(
+                pbr.metallic_roughness_texture.some.tex_coord == 0,
+                "Metallic roughness texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
+            error, material.metallic_roughness_texture_index =
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    pbr.metallic_roughness_texture.some,
+                    .UNORM,
                 );
-                if error {
-                    return error, renderer_model;
-                }
-                renderer_base_color_texture_id = renderer_base_color_texture_ids[0];
-
-                table_set(
-                    *renderer_base_color_texture_id_by_image_dto_index,
-                    base_color_texture_dto.image_index,
-                    renderer_base_color_texture_id,
+            if error {
+                return error, renderer_model;
+            }
+        }
+        if material_dto.normal_texture.kind == .SOME {
+            assert(
+                material_dto.normal_texture.some.texture.tex_coord == 0,
+                "Normal texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
+            normal_texture_dto := material_dto.normal_texture.some;
+            material.normal_scale = normal_texture_dto.scale;
+            error, material.normal_texture_index = get_or_upload_texture(
+                *texture_cache,
+                *model_dto,
+                normal_texture_dto.texture,
+                .UNORM,
+            );
+            if error {
+                return error, renderer_model;
+            }
+        }
+        if material_dto.occlusion_texture.kind == .SOME {
+            assert(
+                material_dto.occlusion_texture.some.texture.tex_coord == 0,
+                "Occlusion texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
+            occlusion_texture_dto := material_dto.occlusion_texture.some;
+            material.occlusion_strength = occlusion_texture_dto.strength;
+            error, material.occlusion_texture_index =
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    occlusion_texture_dto.texture,
+                    .UNORM,
                 );
-            } else {
-                renderer_base_color_texture_id = renderer_texture_id;
+            if error {
+                return error, renderer_model;
+            }
+        }
+        if material_dto.emissive_texture.kind == .SOME {
+            assert(
+                material_dto.emissive_texture.some.tex_coord == 0,
+                "Emissive texture has tex_ccord %, but we don't support that much",
+                pbr.base_color_texture.some.tex_coord,
+            );
+            error, material.emissive_texture_index =
+                get_or_upload_texture(
+                    *texture_cache,
+                    *model_dto,
+                    material_dto.emissive_texture.some,
+                    .SRGB,
+                );
+            if error {
+                return error, renderer_model;
             }
         }
 
-        error, material_ids := Renderer.upload_materials(
+        error=, material_ids := Renderer.upload_materials(
             *state.renderer,
-            .[{
-                base_color_factor        = material_dto.pbr_metallic_roughness.base_color_factor,
-                base_color_texture_index = renderer_base_color_texture_id,
-            }],,
-            temp
+            .[material],,
+            temp,
         );
         if error {
             return error, renderer_model;
@@ -166,6 +215,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                     color    = vertex_dto.color,
                     normal   = vertex_dto.normal,
                     uv       = vertex_dto.uv0,
+                    tangent  = vertex_dto.tangent,
                 };
             }
 
@@ -214,6 +264,17 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
 
 #scope_file
 
+convert_alpha_mode_dto :: (dto_alpha_mode: Alpha_Mode_Dto) -> Renderer.Alpha_Mode {
+    if #complete dto_alpha_mode == {
+        case .OPAQUE;
+            return .OPAQUE;
+        case .MASK;
+            return .MASK;
+        case .BLEND;
+            return .BLEND;
+    }
+}
+
 create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, sampler_id: u32 {
     params: Renderer.Create_Sampler_Params;
 
@@ -230,22 +291,22 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
         case .UNDEFINED;
             params.min_filter = .LINEAR;
             params.mipmap_mode = .LINEAR;
-        case. NEAREST;
+        case .NEAREST;
             params.min_filter = .NEAREST;
             params.mipmap_mode = .NEAREST;
-        case. LINEAR;
+        case .LINEAR;
             params.min_filter = .LINEAR;
             params.mipmap_mode = .NEAREST;
-        case. NEAREST_MIPMAP_NEAREST;
+        case .NEAREST_MIPMAP_NEAREST;
             params.min_filter = .NEAREST;
             params.mipmap_mode = .NEAREST;
-        case. LINEAR_MIPMAP_NEAREST;
+        case .LINEAR_MIPMAP_NEAREST;
             params.min_filter = .LINEAR;
             params.mipmap_mode = .NEAREST;
-        case. NEAREST_MIPMAP_LINEAR;
+        case .NEAREST_MIPMAP_LINEAR;
             params.min_filter = .NEAREST;
             params.mipmap_mode = .LINEAR;
-        case. LINEAR_MIPMAP_LINEAR;
+        case .LINEAR_MIPMAP_LINEAR;
             params.min_filter = .LINEAR;
             params.mipmap_mode = .LINEAR;
     }
@@ -277,6 +338,91 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
     }
 
     return "", sampler_index;
+}
+
+Texture_Cache_Key :: #type u64;
+
+Texture_Cache :: struct {
+    image_id_by_key:   Table(Texture_Cache_Key, u32); // (image_dto_index << 1) | is_unorm
+    texture_id_by_key: Table(Texture_Cache_Key, u32); // (renderer_image_id << 32) | sampler_id
+    sampler_id_by_key: Table(Texture_Cache_Key, u32);
+
+    image_id_by_key.allocator   = temp;
+    texture_id_by_key.allocator = temp;
+    sampler_id_by_key.allocator = temp;
+}
+
+get_or_upload_texture :: (
+    cache:        *Texture_Cache,
+    model_dto:    *Model_Dto,
+    texture_dto:  Texture_Dto,           // whatever the type of `.some` is
+    format_kind:  type_of(Renderer.Image_Params.format_kind),
+) -> error: string, texture_id: u32 {
+    image_id: u32;
+    { // Image
+        image_key: Texture_Cache_Key = (cast(u64, texture_dto.image_index) << 1)
+            | cast(u64, format_kind == .UNORM);
+
+        found:, image_id = table_find(*cache.image_id_by_key, image_key);
+        if !found {
+            image_dto := model_dto.images[texture_dto.image_index];
+            error, image_ids := Renderer.upload_texture_images(
+                *state.renderer,
+                .[{
+                    width       = image_dto.width,
+                    height      = image_dto.height,
+                    bytes       = image_dto.bytes,
+                    format_kind = format_kind,
+                }],,
+                temp
+            );
+            if error {
+                return error, 0;
+            }
+
+            image_id = image_ids[0];
+            table_set(*cache.image_id_by_key, image_key, image_id);
+        }
+    }
+
+    sampler_id: u32;
+    { // Sampler
+        sampler_key: Texture_Cache_Key =
+              cast(u64, texture_dto.mag_filter)
+            | cast(u64, texture_dto.min_filter) << 16
+            | cast(u64, texture_dto.wrap_s)     << 32
+            | cast(u64, texture_dto.wrap_t)     << 48;
+
+        found:, sampler_id = table_find(*cache.sampler_id_by_key, sampler_key);
+        if !found {
+            error:, sampler_id = create_sampler_from_texture_dto(texture_dto);
+            if error {
+                return error, 0;
+            }
+            table_set(*cache.sampler_id_by_key, sampler_key, sampler_id);
+        }
+    }
+
+    texture_id: u32;
+    { // Texture (image + sampler)
+        texture_key := (cast(u64, image_id) << 32) | cast(u64, sampler_id);
+        found:, texture_id = table_find(*cache.texture_id_by_key, texture_key);
+        if !found {
+            error, texture_ids := Renderer.upload_textures(
+                *state.renderer,
+                .[{ image_index = image_id, sampler_index = sampler_id }],,
+                temp
+            );
+            if error {
+                return error, 0;
+            }
+
+            texture_id = texture_ids[0];
+            table_set(*cache.texture_id_by_key, texture_key, texture_id);
+        }
+    }
+
+    return "", texture_id;
 }
 
 #import "System";

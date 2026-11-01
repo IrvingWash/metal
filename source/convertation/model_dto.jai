@@ -39,7 +39,7 @@ Mesh_Dto :: struct {
 
     vertices: [..]Vertex_Dto;
     indices:  [..]u32;
-    topology: Topology_Mode = .TRIANGLES;
+    topology: Topology_Mode_Dto = .TRIANGLES;
 
     min: Vector3;
     max: Vector3;
@@ -52,7 +52,7 @@ Vertex_Dto :: struct {
     normal:   Vector3;
     uv0:      Vector2;
     uv1:      Vector2;
-    tangent:  Vector4 = { 0, 0, 0, 1 };
+    tangent:  Vector4 = { 1, 0, 0, 1 };
     color:    Vector4 = { 1, 1, 1, 1 };
 }
 
@@ -60,7 +60,7 @@ Material_Dto :: struct {
     name: string;
 
     double_sided: bool;
-    alpha_mode:   Alpha_Mode;
+    alpha_mode:   Alpha_Mode_Dto;
     alpha_cutoff: float = 0.5;
 
     pbr_metallic_roughness: Pbr_Metallic_Roughness_Dto;
@@ -95,10 +95,10 @@ Texture_Dto :: struct {
     image_index: u32;
     tex_coord:   u32;
 
-    mag_filter: Mag_Filter = .UNDEFINED;
-    min_filter: Min_Filter = .UNDEFINED;
-    wrap_s:     Wrap_Mode  = .REPEAT;
-    wrap_t:     Wrap_Mode  = .REPEAT;
+    mag_filter: Mag_Filter_Dto = .UNDEFINED;
+    min_filter: Min_Filter_Dto = .UNDEFINED;
+    wrap_s:     Wrap_Mode_Dto  = .REPEAT;
+    wrap_t:     Wrap_Mode_Dto  = .REPEAT;
 }
 
 Image_Dto :: struct {
@@ -110,19 +110,19 @@ Image_Dto :: struct {
     channel_count: u8;
 };
 
-Alpha_Mode :: enum {
+Alpha_Mode_Dto :: enum {
     OPAQUE;
     MASK;
     BLEND;
 }
 
-Wrap_Mode :: enum {
+Wrap_Mode_Dto :: enum {
     CLAMP_TO_EDGE;
     MIRRORED_REPEAT;
     REPEAT;
 }
 
-Topology_Mode :: enum {
+Topology_Mode_Dto :: enum {
     POINTS;
     LINES;
     LINE_LOOP;
@@ -132,13 +132,13 @@ Topology_Mode :: enum {
     TRIANGLE_FAN;
 }
 
-Mag_Filter :: enum {
+Mag_Filter_Dto :: enum {
     UNDEFINED;
     NEAREST;
     LINEAR;
 }
 
-Min_Filter :: enum {
+Min_Filter_Dto :: enum {
     UNDEFINED;
     NEAREST;
     LINEAR;
