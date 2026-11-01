@@ -77,14 +77,14 @@ Shader_Meta_Info :: struct {
 
 SHADER_META_INFOS :: Shader_Meta_Info.[
     {
-        relative_source_path = "modules/Renderer/shaders/common.vertex.glsl",
-        compiled_name        = "common.vertex.spv",
+        relative_source_path = "modules/Renderer/shaders/pbr.vertex.glsl",
+        compiled_name        = "pbr.vertex.spv",
         entry_point_name     = "main",
         kind                 = Shaderc.Shader_Kind.VERTEX_SHADER,
     },
     {
-        relative_source_path = "modules/Renderer/shaders/common.fragment.glsl",
-        compiled_name        = "common.fragment.spv",
+        relative_source_path = "modules/Renderer/shaders/pbr.fragment.glsl",
+        compiled_name        = "pbr.fragment.spv",
         entry_point_name     = "main",
         kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
     },
