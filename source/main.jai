@@ -18,9 +18,6 @@ Renderer      :: #import "Renderer"()(
 );
 #import "More_Math";
 
-#if DEBUG {
-    #load "editor.jai";
-}
 #load "asset_manager.jai";
 #load "camera.jai";
 
@@ -29,6 +26,7 @@ State :: struct {
     input_state:   Input.Input_State;
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
+
     camera:        Camera;
 
     models: [..]Renderer.Model;

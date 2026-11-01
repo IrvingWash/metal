@@ -23,11 +23,13 @@ SDL_INCLUDE_PATH    :: #run path_join(#filepath, "..", "vendored", "SDL", "inclu
         exit(1);
     }
 
+/* // There are some wrong types generated, cleaned up by hand
     error := generate_bindings();
     if error {
         log_error("Failed to generate bindings: %", error);
         exit(1);
     }
+*/
 }
 
 generate_bindings :: () -> error: string {
