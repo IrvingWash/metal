@@ -175,7 +175,7 @@ void main() {
 
     vec3 ambient = scene_data.ambient_color * albedo.rgb * occlusion;
 
-    vec3 final_color = ambient + Lo;
+    vec3 final_color = ambient + Lo + emissive;
 
-    fragment_color = vec4(final_color, 1);
+    fragment_color = vec4(final_color, albedo.a);
 }
