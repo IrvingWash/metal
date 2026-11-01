@@ -18,6 +18,9 @@ Renderer      :: #import "Renderer"()(
 );
 #import "More_Math";
 
+#if DEBUG {
+    #load "editor.jai";
+}
 #load "asset_manager.jai";
 #load "camera.jai";
 
