@@ -3085,7 +3085,12 @@ create_shader_module :: (
     }
 }
 
-scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> left_x: s32, left_y: s32, right_x: s32, right_y: s32 {
+scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
+    left_x: s32,
+    left_y: s32,
+    right_x: s32,
+    right_y: s32
+) {
     scale := min(
         cast(float, dst.width)  / cast(float, src.width),
         cast(float, dst.height) / cast(float, src.height),
@@ -3102,8 +3107,8 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> le
 
 #import "Basic";
 #import "Math";
-VK  :: #import "vendored/Jai_Vulkan";
-VMA :: #import "vendored/Vulkan_Memory_Allocator"(DEBUG = DEBUG);
+VK  :: #import "Jai_Vulkan";
+VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
 #if DEBUG {
     #import "Print_Vars";

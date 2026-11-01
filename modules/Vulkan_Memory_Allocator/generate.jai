@@ -4,14 +4,12 @@
 #import "Compiler";
 #import "BuildCpp";
 #import "File";
+#import "String";
 
-// ./modules/Vulkan_Memory_Allocator/Vulkan-Headers/include
-VULKAN_INCLUDE_PATH :: #run tprint("%Vulkan-Headers/include", #filepath);
+VULKAN_INCLUDE_PATH :: #run path_join(#filepath, "..", "vendored", "Vulkan-Headers", "include",, temp);
+SRC_PATH            :: #run path_join(#filepath, "..", "vendored", "VulkanMemoryAllocator", "include", "vk_mem_alloc.h",, temp);
 
-// ./modules/Vulkan_Memory_Allocator/VulkanMemoryAllocator/include/vk_mem_alloc.h
-SRC_PATH :: #run tprint("%VulkanMemoryAllocator/include/vk_mem_alloc.h", #filepath);
-
-#run {
+#run,stallable {
     set_build_options_dc({ do_output = false });
 
     error := build_vma();

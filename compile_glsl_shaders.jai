@@ -94,4 +94,4 @@ SHADER_META_INFOS :: Shader_Meta_Info.[
 #import "File";
 #import "Compiler";
 #import "String";
-Shaderc :: #import "vendored/Shaderc";
+Shaderc :: #import "Shaderc";

@@ -26,6 +26,7 @@ State :: struct {
     input_state:   Input.Input_State;
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
+
     camera:        Camera;
 
     models: [..]Renderer.Model;

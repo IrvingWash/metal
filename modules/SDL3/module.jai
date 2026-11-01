@@ -1191,4 +1191,4 @@ SDL_free :: (mem: *void) -> void #foreign libsdl3;
         #assert "Unsupported OS";
 }
 
-VK :: #import "vendored/Jai_Vulkan";
+VK :: #import "Jai_Vulkan";
