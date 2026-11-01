@@ -1,5 +1,11 @@
 #module_parameters()(Window_Type: Type, APPLICATION_NAME: string, DEBUG: bool = false);
 
+FALLBACK_COLOR_TEXTURE_ID              :: 0;
+FALLBACK_NORMAL_TEXTURE_ID             :: 1;
+FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID :: FALLBACK_COLOR_TEXTURE_ID;
+FALLBACK_OCCLUSION_TEXTURE_ID          :: FALLBACK_COLOR_TEXTURE_ID;
+FALLBACK_EMISSIVE_TEXTURE_ID           :: FALLBACK_COLOR_TEXTURE_ID;
+
 Renderer :: struct {
     window:                 Window_Type;
     get_window_render_size: Get_Window_Render_Size; // @Todo: maybe remove this, so Renderer doesn't know
@@ -21,7 +27,7 @@ Renderer :: struct {
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
-    light_info: Light_Info;
+    scene_info: Scene_Info;
     materials_info: Materials_Info;
     geometry_info: Geometry_Info;
 
@@ -61,6 +67,11 @@ Image_Params :: struct {
     width:  u32;
     height: u32;
     bytes:  []u8;
+
+    format_kind: enum {
+        SRGB;
+        UNORM;
+    }
 }
 
 Camera :: struct {
@@ -220,7 +231,7 @@ init :: (
             renderer;
     }
 
-    error, renderer.light_info = create_light_info(
+    error, renderer.scene_info = create_scene_info(
         renderer.device,
         renderer.allocator,
     );
@@ -271,7 +282,7 @@ init :: (
         renderer.depth_image_info.format,
         .[
             renderer.materials_info.texture_descriptor_info.layout,
-            renderer.light_info.layout,
+            renderer.scene_info.layout,
         ],
     );
     if error {
@@ -303,7 +314,7 @@ deinit :: (renderer: *Renderer) {
         );
     }
 
-    destroy_light_info(renderer.device, renderer.allocator, renderer.light_info);
+    destroy_scene_info(renderer.device, renderer.allocator, renderer.scene_info);
 
     destroy_image( // Depth image
         renderer.device,
@@ -333,6 +344,8 @@ deinit :: (renderer: *Renderer) {
 }
 
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
+    renderer.scene_info.scene_data.camera_world_position = camera.position;
+
     array_reset_keeping_memory(*renderer.models_this_frame);
 
     if renderer.swapchain_info.should_recreate {
@@ -427,10 +440,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         }
     }
 
-    renderer.light_info.pointers[frame_resources_index].* = renderer.light_info.directional_light;
+    renderer.scene_info.pointers[frame_resources_index].* = renderer.scene_info.scene_data;
     VMA.flush_allocation(
         renderer.allocator,
-        renderer.light_info.buffer_infos[frame_resources_index].allocation,
+        renderer.scene_info.buffer_infos[frame_resources_index].allocation,
         offset = 0,
         VK.WHOLE_SIZE,
     );
@@ -588,7 +601,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             first_set = 0,
             .[
                 renderer.materials_info.texture_descriptor_info.set,
-                renderer.light_info.sets[frame_resources_index],
+                renderer.scene_info.sets[frame_resources_index],
             ],
             .[],
         );
@@ -881,7 +894,7 @@ set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
 }
 
 set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
-    renderer.light_info.directional_light = light;
+    renderer.scene_info.scene_data.directional_light = light;
 }
 
 upload_textures :: (renderer: *Renderer, textures: []Texture) -> error: string, texture_ids: [..]u32 {
@@ -1106,7 +1119,8 @@ DEFAULT_PRESENT_MODE :: VK.Present_Mode_Khr.FIFO_KHR;
 
 DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
 
-DEFAULT_TEXTURE_IMAGE_FORMAT :: VK.Format.R8G8B8A8_SRGB;
+DEFAULT_TEXTURE_SRGB_FORMAT  :: VK.Format.R8G8B8A8_SRGB;
+DEFAULT_TEXTURE_UNORM_FORMAT :: VK.Format.R8G8B8A8_UNORM;
 
 DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
@@ -1122,7 +1136,7 @@ MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Co
 MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
 
-HAVE_MORE_DEBUG :: DEBUG && false;
+HAVE_MORE_DEBUG :: DEBUG && true;
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
@@ -1192,15 +1206,23 @@ Frame_Resources :: struct {
     instance_pointer: *Instance;
 }
 
-Light_Info :: struct {
-    directional_light: Directional_Light;
+// @Todo: give this a better name
+Scene_Info :: struct {
+    scene_data: Scene_Data;
 
     pool:         VK.Descriptor_Pool;
     layout:       VK.Descriptor_Set_Layout;
     sets:         [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
 
     buffer_infos: [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
-    pointers:     [FRAMES_IN_FLIGHT_COUNT]*Directional_Light;
+    pointers:     [FRAMES_IN_FLIGHT_COUNT]*Scene_Data;
+}
+
+// @Todo: give this a better name
+Scene_Data :: struct @Gpu {
+    directional_light:     Directional_Light;
+    camera_world_position: Vector3;
+    ambient_color:         Vector3 = { 0.01, 0.01, 0.01 };
 }
 
 Descriptor_Info :: struct {
@@ -1498,33 +1520,44 @@ draw_node :: (
 }
 
 create_fallbacks :: (renderer: *Renderer) -> error: string {
-    image_id: u32;
+    base_color_image_id: u32;
+    normal_image_id:     u32;
     {
-        white: u32 = 0xFFFFFFFF;
-        bytes: [..]u8;
-        bytes.allocator = temp;
-        array_resize(*bytes, 4);
-        bytes.data = cast(*u8, *white);
+        white_pixel := u8.[255, 255, 255, 255];
+        flat_normal_pixel := u8.[128, 128, 255, 255]; // tangent-space (0, 0, 1)
 
         white_pixel_image_params := Image_Params.{
             width         = 1,
             height        = 1,
-            bytes         = bytes,
+            bytes         = white_pixel,
+            format_kind   = .SRGB,
+        };
+
+        flat_normal_image_params := Image_Params.{
+            width         = 1,
+            height        = 1,
+            bytes         = flat_normal_pixel,
+            format_kind   = .UNORM,
         };
 
         error, image_ids := upload_texture_images(
             renderer,
-            .[white_pixel_image_params],,
+            .[white_pixel_image_params, flat_normal_image_params],,
             temp
         );
         if error {
             return error;
         }
-        if image_ids.count != 1 || image_ids[0] != 0 {
+        if (
+            image_ids.count != 2
+            || image_ids[0] != 0
+            || image_ids[1] != 1
+        ) {
             return "The ids of the fallback texture image should be the very first and the very only";
         }
 
-        image_id = image_ids[0];
+        base_color_image_id = image_ids[0];
+        normal_image_id     = image_ids[1];
     }
 
     sampler_index: u32;
@@ -1548,29 +1581,43 @@ create_fallbacks :: (renderer: *Renderer) -> error: string {
         }
     }
 
-    texture_index: u32;
     {
         error, texture_indices := upload_textures(
             renderer,
-            .[{
-                image_index = image_id,
-                sampler_index = sampler_index,
-            }],,
+            .[
+                {
+                    image_index = base_color_image_id,
+                    sampler_index = sampler_index,
+                },
+                {
+                    image_index = normal_image_id,
+                    sampler_index = sampler_index,
+                }
+            ],,
             temp
         );
         if error {
             return error;
         }
-        if texture_indices.count != 1 || texture_indices[0] != 0 {
+        if (
+            texture_indices.count != 2
+            || texture_indices[0] != FALLBACK_COLOR_TEXTURE_ID
+            || texture_indices[1] != FALLBACK_NORMAL_TEXTURE_ID
+        ) {
             return "Fallback texture should be the very first and very only";
         }
-        texture_index = texture_indices[0];
     }
 
     error, material_ids := upload_materials(
         renderer,
         .[{
-            base_color_texture_index = texture_index,
+            base_color_texture_index         = FALLBACK_COLOR_TEXTURE_ID,
+            metallic_roughness_texture_index = FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID,
+            normal_texture_index             = FALLBACK_NORMAL_TEXTURE_ID,
+            occlusion_texture_index          = FALLBACK_OCCLUSION_TEXTURE_ID,
+            emissive_texture_index           = FALLBACK_EMISSIVE_TEXTURE_ID,
+            metallic_factor                  = 0,
+            roughness_factor                 = 0.5,
         }],,
         temp
     );
@@ -1622,10 +1669,18 @@ create_texture_image_and_record_transition :: (
     command_buffer: VK.Command_Buffer,
     image_params:   Image_Params,
 ) -> error: string, Image_Info, staging_buffer: Buffer_Info {
+    format: VK.Format = ---;
+    if #complete image_params.format_kind == {
+        case .SRGB;
+            format = DEFAULT_TEXTURE_SRGB_FORMAT;
+        case .UNORM;
+            format = DEFAULT_TEXTURE_UNORM_FORMAT;
+    }
+
     error, image_info := create_image(
         device,
         allocator,
-        DEFAULT_TEXTURE_IMAGE_FORMAT,
+        format = format,
         image_params.width,
         image_params.height,
         depth            = 1,
@@ -1763,16 +1818,16 @@ map_copy_buffer_data :: (
     }
 
     memcpy(buffer_pointer + buffer_offset, data, byte_size);
-    result = VMA.flush_allocation(
+    flush_result := VMA.flush_allocation(
         allocator,
         buffer.allocation,
         buffer_offset,
         cast(u64, byte_size),
     );
-    if result != .SUCCESS {
-        return tprint("Failed to flush allocation: %", result);
-    }
     VMA.unmap_memory(allocator, buffer.allocation);
+    if flush_result != .SUCCESS {
+        return tprint("Failed to flush allocation: %", flush_result);
+    }
 
     return "";
 }
@@ -1976,12 +2031,12 @@ destroy_pipeline :: (device: VK.Device, pipeline_info: *Pipeline_Info) {
     pipeline_info.* = {};
 }
 
-destroy_light_info :: (
+destroy_scene_info :: (
     device: VK.Device,
     allocator: VMA.Allocator,
-    light_info: Light_Info,
+    scene_info: Scene_Info,
 ) {
-    for buffer_info: light_info.buffer_infos {
+    for buffer_info: scene_info.buffer_infos {
         VMA.unmap_memory(allocator, buffer_info.allocation);
         VMA.destroy_buffer(
             allocator,
@@ -1989,12 +2044,12 @@ destroy_light_info :: (
             buffer_info.allocation,
         );
     }
-    VK.destroy_descriptor_set_layout(device, light_info.layout);
-    VK.destroy_descriptor_pool(device, light_info.pool);
+    VK.destroy_descriptor_set_layout(device, scene_info.layout);
+    VK.destroy_descriptor_pool(device, scene_info.pool);
 }
 
-create_light_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Light_Info {
-    light_info: Light_Info;
+create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Scene_Info {
+    scene_info: Scene_Info;
 
     { // Pool
         descriptor_pool_sizes := VK.Descriptor_Pool_Size.[
@@ -2009,11 +2064,11 @@ create_light_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
             pool_size_count = descriptor_pool_sizes.count,
             p_pool_sizes    = descriptor_pool_sizes.data,
         };
-        result:, light_info.pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
+        result:, scene_info.pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
         if result != .SUCCESS {
             return
-                tprint("Failed to create descriptor pool for light: %", result),
-                light_info;
+                tprint("Failed to create descriptor pool for scene: %", result),
+                scene_info;
         }
     }
 
@@ -2032,24 +2087,24 @@ create_light_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
             p_bindings    = bindings.data,
         };
 
-        result:, light_info.layout = VK.create_descriptor_set_layout(
+        result:, scene_info.layout = VK.create_descriptor_set_layout(
             device,
             *descriptor_set_layout_create_info,
         );
         if result != .SUCCESS {
             return
-                tprint("Failed to create descriptor set layout for light: %", result),
-                light_info;
+                tprint("Failed to create descriptor set layout for scene: %", result),
+                scene_info;
         }
     }
 
     { // Set
         layouts: [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set_Layout;
         for *layout: layouts {
-            layout.* = light_info.layout;
+            layout.* = scene_info.layout;
         }
         descriptor_set_allocate_info := VK.Descriptor_Set_Allocate_Info.{
-            descriptor_pool      = light_info.pool,
+            descriptor_pool      = scene_info.pool,
             descriptor_set_count = layouts.count,
             p_set_layouts        = layouts.data,
         };
@@ -2057,52 +2112,52 @@ create_light_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
         result, descriptor_sets := VK.allocate_descriptor_sets(device, *descriptor_set_allocate_info,, temp);
         if result != .SUCCESS {
             return
-                tprint("Failed to allocate descriptor set for light: %", result),
-                light_info;
+                tprint("Failed to allocate descriptor set for scene: %", result),
+                scene_info;
         }
 
-        for *set: light_info.sets {
+        for *set: scene_info.sets {
             set.* = descriptor_sets[it_index];
         }
     }
 
     // Buffers
-    for *buffer_info: light_info.buffer_infos {
+    for *buffer_info: scene_info.buffer_infos {
         error, new_buffer_info := create_buffer(
             device,
             allocator,
             usage = .UNIFORM_BUFFER,
-            size_of(Directional_Light),
+            size_of(Scene_Data),
             memory_usage = .AUTO,
             mappable = true,
         );
         if error {
             return
-                tprint("Failed to create light uniform buffer: %", error),
-                light_info;
+                tprint("Failed to create scene uniform buffer: %", error),
+                scene_info;
         }
 
         buffer_info.* = new_buffer_info;
 
 
-        result:, light_info.pointers[it_index] = VMA.map_memory(
+        result:, scene_info.pointers[it_index] = VMA.map_memory(
             allocator,
             buffer_info.allocation,
         );
         if result != .SUCCESS {
             return
-                tprint("Failed to map light uniform buffer memory: %", result),
-                light_info;
+                tprint("Failed to map scene uniform buffer memory: %", result),
+                scene_info;
         }
 
         descriptor_buffer_info := VK.Descriptor_Buffer_Info.{
             buffer = buffer_info.buffer,
             offset = 0,
-            range = size_of(Directional_Light),
+            range = size_of(Scene_Data),
         };
 
         write_descriptor_set := VK.Write_Descriptor_Set.{
-            dst_set          = light_info.sets[it_index],
+            dst_set          = scene_info.sets[it_index],
             dst_binding      = 0,
             descriptor_count = 1,
             descriptor_type  = .UNIFORM_BUFFER,
@@ -2116,7 +2171,7 @@ create_light_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
         );
     }
 
-    return "", light_info;
+    return "", scene_info;
 }
 
 create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descriptor_Info {
