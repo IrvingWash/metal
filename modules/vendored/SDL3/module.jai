@@ -1095,6 +1095,8 @@ get_keyboard_state :: (numkeys: *s32) -> *bool #foreign libsdl3 "SDL_GetKeyboard
 get_mouse_state :: (x: *float, y: *float) -> Mouse_Button_Flags #foreign libsdl3 "SDL_GetMouseState";
 capture_mouse :: (enabled: bool) -> bool #foreign libsdl3 "SDL_CaptureMouse";
 
+get_window_relative_mouse_mode :: (window: *Window) -> bool #foreign libsdl3 "SDL_GetWindowRelativeMouseMode";
+
 set_window_relative_mouse_mode :: (window: *Window, enabled: bool) -> bool #foreign libsdl3 "SDL_SetWindowRelativeMouseMode";
 
 get_window_size_in_pixels :: (window: *Window) -> width: s32, height: s32 {

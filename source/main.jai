@@ -85,6 +85,13 @@ process_input :: () {
                 state.renderer.swapchain_info.should_recreate = true;
         }
     }
+
+    #if DEBUG {
+        if state.input_state.keys[Input.Scan_Code.F1] & .PRESSED {
+            current := Windowing.get_window_relative_cursor_mode(state.window);
+            Windowing.set_window_relative_cursor_mode(state.window, !current);
+        }
+    }
 }
 
 update :: (dt: float) {

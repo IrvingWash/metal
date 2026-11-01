@@ -83,6 +83,20 @@ get_display_info :: (id: u32) -> error: string, Display_Info {
     return "", display_info;
 }
 
+get_window_relative_cursor_mode :: (window: *Window) -> bool {
+    return SDL.get_window_relative_mouse_mode(window);
+}
+
+set_window_relative_cursor_mode :: (window: *Window, enabled: bool) -> error: string {
+    ok := SDL.set_window_relative_mouse_mode(window, enabled);
+    if !ok {
+        error := SDL.get_error();
+        return to_string(error);
+    }
+
+    return "";
+}
+
 // =============================================================================
 // Vulkan-specific
 // =============================================================================
@@ -110,16 +124,6 @@ get_vulkan_instance_extensions :: () -> [..]*u8 {
     }
 
     return extensions;
-}
-
-set_window_relative_cursor_mode :: (window: *Window, enabled: bool) -> error: string {
-    ok := SDL.set_window_relative_mouse_mode(window, enabled);
-    if !ok {
-        error := SDL.get_error();
-        return to_string(error);
-    }
-
-    return "";
 }
 
 
