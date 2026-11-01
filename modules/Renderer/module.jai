@@ -1223,6 +1223,7 @@ Scene_Data :: struct @Gpu {
     directional_light:     Directional_Light;
     camera_world_position: Vector3;
     ambient_color:         Vector3 = { 0.01, 0.01, 0.01 };
+    exposure:              float   = 1;
 }
 
 Descriptor_Info :: struct {

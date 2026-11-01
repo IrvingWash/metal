@@ -118,6 +118,7 @@ layout(scalar, set = 1, binding = 0) uniform Scene_Data {
     Directional_Light directional_light;
     vec3 camera_world_position;
     vec3 ambient_color;
+    float exposure;
 } scene_data;
 
 layout(location = 0) out vec4 fragment_color;
@@ -177,5 +178,9 @@ void main() {
 
     vec3 final_color = ambient + Lo + emissive;
 
-    fragment_color = vec4(final_color, albedo.a);
+    // Tonemapping
+    // @Todo: maybe use https://github.com/KhronosGroup/ToneMapping/blob/main/PBR_Neutral/pbrNeutral.glsl
+    vec3 tone_mapped = vec3(1.0) - exp(-final_color * scene_data.exposure);
+
+    fragment_color = vec4(tone_mapped, albedo.a);
 }
