@@ -7,6 +7,12 @@ Create_Window_Flags :: enum_flags {
     RESIZABLE :: 0x0000000000000020;
 }
 
+Display_Info :: struct {
+    width:  u32;
+    height: u32;
+    dpi:    float;
+}
+
 init :: () -> ok: bool {
     ok := SDL.init_subsystem(.VIDEO);
 
@@ -45,6 +51,36 @@ get_renderable_size :: (window: *Window) -> width: u32, height: u32 {
     width, height := SDL.get_window_size_in_pixels(window);
 
     return cast(u32, width), cast(u32, height);
+}
+
+get_display_ids :: () -> [..]u32 {
+    result: [..]u32;
+
+    display_ids := SDL.get_displays();
+    array_resize(*result, display_ids.count);
+    for display_id: display_ids {
+        result[it_index] = display_id;
+    }
+    SDL.free(display_ids);
+
+    return result;
+}
+
+get_display_info :: (id: u32) -> error: string, Display_Info {
+    display_mode := SDL.get_desktop_display_mode(id);
+    if !display_mode {
+        error := SDL.get_error();
+
+        return to_string(error), .{};
+    }
+
+    display_info := Display_Info.{
+        width  = cast(u32, display_mode.w),
+        height = cast(u32, display_mode.h),
+        dpi    = display_mode.pixel_density,
+    };
+
+    return "", display_info;
 }
 
 // =============================================================================

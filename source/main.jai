@@ -125,7 +125,15 @@ init :: () {
         get_compiled_shader,
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
-    Renderer.set_render_resolution(*state.renderer, 1920, 1080);
+    display_ids := Windowing.get_display_ids(,, temp);
+    assert(display_ids.count > 0, "No displays(?!)");
+    error =, display_info := Windowing.get_display_info(display_ids[0]);
+    assert(!error, error);
+    Renderer.set_render_resolution(
+        *state.renderer,
+        cast(u32, display_info.width * display_info.dpi),
+        cast(u32, display_info.height * display_info.dpi),
+    );
 }
 
 deinit :: () {
