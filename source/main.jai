@@ -47,6 +47,16 @@ main :: () {
     init();
     defer deinit();
 
+    display_ids := Windowing.get_display_ids(,, temp);
+    assert(display_ids.count > 0, "No displays(?!)");
+    error, display_info := Windowing.get_display_info(display_ids[0]);
+    assert(!error, error);
+    Renderer.set_render_resolution(
+        *state.renderer,
+        cast(u32, display_info.width * display_info.dpi),
+        cast(u32, display_info.height * display_info.dpi),
+    );
+
     Renderer.set_directional_light(*state.renderer, { color = {0.9, 0.7, 0.7}, direction = { 1, -1, -1 } });
     state.renderer.normalized_clear_color = { 0.3, 0.1, 0.1, 1 };
 
@@ -83,6 +93,13 @@ process_input :: () {
                 state.should_quit = true;
             case .WINDOW_PIXEL_SIZE_CHANGED;
                 state.renderer.swapchain_info.should_recreate = true;
+        }
+    }
+
+    #if DEBUG {
+        if state.input_state.keys[Input.Scan_Code.F1] & .PRESSED {
+            current := Windowing.get_window_relative_cursor_mode(state.window);
+            Windowing.set_window_relative_cursor_mode(state.window, !current);
         }
     }
 }
@@ -125,7 +142,6 @@ init :: () {
         get_compiled_shader,
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
-    Renderer.set_render_resolution(*state.renderer, 1920, 1080);
 }
 
 deinit :: () {
