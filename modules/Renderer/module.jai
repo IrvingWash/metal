@@ -31,7 +31,7 @@ Renderer :: struct {
     materials_info: Materials_Info;
     geometry_info: Geometry_Info;
 
-    common_pipeline_info: Pipeline_Info;
+    pbr_pipeline_info: Pipeline_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
@@ -275,7 +275,7 @@ init :: (
             renderer;
     }
 
-    error, renderer.common_pipeline_info = create_common_pipeline(
+    error, renderer.pbr_pipeline_info = create_pbr_pipeline(
         renderer.device,
         renderer.get_compiled_shader,
         .[renderer.color_target.image_info.format],
@@ -304,7 +304,7 @@ deinit :: (renderer: *Renderer) {
     destroy_geometry_info(renderer.allocator, *renderer.geometry_info);
     destroy_materials_info(renderer.device, renderer.allocator, *renderer.materials_info);
 
-    destroy_pipeline(renderer.device, *renderer.common_pipeline_info);
+    destroy_pipeline(renderer.device, *renderer.pbr_pipeline_info);
 
     for *frame_resources: renderer.frame_resources_list {
         destroy_frame_resources(
@@ -597,7 +597,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_bind_descriptor_sets(
             frame_resources.command_buffer,
             pipeline_bind_point = .GRAPHICS,
-            renderer.common_pipeline_info.layout,
+            renderer.pbr_pipeline_info.layout,
             first_set = 0,
             .[
                 renderer.materials_info.texture_descriptor_info.set,
@@ -614,7 +614,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
         VK.cmd_push_constants(
             frame_resources.command_buffer,
-            renderer.common_pipeline_info.layout,
+            renderer.pbr_pipeline_info.layout,
             stage_flags = .VERTEX | .FRAGMENT,
             offset = 0,
             size_of(Push_Constants),
@@ -655,7 +655,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     VK.cmd_bind_pipeline(
         frame_resources.command_buffer,
         .GRAPHICS,
-        renderer.common_pipeline_info.pipeline,
+        renderer.pbr_pipeline_info.pipeline,
     );
 
     VK.cmd_draw_indexed_indirect(
@@ -1876,7 +1876,7 @@ create_buffer :: (
     return "", buffer;
 }
 
-create_common_pipeline :: (
+create_pbr_pipeline :: (
     device:                   VK.Device,
     get_compiled_shader:      Get_Compiled_Shader,
     color_attachment_formats: []VK.Format,
@@ -1902,12 +1902,12 @@ create_common_pipeline :: (
         result:, pipeline_info.layout = VK.create_pipeline_layout(device, *layout_create_info);
         if result != .SUCCESS {
             return
-                tprint("Failed to create layout for common pipeline: %", result),
+                tprint("Failed to create layout for pbr pipeline: %", result),
                 pipeline_info;
         }
     }
 
-    error, vertex_shader := create_shader_module(device, "common.vertex.spv", get_compiled_shader);
+    error, vertex_shader := create_shader_module(device, "pbr.vertex.spv", get_compiled_shader);
     if error {
         return
             error,
@@ -1915,7 +1915,7 @@ create_common_pipeline :: (
     }
     defer VK.destroy_shader_module(device, vertex_shader);
 
-    error =, fragment_shader := create_shader_module(device, "common.fragment.spv", get_compiled_shader);
+    error =, fragment_shader := create_shader_module(device, "pbr.fragment.spv", get_compiled_shader);
     if error {
         return
             error,
@@ -2018,7 +2018,7 @@ create_common_pipeline :: (
     );
     if result != .SUCCESS {
         return
-            tprint("Failed to create common pipeline: %", result),
+            tprint("Failed to create pbr pipeline: %", result),
             pipeline_info;
     }
 
