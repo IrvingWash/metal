@@ -122,10 +122,6 @@ init :: () {
     }
 
     state.input_state = Input.init();
-    error = Input.set_cursor_capture(*state.input_state, should_capture = true);
-    if error {
-        log("Failed to enable cursor capture: %", error, flags = .WARNING);
-    }
 
     state.asset_manager = init_asset_manager();
 

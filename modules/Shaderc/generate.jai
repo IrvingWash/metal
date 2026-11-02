@@ -51,10 +51,34 @@ build :: () -> error: string {
         if result.exit_code != 0 {
             return "Failed to build";
         }
-    } else {
-        #assert false, "Unsupported OS";
-    }
+    } else #if OS == .WINDOWS {
+       result = run_command(
+           "cmake",
+           "-S", SHADERC_PATH,
+           "-B", CMAKE_ARTEFACTS_PATH,
+           "-G", "Ninja",
+           "-DCMAKE_BUILD_TYPE=Release",
+           "-DSHADERC_SKIP_TESTS=ON",
+           "-DSHADERC_SKIP_EXAMPLES=ON",
+           "-DCMAKE_CXX_FLAGS=-D_CRT_SECURE_NO_WARNINGS",
+           tprint("-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=%", BINARY_OUTPUT_PATH),
+           tprint("-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=%", BINARY_OUTPUT_PATH),
+       );
+       if result.exit_code != 0 {
+           return "Failed to configure cmake";
+       }
 
+       result = run_command(
+           "cmake",
+           "--build", CMAKE_ARTEFACTS_PATH,
+           "--target", "shaderc_shared",
+       );
+       if result.exit_code != 0 {
+           return "Failed to build";
+       }
+   } else {
+       #assert false, "Unsupported OS";
+   }
     ok := delete_directory(CMAKE_ARTEFACTS_PATH);
     if !ok {
         return tprint("Failed to delete artefacts directory at '%'", CMAKE_ARTEFACTS_PATH);
