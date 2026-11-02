@@ -58,13 +58,18 @@ main :: () {
         cast(u32, display_info.height * display_info.dpi),
     );
 
-    add_model :: (path: string) {
+    add_model :: (path: string, translation: Vector3 = {}, scale: Vector3 = {1, 1, 1}) {
         error, model := asset_manager_upload_model(*state.asset_manager, path);
         assert(!error, error);
+
+        transform := make_translation_matrix4(translation) * make_scale_matrix4(scale);
+
+        model.transform = transform;
         array_add(*state.models, model);
     }
 
-    add_model("assets/models/damaged_helmet/scene.glb");
+    add_model("assets/models/damaged_helmet/scene.glb", translation = { -1, 0 ,0 });
+    add_model("../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf", translation = {1, 0, 0 });
 
     while !state.should_quit {
         dt := calculate_delta_time();

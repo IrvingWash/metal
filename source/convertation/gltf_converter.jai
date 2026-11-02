@@ -47,13 +47,13 @@ convert_gltf :: (path: string, $validate: bool = false) -> error: string, Model_
     for gltf_mesh: gltf.meshes {
         array_add(*first_mesh_indices, cast(u32, model_dto.meshes.count));
 
-        name := sprint("%-%", model_dto.name, gltf_mesh.name);
+        temp_name := tprint("%-%", model_dto.name, gltf_mesh.name);
         for gltf_primitive: gltf_mesh.primitives {
             mesh_dto := convert_gltf_primitive_to_mesh_dto(
                 gltf,
                 gltf_primitive,
 
-                name                  = name,
+                temp_name             = temp_name,
                 identifier_for_errors = path,
             );
             array_add(*model_dto.meshes, mesh_dto);
@@ -387,12 +387,12 @@ convert_gltf_primitive_to_mesh_dto :: (
     gltf:           Gltf.Gltf,
     gltf_primitive: Gltf.Mesh.Primitive,
 
-    name:                  string,
+    temp_name:             string,
     identifier_for_errors: string,
 ) -> Mesh_Dto {
     mesh_dto: Mesh_Dto;
 
-    mesh_dto.name     = name;
+    mesh_dto.name     = copy_string(temp_name);
     mesh_dto.topology = convert_gltf_topology_mode(gltf_primitive.mode);
 
     if gltf_primitive._material != Gltf.SENTINEL {

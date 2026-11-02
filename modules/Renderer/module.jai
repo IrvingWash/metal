@@ -88,6 +88,7 @@ Camera :: struct {
 
 Directional_Light :: struct @Gpu {
     direction: Vector3 = { 0, -1, -1 };
+    intensity: float   = 3;
     color:     Vector3 = { 1, 1, 1 };
 }
 
@@ -1222,7 +1223,7 @@ Scene_Info :: struct {
 Scene_Data :: struct @Gpu {
     directional_light:     Directional_Light;
     camera_world_position: Vector3;
-    ambient_color:         Vector3 = { 0.01, 0.01, 0.01 };
+    ambient_color:         Vector3 = { 0.03, 0.03, 0.03 };
     exposure:              float   = 1;
 }
 

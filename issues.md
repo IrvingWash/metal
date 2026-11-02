@@ -1,5 +1,9 @@
 # Issues
 
+- Refactor pbr shader
+
+- Generate tangents
+
 - Mipmaps
 
 - Sort everything so parent nodes come before children nodes so we don't need to use recursion when traversing the nodes

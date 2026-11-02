@@ -9,6 +9,7 @@ const float PI = 3.14159265359;
 
 struct Directional_Light {
     vec3 direction;
+    float intensity;
     vec3 color;
 };
 
@@ -157,7 +158,7 @@ void main() {
     vec3 Lo = vec3(0);
 
     { // Directional light
-        vec3 radiance = scene_data.directional_light.color;
+        vec3 radiance = scene_data.directional_light.color * scene_data.directional_light.intensity;
 
         vec3 L = normalize(-scene_data.directional_light.direction);
         vec3 H = normalize(V + L);
