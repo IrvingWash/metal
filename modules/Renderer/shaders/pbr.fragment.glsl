@@ -32,6 +32,7 @@ struct Material {
 
     float alpha_cutoff;
     uint alpha_mode;
+    uint double_sided; // 0 or 1
 };
 
 // Normal distribution function (Trowbridge-Reitz) - D

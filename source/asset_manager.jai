@@ -76,6 +76,8 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
         material.emissive_factor   = material_dto.emissive_factor;
         material.alpha_cutoff      = material_dto.alpha_cutoff;
         material.alpha_mode        = convert_alpha_mode_dto(material_dto.alpha_mode);
+        material.double_sided      = cast(u32, material_dto.double_sided);
+
         material.base_color_texture_index         = Renderer.FALLBACK_COLOR_TEXTURE_ID;
         material.normal_texture_index             = Renderer.FALLBACK_NORMAL_TEXTURE_ID;
         material.metallic_roughness_texture_index = Renderer.FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID;

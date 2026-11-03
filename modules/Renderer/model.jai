@@ -44,6 +44,7 @@ Material :: struct @Gpu {
 
     alpha_cutoff: float = 0.5;
     alpha_mode:   Alpha_Mode;
+    double_sided: u32; // 0 or 1
 }
 
 Vertex :: struct @Gpu {

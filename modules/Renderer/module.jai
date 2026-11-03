@@ -950,7 +950,7 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> error: string, 
 }
 
 upload_materials :: (renderer: *Renderer, materials: []Material) -> error: string, material_ids: [..]u32 {
-    start := renderer.materials_info.material_count;
+    start := renderer.materials_info.materials.count;
 
     material_ids: [..]u32;
 
@@ -976,8 +976,12 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
     }
 
     for material: materials {
-        array_add(*material_ids, cast(u32, renderer.materials_info.material_count));
-        renderer.materials_info.material_count += 1;
+        array_add(*material_ids, cast(u32, renderer.materials_info.materials.count));
+
+        array_add(
+            *renderer.materials_info.materials,
+            material,
+        );
     }
 
     return "", material_ids;
@@ -1273,8 +1277,8 @@ Materials_Info :: struct {
     samplers:             [..]VK.Sampler;
     images:               [..]Image_Info;
     material_buffer_info: Buffer_Info;
+    materials: [..]Material;
     texture_count:  u32;
-    material_count: u32;
     texture_descriptor_info: Descriptor_Info;
 }
 
