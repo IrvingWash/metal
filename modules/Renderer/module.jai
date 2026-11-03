@@ -385,6 +385,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
             renderer.color_target.extent.height,
         );
         if error {
+            destroy_image(renderer.device, renderer.allocator, *new_color_target.image_info);
             return tprint("Failed to create new color target: %", error);
         }
 
@@ -395,6 +396,8 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
             renderer.color_target.extent.height,
         );
         if error {
+            destroy_image(renderer.device, renderer.allocator, *new_color_target.image_info);
+            destroy_image(renderer.device, renderer.allocator, *new_depth_image);
             return tprint("Failed to create new depth image: %", error);
         }
 
@@ -1147,7 +1150,7 @@ MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Co
 MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
 
-HAVE_MORE_DEBUG :: DEBUG && false;
+HAVE_MORE_DEBUG :: DEBUG && true;
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[

@@ -112,11 +112,13 @@ update :: (dt: float) {
 }
 
 render :: () {
-    Renderer.start_drawing(*state.renderer, state.camera);
+    error := Renderer.start_drawing(*state.renderer, state.camera);
+    assert(!error, error);
     for model: state.models {
         Renderer.draw_model(*state.renderer, model);
     }
-    Renderer.finish_drawing(*state.renderer);
+    error = Renderer.finish_drawing(*state.renderer);
+    assert(!error, error);
 }
 
 init :: () {
