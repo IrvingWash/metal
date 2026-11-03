@@ -16,3 +16,6 @@
 [submodule "modules/vendored/imgui"]
 	path = modules/vendored/imgui
 	url = git@github.com:ocornut/imgui.git
+[submodule "modules/vendored/MikkTSpace"]
+	path = modules/vendored/MikkTSpace
+	url = git@github.com:mmikk/MikkTSpace.git

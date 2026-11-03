@@ -11,6 +11,8 @@
         "modules/SDL3/module.jai",
         "modules/Shaderc/module.jai",
         "modules/Shaderc/generate.jai",
+        "modules/Mikk_T_Space/module.jai",
+        "modules/Mikk_T_Space/generate.jai",
         "source/Renderer/module.jai",
         "source/Windowing/module.jai",
         "source/Input/module.jai",
