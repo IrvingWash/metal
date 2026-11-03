@@ -33,14 +33,12 @@ Renderer :: struct {
     materials_info: Materials_Info;
     geometry_info: Geometry_Info;
 
-    pbr_pipeline_info: Pbr_Pipeline_Info;
+    model_pass: Model_Pass;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
 
     transforms: Transforms;
-
-    model_draw_buckets_this_frame: Model_Draw_Buckets;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -100,10 +98,6 @@ Color_Target :: struct {
     extent:          VK.Extent_2D;
     should_recreate: bool;
 }
-
-// =============================================================================
-// Public API
-// =============================================================================
 
 init :: (
     window:                             Window_Type,
@@ -279,23 +273,20 @@ init :: (
             renderer;
     }
 
-    error, renderer.pbr_pipeline_info = create_pbr_pipeline(
+    error, renderer.model_pass = create_model_pass(
         renderer.device,
-        renderer.get_compiled_shader,
-        .[renderer.color_target.image_info.format],
-        renderer.depth_image_info.format,
-        .[
-            renderer.materials_info.texture_descriptor_info.layout,
-            renderer.scene_info.layout,
-        ],
+        renderer.allocator,
+        get_compiled_shader,
+        color_target_image_format    = renderer.color_target.image_info.format,
+        depth_image_format           = renderer.depth_image_info.format,
+        texture_descriptor_layout    = renderer.materials_info.texture_descriptor_info.layout,
+        scene_info_descriptor_layout = renderer.scene_info.descriptor_set_layout,
     );
     if error {
         return
             error,
             renderer;
     }
-
-    renderer.model_draw_buckets_this_frame = init_model_draw_buckets();
 
     return
         "",
@@ -305,12 +296,14 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
-    destroy_model_draw_buckets(*renderer.model_draw_buckets_this_frame);
+    destroy_model_pass(
+        *renderer.model_pass,
+        renderer.device,
+        renderer.allocator,
+    );
 
     destroy_geometry_info(renderer.allocator, *renderer.geometry_info);
     destroy_materials_info(renderer.device, renderer.allocator, *renderer.materials_info);
-
-    destroy_pbr_pipeline(renderer.device, *renderer.pbr_pipeline_info);
 
     for *frame_resources: renderer.frame_resources_list {
         destroy_frame_resources(
@@ -352,7 +345,7 @@ deinit :: (renderer: *Renderer) {
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     renderer.scene_info.scene_data.camera_world_position = camera.position;
 
-    reset_model_draw_buckets(*renderer.model_draw_buckets_this_frame);
+    reset_model_pass(*renderer.model_pass);
 
     if renderer.swapchain_info.should_recreate {
         VK.device_wait_idle(renderer.device);
@@ -432,20 +425,12 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
 }
 
 draw_model :: (renderer: *Renderer, model: Model) {
-    for node: model.nodes {
-        if node.parent_index.kind != .NONE {
-            continue;
-        }
-
-        add_model_node_to_draw_bucket(
-            renderer.materials_info,
-            renderer.transforms,
-            *renderer.model_draw_buckets_this_frame,
-            node,
-            model.nodes,
-            model.transform,
-        );
-    }
+    add_model_to_model_pass(
+        *renderer.model_pass,
+        model,
+        renderer.materials_info,
+        renderer.transforms,
+    );
 }
 
 finish_drawing :: (renderer: *Renderer) -> error: string {
@@ -590,40 +575,6 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             p_depth_attachment = *depth_rendering_attachment_info,
         };
 
-        VK.cmd_bind_descriptor_sets(
-            frame_resources.command_buffer,
-            pipeline_bind_point = .GRAPHICS,
-            renderer.pbr_pipeline_info.layout,
-            first_set = 0,
-            .[
-                renderer.materials_info.texture_descriptor_info.set,
-                renderer.scene_info.sets[frame_resources_index],
-            ],
-            .[],
-        );
-
-        push_constants: Push_Constants = {
-            vertex_buffer_address   = renderer.geometry_info.vertex_buffer_info.device_address,
-            material_buffer_address = renderer.materials_info.material_buffer_info.device_address,
-            instance_buffer_address = frame_resources.instance_buffer_info.device_address,
-        };
-
-        VK.cmd_push_constants(
-            frame_resources.command_buffer,
-            renderer.pbr_pipeline_info.layout,
-            stage_flags = .VERTEX | .FRAGMENT,
-            offset = 0,
-            size_of(Push_Constants),
-            *push_constants,
-        );
-
-        VK.cmd_bind_index_buffer(
-            frame_resources.command_buffer,
-            renderer.geometry_info.index_buffer_info.buffer,
-            offset = 0,
-            index_type = .UINT32,
-        );
-
         VK.cmd_begin_rendering(frame_resources.command_buffer, *rendering_info);
     }
 
@@ -648,72 +599,15 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
 
-    // =========================================================================
-    // Mesh pass
-    // =========================================================================
-    draw_passes := into_draw_passes(*renderer.model_draw_buckets_this_frame, renderer.pbr_pipeline_info);
-    { // Check
-        count: int;
-        for draw_pass: draw_passes {
-            count += draw_pass.bucket.count;
-        }
-        assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
-    }
-
-    { // Copy to buffers
-        cursor: u32;
-        for pass: draw_passes {
-            for entry: pass.bucket {
-                command := entry.command;
-                command.first_instance = cursor;
-
-                frame_resources.indirect_draw_pointer[cursor] = command;
-                frame_resources.instance_pointer[cursor]      = entry.instance;
-
-                cursor += 1;
-            }
-        }
-    }
-
-    VMA.flush_allocation(
+    do_model_pass(
+        *renderer.model_pass,
+        renderer.geometry_info,
+        renderer.materials_info,
+        frame_resources_index,
+        frame_resources.command_buffer,
+        renderer.scene_info,
         renderer.allocator,
-        frame_resources.indirect_draw_buffer_info.allocation,
-        offset = 0,
-        VK.WHOLE_SIZE,
     );
-    VMA.flush_allocation(
-        renderer.allocator,
-        frame_resources.instance_buffer_info.allocation,
-        offset = 0,
-        VK.WHOLE_SIZE,
-    );
-
-    { // Draw
-        offset: int;
-        bound_pipeline:  VK.Pipeline;
-        for draw_pass: draw_passes {
-            if draw_pass.bucket.count == 0 {
-                continue;
-            }
-
-            if draw_pass.pipeline != bound_pipeline {
-                VK.cmd_bind_pipeline(frame_resources.command_buffer, .GRAPHICS, draw_pass.pipeline);
-                bound_pipeline = draw_pass.pipeline;
-            }
-
-            VK.cmd_set_cull_mode(frame_resources.command_buffer, draw_pass.cull_mode);
-
-            VK.cmd_draw_indexed_indirect(
-                frame_resources.command_buffer,
-                frame_resources.indirect_draw_buffer_info.buffer,
-                offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
-                draw_count = cast(u32, draw_pass.bucket.count),
-                stride     = size_of(VK.Draw_Indexed_Indirect_Command),
-            );
-
-            offset += draw_pass.bucket.count;
-        }
-    }
 
     VK.cmd_end_rendering(frame_resources.command_buffer);
 
@@ -1157,18 +1051,131 @@ upload_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error:
 
 #scope_module
 
+VK  :: #import "Jai_Vulkan";
+VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
+
 MAX_TEXTURE_COUNT        :: 256;
 MAX_SAMPLER_COUNT        :: 256;
 MAX_MATERIAL_COUNT       :: 256;
-MAX_DRAW_COUNT           :: 4096;
-MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
-MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
-Pbr_Pipeline_Info :: struct {
-    layout:          VK.Pipeline_Layout;
-    opaque_pipeline: VK.Pipeline;
-    blend_pipeline:  VK.Pipeline;
-    mask_pipeline:   VK.Pipeline;
+FRAMES_IN_FLIGHT_COUNT :: 2;
+
+// @Todo: give this a better name
+Scene_Info :: struct {
+    scene_data: Scene_Data;
+
+    descriptor_pool:       VK.Descriptor_Pool;
+    descriptor_set_layout: VK.Descriptor_Set_Layout;
+    descriptor_sets:       [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
+
+    buffer_infos: [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
+    pointers:     [FRAMES_IN_FLIGHT_COUNT]*Scene_Data;
+}
+
+Buffer_Info :: struct {
+    buffer:          VK.Buffer;
+    allocation:      VMA.Allocation;
+    allocation_info: VMA.Allocation_Info;
+    device_address:  VK.Device_Address;
+}
+
+Transforms :: struct {
+    projection:      Matrix4;
+    view:            Matrix4;
+    view_projection: Matrix4;
+}
+
+Geometry_Info :: struct {
+    index_buffer_info: Buffer_Info;
+    indices_offset: u32;
+
+    vertex_buffer_info: Buffer_Info;
+    vertices_offset: u32;
+
+    VERTEX_BUFFER_BYTE_SIZE  :: 64 * 1024 * 1024;
+    INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
+}
+
+Materials_Info :: struct {
+    samplers:             [..]VK.Sampler;
+    images:               [..]Image_Info;
+    material_buffer_info: Buffer_Info;
+    materials: [..]Material;
+    texture_count:  u32;
+    texture_descriptor_info: Descriptor_Info;
+}
+
+create_buffer :: (
+    device:       VK.Device,
+    allocator:    VMA.Allocator,
+    usage:        VK.Buffer_Usage_Flags,
+    byte_size:    u64,
+    memory_usage: VMA.Memory_Usage,
+    mappable:     bool,
+) -> error: string, Buffer_Info {
+    buffer: Buffer_Info;
+
+    buffer_create_info := VK.Buffer_Create_Info.{
+        size         = byte_size,
+        usage        = usage,
+        sharing_mode = .EXCLUSIVE,
+    };
+
+    allocation_create_info := VMA.Allocation_Create_Info.{
+        flags = ifx mappable then VMA.Allocation_Create_Flags.HOST_ACCESS_SEQUENTIAL_WRITE else 0,
+        usage = memory_usage,
+    };
+
+    result:, buffer.buffer, buffer.allocation, buffer.allocation_info = VMA.create_buffer(
+        allocator,
+        *buffer_create_info,
+        *allocation_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create buffer: %", result),
+            buffer;
+    }
+
+    if (usage & .SHADER_DEVICE_ADDRESS) {
+        vertex_buffer_device_address_info := VK.Buffer_Device_Address_Info.{
+            buffer = buffer.buffer,
+        };
+
+        buffer.device_address = VK.get_buffer_device_address(device, *vertex_buffer_device_address_info);
+    }
+
+    return "", buffer;
+}
+
+create_shader_module :: (
+    device: VK.Device,
+    name: string,
+    get_compiled_shader: Get_Compiled_Shader,
+) -> error: string, VK.Shader_Module {
+    error, content := get_compiled_shader(name,, temp);
+    if error {
+        return
+            error,
+            null;
+    }
+
+    shader_module_create_info := VK.Shader_Module_Create_Info.{
+        code_size = cast(u32, content.count * size_of(u8)),
+        p_code    = cast(*u32, content.data),
+    };
+
+    result, shader_module := VK.create_shader_module(
+        device,
+        *shader_module_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create shader module: %", result),
+            shader_module;
+    }
+
+    return "", shader_module;
 }
 
 
@@ -1194,8 +1201,6 @@ DEFAULT_TEXTURE_UNORM_FORMAT :: VK.Format.R8G8B8A8_UNORM;
 DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
 ];
-
-FRAMES_IN_FLIGHT_COUNT :: 2;
 
 HAVE_MORE_DEBUG :: DEBUG && true;
 
@@ -1231,20 +1236,6 @@ Swapchain_Info :: struct {
     should_recreate: bool;
 }
 
-Image_Info :: struct {
-    image:      VK.Image;
-    image_view: VK.Image_View;
-    allocation: VMA.Allocation;
-    format:     VK.Format;
-}
-
-Buffer_Info :: struct {
-    buffer:          VK.Buffer;
-    allocation:      VMA.Allocation;
-    allocation_info: VMA.Allocation_Info;
-    device_address:  VK.Device_Address;
-}
-
 Timeline_Semaphore_Info :: struct {
     semaphore:         VK.Semaphore;
     next_signal_value: u64;
@@ -1254,24 +1245,13 @@ Frame_Resources :: struct {
     command_pool:             VK.Command_Pool;
     command_buffer:           VK.Command_Buffer;
     image_acquired_semaphore: VK.Semaphore;
-
-    indirect_draw_buffer_info: Buffer_Info;
-    indirect_draw_pointer:     *VK.Draw_Indexed_Indirect_Command;
-
-    instance_buffer_info:    Buffer_Info;
-    instance_pointer: *Instance;
 }
 
-// @Todo: give this a better name
-Scene_Info :: struct {
-    scene_data: Scene_Data;
-
-    pool:         VK.Descriptor_Pool;
-    layout:       VK.Descriptor_Set_Layout;
-    sets:         [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
-
-    buffer_infos: [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
-    pointers:     [FRAMES_IN_FLIGHT_COUNT]*Scene_Data;
+Image_Info :: struct {
+    image:      VK.Image;
+    image_view: VK.Image_View;
+    allocation: VMA.Allocation;
+    format:     VK.Format;
 }
 
 // @Todo: give this a better name
@@ -1286,38 +1266,6 @@ Descriptor_Info :: struct {
     pool:   VK.Descriptor_Pool;
     layout: VK.Descriptor_Set_Layout;
     set:    VK.Descriptor_Set;
-}
-
-Push_Constants :: struct @Gpu {
-    vertex_buffer_address:   VK.Device_Address;
-    material_buffer_address: VK.Device_Address;
-    instance_buffer_address: VK.Device_Address;
-}
-
-Transforms :: struct {
-    projection:      Matrix4;
-    view:            Matrix4;
-    view_projection: Matrix4;
-}
-
-Geometry_Info :: struct {
-    index_buffer_info: Buffer_Info;
-    indices_offset: u32;
-
-    vertex_buffer_info: Buffer_Info;
-    vertices_offset: u32;
-
-    VERTEX_BUFFER_BYTE_SIZE  :: 64 * 1024 * 1024;
-    INDEX_BUFFER_BYTE_SIZE   :: 32 * 1024 * 1024;
-}
-
-Materials_Info :: struct {
-    samplers:             [..]VK.Sampler;
-    images:               [..]Image_Info;
-    material_buffer_info: Buffer_Info;
-    materials: [..]Material;
-    texture_count:  u32;
-    texture_descriptor_info: Descriptor_Info;
 }
 
 create_color_target :: (
@@ -1530,53 +1478,6 @@ destroy_geometry_info :: (allocator: VMA.Allocator, geometry_info: *Geometry_Inf
     );
 
     geometry_info.* = {};
-}
-
-add_model_node_to_draw_bucket :: (
-    materials_info: Materials_Info,
-    global_transforms: Transforms,
-    draw_buckets: *Model_Draw_Buckets,
-    node: Node,
-    nodes: []Node,
-    parent_transform: Matrix4,
-) {
-    world_transform := parent_transform * node.local_transform;
-
-    for mesh: node.meshes {
-        material := materials_info.materials[mesh.material_index];
-
-        bucket := get_model_draw_bucket_by_material(draw_buckets, material);
-
-        array_add(
-            bucket,
-            {
-                command = {
-                    index_count    = mesh.index_count,
-                    instance_count = 1, // @Todo
-                    first_index    = mesh.index_start,
-                    vertex_offset  = cast(s32, mesh.vertex_start),
-                },
-                instance = {
-                    wvp_transform   = transpose(global_transforms.view_projection * world_transform),
-                    world_transform = transpose(world_transform),
-                    material_index  = mesh.material_index,
-                },
-            },
-        );
-    }
-
-    for child_node_index: node.children_ids {
-        child_node := nodes[child_node_index];
-
-        add_model_node_to_draw_bucket(
-            materials_info,
-            global_transforms,
-            draw_buckets,
-            child_node,
-            nodes,
-            world_transform,
-        );
-    }
 }
 
 create_fallbacks :: (renderer: *Renderer) -> error: string {
@@ -2028,259 +1929,6 @@ map_copy_buffer_data :: (
     return "";
 }
 
-create_buffer :: (
-    device:       VK.Device,
-    allocator:    VMA.Allocator,
-    usage:        VK.Buffer_Usage_Flags,
-    byte_size:    u64,
-    memory_usage: VMA.Memory_Usage,
-    mappable:     bool,
-) -> error: string, Buffer_Info {
-    buffer: Buffer_Info;
-
-    buffer_create_info := VK.Buffer_Create_Info.{
-        size         = byte_size,
-        usage        = usage,
-        sharing_mode = .EXCLUSIVE,
-    };
-
-    allocation_create_info := VMA.Allocation_Create_Info.{
-        flags = ifx mappable then VMA.Allocation_Create_Flags.HOST_ACCESS_SEQUENTIAL_WRITE else 0,
-        usage = memory_usage,
-    };
-
-    result:, buffer.buffer, buffer.allocation, buffer.allocation_info = VMA.create_buffer(
-        allocator,
-        *buffer_create_info,
-        *allocation_create_info,
-    );
-    if result != .SUCCESS {
-        return
-            tprint("Failed to create buffer: %", result),
-            buffer;
-    }
-
-    if (usage & .SHADER_DEVICE_ADDRESS) {
-        vertex_buffer_device_address_info := VK.Buffer_Device_Address_Info.{
-            buffer = buffer.buffer,
-        };
-
-        buffer.device_address = VK.get_buffer_device_address(device, *vertex_buffer_device_address_info);
-    }
-
-    return "", buffer;
-}
-
-create_pbr_pipeline :: (
-    device:                   VK.Device,
-    get_compiled_shader:      Get_Compiled_Shader,
-    color_attachment_formats: []VK.Format,
-    depth_attachment_format:  VK.Format,
-    descriptor_set_layouts:   []VK.Descriptor_Set_Layout,
-) -> error: string, Pbr_Pipeline_Info {
-    pipeline_info: Pbr_Pipeline_Info;
-
-    { // Layout
-        push_constant_range := VK.Push_Constant_Range.{
-            stage_flags = .VERTEX | .FRAGMENT,
-            offset      = 0,
-            size        = size_of(Push_Constants),
-        };
-
-        layout_create_info := VK.Pipeline_Layout_Create_Info.{
-            set_layout_count          = cast(u32, descriptor_set_layouts.count),
-            p_set_layouts             = descriptor_set_layouts.data,
-            push_constant_range_count = 1,
-            p_push_constant_ranges    = *push_constant_range,
-        };
-
-        result:, pipeline_info.layout = VK.create_pipeline_layout(device, *layout_create_info);
-        if result != .SUCCESS {
-            return
-                tprint("Failed to create layout for pbr pipeline: %", result),
-                pipeline_info;
-        }
-    }
-
-    error, vertex_shader := create_shader_module(device, "pbr.vertex.spv", get_compiled_shader);
-    if error {
-        return
-            error,
-            pipeline_info;
-    }
-    defer VK.destroy_shader_module(device, vertex_shader);
-
-    error =, fragment_shader := create_shader_module(device, "pbr.fragment.spv", get_compiled_shader);
-    if error {
-        return
-            error,
-            pipeline_info;
-    }
-    defer VK.destroy_shader_module(device, fragment_shader);
-
-    specialization_map_entry := VK.Specialization_Map_Entry.{
-        constant_id = 0, // As in the shader
-        offset      = 0,
-        size        = size_of(Alpha_Mode),
-    };
-
-    alpha_mode := Alpha_Mode.OPAQUE;
-
-    specialization_info := VK.Specialization_Info.{
-        map_entry_count = 1,
-        p_map_entries   = *specialization_map_entry,
-        data_size       = size_of(Alpha_Mode),
-        p_data          = *alpha_mode,
-    };
-
-    shader_stage_create_infos := VK.Pipeline_Shader_Stage_Create_Info.[
-        {
-            stage  = .VERTEX,
-            module = vertex_shader,
-            p_name = "main",
-        },
-        {
-            stage  = .FRAGMENT,
-            module = fragment_shader,
-            p_name = "main",
-            p_specialization_info = *specialization_info,
-        },
-    ];
-
-    vertex_input_state_create_info := VK.Pipeline_Vertex_Input_State_Create_Info.{};
-
-    input_assembly_state_create_info := VK.Pipeline_Input_Assembly_State_Create_Info.{
-        topology = .TRIANGLE_LIST,
-    };
-
-    depth_stencil_state_create_info := VK.Pipeline_Depth_Stencil_State_Create_Info.{
-        depth_test_enable   = VK.TRUE,
-        depth_write_enable  = VK.TRUE,
-        depth_compare_op    = .LESS,
-        stencil_test_enable = VK.FALSE,
-    };
-
-    viewport_state_create_info := VK.Pipeline_Viewport_State_Create_Info.{
-        viewport_count = 1,
-        p_viewports    = null,
-        scissor_count  = 1,
-        p_scissors     = null,
-    };
-
-    rasterization_state_create_info := VK.Pipeline_Rasterization_State_Create_Info.{
-        polygon_mode = .FILL,
-        cull_mode    = .BACK,
-        front_face   = .COUNTER_CLOCKWISE,
-        line_width   = 1,
-    };
-
-    multisample_state_create_info := VK.Pipeline_Multisample_State_Create_Info.{
-        rasterization_samples = ._1,
-    };
-
-    color_blend_attachment_state := VK.Pipeline_Color_Blend_Attachment_State.{
-        blend_enable = VK.FALSE,
-        src_color_blend_factor = .SRC_ALPHA,
-        dst_color_blend_factor = .ONE_MINUS_SRC_ALPHA,
-        color_blend_op         = .ADD,
-        src_alpha_blend_factor = .ONE,
-        dst_alpha_blend_factor = .ONE_MINUS_SRC_ALPHA,
-        alpha_blend_op         = .ADD,
-        color_write_mask = .R | .G | .B | .A,
-    };
-
-    color_blend_state_create_info := VK.Pipeline_Color_Blend_State_Create_Info.{
-        attachment_count = 1,
-        p_attachments    = *color_blend_attachment_state,
-    };
-
-    dynamic_states := VK.Dynamic_State.[
-        .VIEWPORT,
-        .SCISSOR,
-        .CULL_MODE,
-    ];
-
-    dynamic_state_create_info := VK.Pipeline_Dynamic_State_Create_Info.{
-        dynamic_state_count = dynamic_states.count,
-        p_dynamic_states    = dynamic_states.data,
-    };
-
-    rendering_create_info := VK.Pipeline_Rendering_Create_Info.{
-        color_attachment_count     = cast(u32, color_attachment_formats.count),
-        p_color_attachment_formats = color_attachment_formats.data,
-        depth_attachment_format    = depth_attachment_format,
-    };
-
-    pipeline_create_info := VK.Graphics_Pipeline_Create_Info.{
-        p_next                 = *rendering_create_info,
-        stage_count            = shader_stage_create_infos.count,
-        p_stages               = shader_stage_create_infos.data,
-        p_vertex_input_state   = *vertex_input_state_create_info,
-        p_input_assembly_state = *input_assembly_state_create_info,
-        p_viewport_state       = *viewport_state_create_info,
-        p_rasterization_state  = *rasterization_state_create_info,
-        p_multisample_state    = *multisample_state_create_info,
-        p_depth_stencil_state  = *depth_stencil_state_create_info,
-        p_color_blend_state    = *color_blend_state_create_info,
-        p_dynamic_state        = *dynamic_state_create_info,
-        layout                 = pipeline_info.layout,
-        render_pass            = null,
-    };
-
-    { // Opaque
-        alpha_mode = .OPAQUE;
-        result:, pipeline_info.opaque_pipeline = VK.create_graphics_pipeline(
-            device,
-            null,
-            *pipeline_create_info,
-        );
-        if result != .SUCCESS {
-            return
-                tprint("Failed to create opaque pbr pipeline: %", result),
-                pipeline_info;
-        }
-    }
-    { // Mask
-        alpha_mode = .MASK;
-        result:, pipeline_info.mask_pipeline = VK.create_graphics_pipeline(
-            device,
-            null,
-            *pipeline_create_info,
-        );
-        if result != .SUCCESS {
-            return
-                tprint("Failed to create mask pbr pipeline: %", result),
-                pipeline_info;
-        }
-    }
-    { // Blend
-        alpha_mode = .BLEND;
-        color_blend_attachment_state.blend_enable = VK.TRUE;
-        depth_stencil_state_create_info.depth_write_enable = VK.FALSE;
-        result:, pipeline_info.blend_pipeline = VK.create_graphics_pipeline(
-            device,
-            null,
-            *pipeline_create_info,
-        );
-        if result != .SUCCESS {
-            return
-                tprint("Failed to create blend pbr pipeline: %", result),
-                pipeline_info;
-        }
-    }
-
-    return "", pipeline_info;
-}
-
-destroy_pbr_pipeline :: (device: VK.Device, pipeline_info: *Pbr_Pipeline_Info) {
-    VK.destroy_pipeline(device, pipeline_info.opaque_pipeline);
-    VK.destroy_pipeline(device, pipeline_info.mask_pipeline);
-    VK.destroy_pipeline(device, pipeline_info.blend_pipeline);
-    VK.destroy_pipeline_layout(device, pipeline_info.layout);
-
-    pipeline_info.* = {};
-}
-
 destroy_scene_info :: (
     device: VK.Device,
     allocator: VMA.Allocator,
@@ -2294,8 +1942,8 @@ destroy_scene_info :: (
             buffer_info.allocation,
         );
     }
-    VK.destroy_descriptor_set_layout(device, scene_info.layout);
-    VK.destroy_descriptor_pool(device, scene_info.pool);
+    VK.destroy_descriptor_set_layout(device, scene_info.descriptor_set_layout);
+    VK.destroy_descriptor_pool(device, scene_info.descriptor_pool);
 }
 
 create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Scene_Info {
@@ -2314,7 +1962,7 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
             pool_size_count = descriptor_pool_sizes.count,
             p_pool_sizes    = descriptor_pool_sizes.data,
         };
-        result:, scene_info.pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
+        result:, scene_info.descriptor_pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
         if result != .SUCCESS {
             return
                 tprint("Failed to create descriptor pool for scene: %", result),
@@ -2337,7 +1985,7 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
             p_bindings    = bindings.data,
         };
 
-        result:, scene_info.layout = VK.create_descriptor_set_layout(
+        result:, scene_info.descriptor_set_layout = VK.create_descriptor_set_layout(
             device,
             *descriptor_set_layout_create_info,
         );
@@ -2351,10 +1999,10 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
     { // Set
         layouts: [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set_Layout;
         for *layout: layouts {
-            layout.* = scene_info.layout;
+            layout.* = scene_info.descriptor_set_layout;
         }
         descriptor_set_allocate_info := VK.Descriptor_Set_Allocate_Info.{
-            descriptor_pool      = scene_info.pool,
+            descriptor_pool      = scene_info.descriptor_pool,
             descriptor_set_count = layouts.count,
             p_set_layouts        = layouts.data,
         };
@@ -2366,7 +2014,7 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
                 scene_info;
         }
 
-        for *set: scene_info.sets {
+        for *set: scene_info.descriptor_sets {
             set.* = descriptor_sets[it_index];
         }
     }
@@ -2407,7 +2055,7 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
         };
 
         write_descriptor_set := VK.Write_Descriptor_Set.{
-            dst_set          = scene_info.sets[it_index],
+            dst_set          = scene_info.descriptor_sets[it_index],
             dst_binding      = 0,
             descriptor_count = 1,
             descriptor_type  = .UNIFORM_BUFFER,
@@ -2518,26 +2166,6 @@ destroy_frame_resources :: (
     allocator:       VMA.Allocator,
     frame_resources: *Frame_Resources,
 ) {
-    VMA.unmap_memory(
-        allocator,
-        frame_resources.instance_buffer_info.allocation,
-    );
-    VMA.destroy_buffer(
-        allocator,
-        frame_resources.instance_buffer_info.buffer,
-        frame_resources.instance_buffer_info.allocation,
-    );
-
-    VMA.unmap_memory(
-        allocator,
-        frame_resources.indirect_draw_buffer_info.allocation,
-    );
-    VMA.destroy_buffer(
-        allocator,
-        frame_resources.indirect_draw_buffer_info.buffer,
-        frame_resources.indirect_draw_buffer_info.allocation,
-    );
-
     VK.destroy_semaphore(
         device,
         frame_resources.image_acquired_semaphore,
@@ -2599,57 +2227,6 @@ create_frame_resources :: (
         if result != .SUCCESS {
             return
                 tprint("Failed to allocate a command buffer for a frame resources: %", result),
-                frame_resources;
-        }
-    }
-
-    { // Indirect draw buffer
-        error:, frame_resources.indirect_draw_buffer_info = create_buffer(
-            device,
-            allocator,
-            usage = .INDIRECT_BUFFER,
-            MAX_INDIRECT_BUFFER_SIZE,
-            memory_usage = .AUTO,
-            mappable = true,
-        );
-        if error {
-            return
-                tprint("Failed to create indirect draw buffer for frame resources: %", error),
-                frame_resources;
-        }
-        result:, frame_resources.indirect_draw_pointer = VMA.map_memory(
-            allocator,
-            frame_resources.indirect_draw_buffer_info.allocation,
-        );
-        if result != .SUCCESS {
-            return
-                tprint("Failed to map indirect draw buffer memory: %", result),
-                frame_resources;
-        }
-    }
-
-    { // Instance buffer
-        error:, frame_resources.instance_buffer_info = create_buffer(
-            device,
-            allocator,
-            usage = .STORAGE_BUFFER | .SHADER_DEVICE_ADDRESS,
-            MAX_INSTANCE_BUFFER_SIZE,
-            memory_usage = .AUTO,
-            mappable = true,
-        );
-        if error {
-            return
-                tprint("Failed to create instance buffer for frame resources: %", error),
-                frame_resources;
-        }
-
-        result:, frame_resources.instance_pointer = VMA.map_memory(
-            allocator,
-            frame_resources.instance_buffer_info.allocation,
-        );
-        if result != .SUCCESS {
-            return
-                tprint("Fialed to map instance buffer memory: %", result),
                 frame_resources;
         }
     }
@@ -3320,36 +2897,6 @@ create_image_view :: (
     return "", image_view;
 }
 
-create_shader_module :: (
-    device: VK.Device,
-    name: string,
-    get_compiled_shader: Get_Compiled_Shader,
-) -> error: string, VK.Shader_Module {
-    error, content := get_compiled_shader(name,, temp);
-    if error {
-        return
-            error,
-            null;
-    }
-
-    shader_module_create_info := VK.Shader_Module_Create_Info.{
-        code_size = cast(u32, content.count * size_of(u8)),
-        p_code    = cast(*u32, content.data),
-    };
-
-    result, shader_module := VK.create_shader_module(
-        device,
-        *shader_module_create_info,
-    );
-    if result != .SUCCESS {
-        return
-            tprint("Failed to create shader module: %", result),
-            shader_module;
-    }
-
-    return "", shader_module;
-}
-
 #if DEBUG {
     create_debug_utils_messenger :: (instance: VK.Instance) -> VK.Debug_Utils_Messenger_Ext {
         create_debug_utils_messenger_ext: VK.Pfn_Create_Debug_Utils_Messenger_Ext = VK.get_instance_proc_addr(
@@ -3422,12 +2969,10 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
 
 #import "Basic";
 #import "Math";
-VK  :: #import "Jai_Vulkan";
-VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
 #if DEBUG {
     #import "Print_Vars";
 }
 
 #load "model.jai";
-#load "model_draw_buckets.jai";
+#load "model_pass.jai";

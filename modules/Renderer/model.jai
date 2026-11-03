@@ -55,12 +55,6 @@ Vertex :: struct @Gpu {
     tangent:  Vector4 = { 1, 0, 0, 1 };
 }
 
-Instance :: struct @Gpu {
-    wvp_transform:   Matrix4;
-    world_transform: Matrix4;
-    material_index:  u32;
-}
-
 Alpha_Mode :: enum u32 #specified {
     OPAQUE :: 0;
     MASK   :: 1;
