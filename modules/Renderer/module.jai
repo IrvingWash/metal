@@ -290,6 +290,8 @@ init :: (
     }
 
     error, renderer.shadow_pass = create_shadow_pass(
+        renderer.device,
+        renderer.allocator,
     );
     if error {
         return
@@ -306,6 +308,8 @@ deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
     destroy_shadow_pass(
+        renderer.device,
+        renderer.allocator,
         *renderer.shadow_pass,
     );
 
@@ -328,12 +332,12 @@ deinit :: (renderer: *Renderer) {
 
     destroy_scene_info(renderer.device, renderer.allocator, renderer.scene_info);
 
-    destroy_image( // Depth image
+    destroy_image_info( // Depth image
         renderer.device,
         renderer.allocator,
         *renderer.depth_image_info,
     );
-    destroy_image(renderer.device, renderer.allocator, *renderer.color_target.image_info);
+    destroy_image_info(renderer.device, renderer.allocator, *renderer.color_target.image_info);
     destroy_swapchain(renderer.device, *renderer.swapchain_info);
 
     VK.destroy_command_pool(renderer.device, renderer.transient_command_pool);
@@ -393,7 +397,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
             renderer.color_target.extent.height,
         );
         if error {
-            destroy_image(renderer.device, renderer.allocator, *new_color_target.image_info);
+            destroy_image_info(renderer.device, renderer.allocator, *new_color_target.image_info);
             return tprint("Failed to create new color target: %", error);
         }
 
@@ -404,13 +408,13 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
             renderer.color_target.extent.height,
         );
         if error {
-            destroy_image(renderer.device, renderer.allocator, *new_color_target.image_info);
-            destroy_image(renderer.device, renderer.allocator, *new_depth_image);
+            destroy_image_info(renderer.device, renderer.allocator, *new_color_target.image_info);
+            destroy_image_info(renderer.device, renderer.allocator, *new_depth_image);
             return tprint("Failed to create new depth image: %", error);
         }
 
-        destroy_image(renderer.device, renderer.allocator, *renderer.color_target.image_info);
-        destroy_image(renderer.device, renderer.allocator, *renderer.depth_image_info);
+        destroy_image_info(renderer.device, renderer.allocator, *renderer.color_target.image_info);
+        destroy_image_info(renderer.device, renderer.allocator, *renderer.depth_image_info);
 
         renderer.color_target = new_color_target;
         renderer.depth_image_info = new_depth_image;
@@ -612,7 +616,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
 
-    do_shadow_pass(*renderer.shadow_pass);
+    light_source: Light_Source;
+    light_source.kind = .DIRECTIONAL;
+    light_source.directional.direction = renderer.scene_info.scene_data.directional_light.direction;
+    do_shadow_pass(*renderer.shadow_pass, light_source);
 
     do_model_pass(
         *renderer.model_pass,
@@ -1076,6 +1083,13 @@ MAX_MATERIAL_COUNT       :: 256;
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
+Image_Info :: struct {
+    image:      VK.Image;
+    image_view: VK.Image_View;
+    allocation: VMA.Allocation;
+    format:     VK.Format;
+}
+
 // @Todo: give this a better name
 Scene_Info :: struct {
     scene_data: Scene_Data;
@@ -1119,6 +1133,81 @@ Materials_Info :: struct {
     materials: [..]Material;
     texture_count:  u32;
     texture_descriptor_info: Descriptor_Info;
+}
+
+destroy_image_info :: (
+    device: VK.Device,
+    allocator: VMA.Allocator,
+    image_info: *Image_Info,
+) {
+    VK.destroy_image_view(device, image_info.image_view);
+    VMA.destroy_image(allocator, image_info.image, image_info.allocation);
+
+    image_info.* = {};
+}
+
+create_image_info :: (
+    device:           VK.Device,
+    allocator:        VMA.Allocator,
+    format:           VK.Format,
+    width:            u32,
+    height:           u32,
+    depth:            u32,
+    tiling:           VK.Image_Tiling,
+    usage:            VK.Image_Usage_Flags,
+    allocation_flags: VMA.Allocation_Create_Flags,
+    aspect_mask:      VK.Image_Aspect_Flags,
+    mip_level_count:  u32 = 1,
+) -> error: string, Image_Info {
+    image_info: Image_Info;
+
+    image_create_info := VK.Image_Create_Info.{
+        image_type = ._2D,
+        format     = format,
+        extent = {
+            width  = width,
+            height = height,
+            depth  = depth,
+        },
+        mip_levels     = mip_level_count,
+        array_layers   = 1,
+        samples        = ._1,
+        tiling         = tiling,
+        usage          = usage,
+        initial_layout = .UNDEFINED,
+        sharing_mode   = .EXCLUSIVE,
+    };
+
+    allocation_create_info := VMA.Allocation_Create_Info.{
+        flags = allocation_flags,
+        usage = .AUTO,
+    };
+
+    result:, image_info.image, image_info.allocation = VMA.create_image(
+        allocator,
+        *image_create_info,
+        *allocation_create_info,
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create image: %", result),
+            image_info;
+    }
+
+    error:, image_info.image_view = create_image_view(
+        device,
+        image_info.image,
+        format,
+        aspect_mask,
+        mip_level_count,
+    );
+    if error {
+        return error, image_info;
+    }
+
+    image_info.format = format;
+
+    return "", image_info;
 }
 
 create_buffer :: (
@@ -1263,13 +1352,6 @@ Frame_Resources :: struct {
     image_acquired_semaphore: VK.Semaphore;
 }
 
-Image_Info :: struct {
-    image:      VK.Image;
-    image_view: VK.Image_View;
-    allocation: VMA.Allocation;
-    format:     VK.Format;
-}
-
 // @Todo: give this a better name
 Scene_Data :: struct @Gpu {
     directional_light:     Directional_Light;
@@ -1292,7 +1374,7 @@ create_color_target :: (
 ) -> error: string, Color_Target {
     color_target: Color_Target;
 
-    error:, color_target.image_info = create_image(
+    error:, color_target.image_info = create_image_info(
         device,
         allocator,
         DEFAULT_COLOR_TARGET_FORMAT,
@@ -1460,7 +1542,7 @@ destroy_materials_info :: (device: VK.Device, allocator: VMA.Allocator, material
     array_free(materials_info.samplers);
 
     for image_info: materials_info.images {
-        destroy_image(
+        destroy_image_info(
             device,
             allocator,
             *image_info,
@@ -1669,7 +1751,7 @@ create_texture_image_and_record_transition :: (
         usage |= .TRANSFER_SRC;
     }
 
-    error, image_info := create_image(
+    error, image_info := create_image_info(
         device,
         allocator,
         format = format,
@@ -2325,7 +2407,7 @@ create_depth_image :: (
     width:     u32,
     height:    u32,
 ) -> error: string, Image_Info {
-    error, depth_image_info := create_image(
+    error, depth_image_info := create_image_info(
         device,
         allocator,
         format           = DEPTH_IMAGE_FORMAT,
@@ -2808,81 +2890,6 @@ create_instance :: (get_additional_extensions: Get_Additional_Instance_Extension
     return
         "",
         instance;
-}
-
-create_image :: (
-    device:           VK.Device,
-    allocator:        VMA.Allocator,
-    format:           VK.Format,
-    width:            u32,
-    height:           u32,
-    depth:            u32,
-    tiling:           VK.Image_Tiling,
-    usage:            VK.Image_Usage_Flags,
-    allocation_flags: VMA.Allocation_Create_Flags,
-    aspect_mask:      VK.Image_Aspect_Flags,
-    mip_level_count:  u32 = 1,
-) -> error: string, Image_Info {
-    image_info: Image_Info;
-
-    image_create_info := VK.Image_Create_Info.{
-        image_type = ._2D,
-        format     = format,
-        extent = {
-            width  = width,
-            height = height,
-            depth  = depth,
-        },
-        mip_levels     = mip_level_count,
-        array_layers   = 1,
-        samples        = ._1,
-        tiling         = tiling,
-        usage          = usage,
-        initial_layout = .UNDEFINED,
-        sharing_mode   = .EXCLUSIVE,
-    };
-
-    allocation_create_info := VMA.Allocation_Create_Info.{
-        flags = allocation_flags,
-        usage = .AUTO,
-    };
-
-    result:, image_info.image, image_info.allocation = VMA.create_image(
-        allocator,
-        *image_create_info,
-        *allocation_create_info,
-    );
-    if result != .SUCCESS {
-        return
-            tprint("Failed to create image: %", result),
-            image_info;
-    }
-
-    error:, image_info.image_view = create_image_view(
-        device,
-        image_info.image,
-        format,
-        aspect_mask,
-        mip_level_count,
-    );
-    if error {
-        return error, image_info;
-    }
-
-    image_info.format = format;
-
-    return "", image_info;
-}
-
-destroy_image :: (
-    device: VK.Device,
-    allocator: VMA.Allocator,
-    image_info: *Image_Info,
-) {
-    VK.destroy_image_view(device, image_info.image_view);
-    VMA.destroy_image(allocator, image_info.image, image_info.allocation);
-
-    image_info.* = {};
 }
 
 create_image_view :: (
