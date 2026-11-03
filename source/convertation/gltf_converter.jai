@@ -454,29 +454,6 @@ convert_gltf_primitive_to_mesh_dto :: (
         );
     }
 
-    if gltf_primitive.attributes._tangent != Gltf.SENTINEL {
-        gltf_tangent_accessor := gltf.accessors[gltf_primitive.attributes._tangent];
-        assert(
-            gltf_tangent_accessor.count == mesh_dto.vertices.count,
-            "There is less tangents than positions (%)",
-            identifier_for_errors,
-        );
-        parse_gltf_attribute(
-            gltf,
-            gltf_tangent_accessor,
-            *mesh_dto.vertices[0].tangent,
-            size_of(Vertex_Dto),
-            attribute_key_for_errors = "TANGENT",
-            identifier_for_errors,
-        );
-   } else {
-        log(
-            "GLTF Converter: the primive doesn't have tangents (%)",
-            identifier_for_errors,
-            flags = .WARNING,
-        );
-   }
-
     if gltf_primitive.attributes._tex_coord_0 != Gltf.SENTINEL {
         gltf_tex_coord_0_accessor := gltf.accessors[gltf_primitive.attributes._tex_coord_0];
         assert(
@@ -522,6 +499,29 @@ convert_gltf_primitive_to_mesh_dto :: (
             flags = .WARNING,
         );
     }
+
+    if gltf_primitive.attributes._tangent != Gltf.SENTINEL {
+        gltf_tangent_accessor := gltf.accessors[gltf_primitive.attributes._tangent];
+        assert(
+            gltf_tangent_accessor.count == mesh_dto.vertices.count,
+            "There is less tangents than positions (%)",
+            identifier_for_errors,
+        );
+        parse_gltf_attribute(
+            gltf,
+            gltf_tangent_accessor,
+            *mesh_dto.vertices[0].tangent,
+            size_of(Vertex_Dto),
+            attribute_key_for_errors = "TANGENT",
+            identifier_for_errors,
+        );
+   } else {
+        log(
+            "GLTF Converter: the primive doesn't have tangents (%)",
+            identifier_for_errors,
+            flags = .WARNING,
+        );
+   }
 
     return mesh_dto;
 }
