@@ -148,7 +148,7 @@ Min_Filter_Dto :: enum {
 }
 
 destroy :: (model_dto: *Model_Dto) {
-    #if DEBUG log("Model_Dto: Destroying %", model_dto.name);
+    log("Model_Dto: Destroying %", model_dto.name);
 
     free(model_dto.name);
 

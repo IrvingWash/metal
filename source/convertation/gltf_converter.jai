@@ -430,6 +430,7 @@ convert_gltf_primitive_to_mesh_dto :: (
     } else {
         assert(false, "No POSITION attribute (%)", identifier_for_errors);
     }
+
     if gltf_primitive.attributes._normal != Gltf.SENTINEL {
         gltf_normal_accessor := gltf.accessors[gltf_primitive.attributes._normal];
         assert(
@@ -446,12 +447,13 @@ convert_gltf_primitive_to_mesh_dto :: (
             identifier_for_errors,
         );
     } else {
-        log(
+        assert(
+            false,
             "GLTF Converter: No normals in the primitive (%)",
             identifier_for_errors,
-            flags = .WARNING
         );
     }
+
     if gltf_primitive.attributes._tangent != Gltf.SENTINEL {
         gltf_tangent_accessor := gltf.accessors[gltf_primitive.attributes._tangent];
         assert(
@@ -467,7 +469,14 @@ convert_gltf_primitive_to_mesh_dto :: (
             attribute_key_for_errors = "TANGENT",
             identifier_for_errors,
         );
-    }
+   } else {
+        log(
+            "GLTF Converter: the primive doesn't have tangents (%)",
+            identifier_for_errors,
+            flags = .WARNING,
+        );
+   }
+
     if gltf_primitive.attributes._tex_coord_0 != Gltf.SENTINEL {
         gltf_tex_coord_0_accessor := gltf.accessors[gltf_primitive.attributes._tex_coord_0];
         assert(
@@ -483,7 +492,14 @@ convert_gltf_primitive_to_mesh_dto :: (
             attribute_key_for_errors = "TEXCOORD_0",
             identifier_for_errors,
         );
+    } else {
+        log(
+            "GLTF Converter: the primive doesn't have uv0 (%)",
+            identifier_for_errors,
+            flags = .WARNING,
+        );
     }
+
     if gltf_primitive.attributes._color_0 != Gltf.SENTINEL {
         gltf_color_0_accessor := gltf.accessors[gltf_primitive.attributes._color_0];
         assert(
@@ -498,6 +514,12 @@ convert_gltf_primitive_to_mesh_dto :: (
             size_of(Vertex_Dto),
             attribute_key_for_errors = "COLOR_0",
             identifier_for_errors,
+        );
+    } else {
+        log(
+            "GLTF Converter: the primive doesn't have color0 (%)",
+            identifier_for_errors,
+            flags = .WARNING,
         );
     }
 

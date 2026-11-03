@@ -57,6 +57,8 @@ main :: () {
         cast(u32, display_info.width * display_info.dpi),
         cast(u32, display_info.height * display_info.dpi),
     );
+    state.renderer.normalized_clear_color = { 0.9, 0.9, 1, 1 };
+    state.renderer.scene_info.scene_data.ambient_color = { 0.1, 0.1, 0.1 };
 
     add_model :: (path: string, translation: Vector3 = {}, scale: Vector3 = {1, 1, 1}) {
         model := asset_manager_upload_model(*state.asset_manager, path);
@@ -69,6 +71,8 @@ main :: () {
 
     add_model("assets/models/damaged_helmet/scene.glb", translation = { -1, 0 ,0 });
     add_model("../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf", translation = {1, 0, 0 });
+    // add_model("assets/models/snowy_mountain/snowy_mountain.glb", scale = { 100, 100, 100 });
+    add_model("../../Models/death_valley.glb", scale = { 100, 100, 100 });
 
     while !state.should_quit {
         dt := calculate_delta_time();

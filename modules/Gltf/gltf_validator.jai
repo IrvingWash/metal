@@ -35,7 +35,12 @@ validate_gltf :: (gltf: Gltf, gltf_identifier: string) -> error: string {
             }
 
             if primitive.attributes._tangent == SENTINEL {
-                log("GLTF Validator: % doesn't have tangents", gltf_identifier, flags = .WARNING);
+                log(
+                    "GLTF Validator: % primitive of mesh % doesn't have tangents",
+                    gltf_identifier,
+                    mesh.name,
+                    flags = .WARNING,
+                );
             }
 
             if primitive._indices != SENTINEL {

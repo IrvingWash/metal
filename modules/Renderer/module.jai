@@ -1143,7 +1143,7 @@ MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Co
 MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
 
-HAVE_MORE_DEBUG :: DEBUG && true;
+HAVE_MORE_DEBUG :: DEBUG && false;
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[

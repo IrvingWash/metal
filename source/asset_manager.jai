@@ -39,6 +39,8 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
 // @Todo: In the future, this will just upload our own binaries.
 // The convertation would be run via a script, like shader compilation
 asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> Renderer.Model {
+    log("Asset Manager: Uploading model at %", path);
+
     renderer_model: Renderer.Model;
 
     maybe_model_dto: Option(Model_Dto);
@@ -56,6 +58,10 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
 
     model_dto := maybe_model_dto.some;
     defer destroy(*model_dto);
+
+    for mesh_dto: model_dto.meshes {
+        assert(mesh_dto.topology == .TRIANGLES, "Model at % has meshes with unsupported topology %", mesh_dto.topology);
+    }
 
     uploaded_renderer_material_ids: [..]u32;
     uploaded_renderer_material_ids.allocator = temp;
