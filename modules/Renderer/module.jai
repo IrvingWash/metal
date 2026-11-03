@@ -511,43 +511,6 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     renderer.frame_index += 1;
     renderer.timeline_semaphore_info.next_signal_value += 1;
 
-    draw_passes := into_draw_passes(*renderer.model_draw_buckets_this_frame, renderer.pbr_pipeline_info);
-    { // Check
-        count: int;
-        for draw_pass: draw_passes {
-            count += draw_pass.bucket.count;
-        }
-        assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
-    }
-
-    { // Copy to buffers
-        cursor: u32;
-        for pass: draw_passes {
-            for entry: pass.bucket {
-                command := entry.command;
-                command.first_instance = cursor;
-
-                frame_resources.indirect_draw_pointer[cursor] = command;
-                frame_resources.instance_pointer[cursor]      = entry.instance;
-
-                cursor += 1;
-            }
-        }
-    }
-
-    VMA.flush_allocation(
-        renderer.allocator,
-        frame_resources.indirect_draw_buffer_info.allocation,
-        offset = 0,
-        VK.WHOLE_SIZE,
-    );
-    VMA.flush_allocation(
-        renderer.allocator,
-        frame_resources.instance_buffer_info.allocation,
-        offset = 0,
-        VK.WHOLE_SIZE,
-    );
-
     { // Begin command buffer
         command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
             flags = .ONE_TIME_SUBMIT,
@@ -685,6 +648,46 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
 
+    // =========================================================================
+    // Mesh pass
+    // =========================================================================
+    draw_passes := into_draw_passes(*renderer.model_draw_buckets_this_frame, renderer.pbr_pipeline_info);
+    { // Check
+        count: int;
+        for draw_pass: draw_passes {
+            count += draw_pass.bucket.count;
+        }
+        assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
+    }
+
+    { // Copy to buffers
+        cursor: u32;
+        for pass: draw_passes {
+            for entry: pass.bucket {
+                command := entry.command;
+                command.first_instance = cursor;
+
+                frame_resources.indirect_draw_pointer[cursor] = command;
+                frame_resources.instance_pointer[cursor]      = entry.instance;
+
+                cursor += 1;
+            }
+        }
+    }
+
+    VMA.flush_allocation(
+        renderer.allocator,
+        frame_resources.indirect_draw_buffer_info.allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
+    VMA.flush_allocation(
+        renderer.allocator,
+        frame_resources.instance_buffer_info.allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
+
     { // Draw
         offset: int;
         bound_pipeline:  VK.Pipeline;
@@ -711,7 +714,6 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             offset += draw_pass.bucket.count;
         }
     }
-
 
     VK.cmd_end_rendering(frame_resources.command_buffer);
 
