@@ -364,6 +364,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
             old_swapchain = renderer.swapchain_info.swapchain,
         );
         if error {
+            destroy_swapchain(renderer.device, *new_swapchain_info);
             return error;
         }
 
