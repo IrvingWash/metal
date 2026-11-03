@@ -33,6 +33,7 @@ TRUE:  Bool : 1;
 FALSE: Bool : 0;
 
 WHOLE_SIZE :: ~cast(u64) 0;
+QUEUE_FAMILY_IGNORED :: ~cast(u32) 0;
 LOD_CLAMP_NONE: float : 1000;
 
 Pfn_Debug_Utils_Messenger_Callback_Ext :: #type (

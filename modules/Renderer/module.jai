@@ -6,6 +6,8 @@ FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID :: FALLBACK_COLOR_TEXTURE_ID;
 FALLBACK_OCCLUSION_TEXTURE_ID          :: FALLBACK_COLOR_TEXTURE_ID;
 FALLBACK_EMISSIVE_TEXTURE_ID           :: FALLBACK_COLOR_TEXTURE_ID;
 
+NO_LOD_CLAMP :: VK.LOD_CLAMP_NONE;
+
 Renderer :: struct {
     window:                 Window_Type;
     get_window_render_size: Get_Window_Render_Size; // @Todo: maybe remove this, so Renderer doesn't know
@@ -64,9 +66,10 @@ Get_Compiled_Shader :: #type (name: string) -> error: string, content: string;
 Create_Sampler_Params :: VK.Sampler_Create_Info;
 
 Image_Params :: struct {
-    width:  u32;
-    height: u32;
-    bytes:  []u8;
+    width:           u32;
+    height:          u32;
+    bytes:           []u8;
+    want_mipmapping: bool;
 
     format_kind: enum {
         SRGB;
@@ -88,7 +91,7 @@ Camera :: struct {
 
 Directional_Light :: struct @Gpu {
     direction: Vector3 = { 0, -1, -1 };
-    intensity: float   = 3;
+    intensity: float   = 5;
     color:     Vector3 = { 1, 1, 1 };
 }
 
@@ -1036,7 +1039,10 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
 }
 
 // @Todo: batching
-upload_texture_images :: (renderer: *Renderer, image_params_list: []Image_Params) -> error: string, image_ids: [..]u32 {
+upload_texture_images :: (
+    renderer:          *Renderer,
+    image_params_list: []Image_Params,
+) -> error: string, image_ids: [..]u32 {
     image_ids: [..]u32;
 
     error, command_buffer := start_transient_command_buffer(
@@ -1679,6 +1685,21 @@ create_texture_image_and_record_transition :: (
             format = DEFAULT_TEXTURE_UNORM_FORMAT;
     }
 
+    mip_level_count: u32 = 1;
+    if image_params.want_mipmapping {
+        max_size := max(image_params.width, image_params.height);
+
+        while max_size > 1 {
+            max_size /= 2;
+            mip_level_count += 1;
+        }
+    }
+
+    usage: VK.Image_Usage_Flags = .TRANSFER_DST | .SAMPLED;
+    if mip_level_count > 1 {
+        usage |= .TRANSFER_SRC;
+    }
+
     error, image_info := create_image(
         device,
         allocator,
@@ -1687,9 +1708,10 @@ create_texture_image_and_record_transition :: (
         image_params.height,
         depth            = 1,
         tiling           = .OPTIMAL,
-        usage            = .TRANSFER_DST | .SAMPLED,
+        usage            = usage,
         allocation_flags = 0,
         aspect_mask      = .COLOR,
+        mip_level_count  = mip_level_count,
     );
     if error {
         return
@@ -1702,14 +1724,14 @@ create_texture_image_and_record_transition :: (
         transfer_barrier := VK.Image_Memory_Barrier_2.{
             src_stage_mask  = .NONE,
             src_access_mask = .NONE,
-            dst_stage_mask  = .COPY,
+            dst_stage_mask  = .COPY | .BLIT,
             dst_access_mask = .TRANSFER_WRITE,
             old_layout      = .UNDEFINED,
             new_layout      = .TRANSFER_DST_OPTIMAL,
             image           = image_info.image,
             subresource_range = {
                 aspect_mask = .COLOR,
-                level_count = 1,
+                level_count = mip_level_count,
                 layer_count = 1,
             },
         };
@@ -1774,37 +1796,157 @@ create_texture_image_and_record_transition :: (
         );
     }
 
-    { // Transition into layout suitable for sampling
-        shader_read_barrier := VK.Image_Memory_Barrier_2.{
+    if image_params.want_mipmapping && mip_level_count > 1 {
+        generate_mipmaps_and_transition_to_shader_read_only(
+            image_info.image,
+            image_params.width,
+            image_params.height,
+            mip_level_count,
+            command_buffer,
+        );
+    } else {
+        barrier := VK.Image_Memory_Barrier_2.{
             src_stage_mask  = .COPY,
             src_access_mask = .TRANSFER_WRITE,
             dst_stage_mask  = .FRAGMENT_SHADER,
-            dst_access_mask = .SHADER_READ,
+            dst_access_mask = .SHADER_SAMPLED_READ,
             old_layout      = .TRANSFER_DST_OPTIMAL,
             new_layout      = .SHADER_READ_ONLY_OPTIMAL,
             image           = image_info.image,
-            subresource_range = {
-                aspect_mask      = .COLOR,
-                level_count      = 1,
-                layer_count      = 1,
-            },
+            subresource_range = { aspect_mask = .COLOR, level_count = 1, layer_count = 1 },
         };
-
-        shader_read_dependency_info := VK.Dependency_Info.{
+        dependency_info := VK.Dependency_Info.{
             image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *shader_read_barrier,
+            p_image_memory_barriers    = *barrier,
         };
-
-        VK.cmd_pipeline_barrier_2(
-            command_buffer,
-            *shader_read_dependency_info,
-        );
+        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
     }
 
     return
         "",
         image_info,
         staging_buffer_info;
+}
+
+generate_mipmaps_and_transition_to_shader_read_only :: (
+    image:          VK.Image,
+    width:          u32,
+    height:         u32,
+    level_count:    u32,
+    command_buffer: VK.Command_Buffer,
+) {
+    barrier := VK.Image_Memory_Barrier_2.{
+        src_access_mask        = .TRANSFER_WRITE,
+        dst_access_mask        = .TRANSFER_READ,
+        old_layout             = .TRANSFER_DST_OPTIMAL,
+        new_layout             = .TRANSFER_SRC_OPTIMAL,
+        src_queue_family_index = VK.QUEUE_FAMILY_IGNORED,
+        dst_queue_family_index = VK.QUEUE_FAMILY_IGNORED,
+        src_stage_mask         = .TRANSFER,
+        dst_stage_mask         = .TRANSFER,
+        image                  = image,
+        subresource_range      = {
+            aspect_mask = .COLOR,
+            level_count = 1,
+            layer_count = 1,
+        },
+    };
+
+    mip_width  := cast(s32, width);
+    mip_height := cast(s32, height);
+    for 1 .. level_count - 1 {
+        barrier.subresource_range.base_mip_level = it - 1; // Resetting these because we reuse the barrier
+        barrier.old_layout      = .TRANSFER_DST_OPTIMAL;
+        barrier.new_layout      = .TRANSFER_SRC_OPTIMAL;
+        barrier.src_access_mask = .TRANSFER_WRITE;
+        barrier.dst_access_mask = .TRANSFER_READ;
+        barrier.src_stage_mask  = .TRANSFER;
+        barrier.dst_stage_mask  = .TRANSFER;
+
+        dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers    = *barrier,
+        };
+
+        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
+
+        blit_region := VK.Image_Blit_2.{
+            src_subresource = {
+                aspect_mask = .COLOR,
+                mip_level   = barrier.subresource_range.base_mip_level,
+                layer_count = 1,
+            },
+            src_offsets = .[{}, { mip_width, mip_height, 1 }],
+            dst_subresource = {
+                aspect_mask = .COLOR,
+                mip_level   = it,
+                layer_count = 1,
+            },
+            dst_offsets = .[
+                {},
+                {
+                    x = ifx 1 < mip_width
+                        then mip_width / 2
+                        else 1,
+                    y = ifx 1 < mip_height
+                        then mip_height / 2
+                        else 1,
+                    z = 1,
+                }
+            ],
+        };
+
+        blit_info := VK.Blit_Image_Info_2.{
+            src_image        = image,
+            src_image_layout = .TRANSFER_SRC_OPTIMAL,
+            dst_image        = image,
+            dst_image_layout = .TRANSFER_DST_OPTIMAL,
+            region_count     = 1,
+            p_regions        = *blit_region,
+            filter           = .LINEAR,
+        };
+
+        VK.cmd_blit_image_2(command_buffer, *blit_info);
+
+        barrier.old_layout      = .TRANSFER_SRC_OPTIMAL;
+        barrier.new_layout      = .SHADER_READ_ONLY_OPTIMAL;
+        barrier.src_access_mask = .TRANSFER_READ;
+        barrier.dst_access_mask = .SHADER_SAMPLED_READ;
+        barrier.src_stage_mask  = .TRANSFER;
+        barrier.dst_stage_mask  = .FRAGMENT_SHADER;
+
+        shader_read_dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers    = *barrier,
+        };
+
+        VK.cmd_pipeline_barrier_2(
+            command_buffer,
+            *shader_read_dependency_info,
+        );
+
+        if (1 < mip_width) {
+          mip_width /= 2;
+        }
+        if (1 < mip_height) {
+          mip_height /= 2;
+        }
+    }
+
+    barrier.subresource_range.base_mip_level = level_count - 1;
+    barrier.old_layout      = .TRANSFER_DST_OPTIMAL;
+    barrier.new_layout      = .SHADER_READ_ONLY_OPTIMAL;
+    barrier.src_access_mask = .TRANSFER_WRITE;
+    barrier.dst_access_mask = .SHADER_SAMPLED_READ;
+    barrier.src_stage_mask  = .TRANSFER;
+    barrier.dst_stage_mask  = .FRAGMENT_SHADER;
+
+    shader_read_dependency_info := VK.Dependency_Info.{
+        image_memory_barrier_count = 1,
+        p_image_memory_barriers    = *barrier,
+    };
+
+    VK.cmd_pipeline_barrier_2(command_buffer, *shader_read_dependency_info);
 }
 
 map_copy_buffer_data :: (
@@ -2485,16 +2627,16 @@ create_depth_image :: (
     height:    u32,
 ) -> error: string, Image_Info {
     error, depth_image_info := create_image(
-            device,
-            allocator,
-            format           = DEPTH_IMAGE_FORMAT,
-            width            = width,
-            height           = height,
-            depth            = 1,
-            tiling           = .OPTIMAL,
-            usage            = .DEPTH_STENCIL_ATTACHMENT,
-            allocation_flags = .DEDICATED_MEMORY,
-            aspect_mask      = .DEPTH,
+        device,
+        allocator,
+        format           = DEPTH_IMAGE_FORMAT,
+        width            = width,
+        height           = height,
+        depth            = 1,
+        tiling           = .OPTIMAL,
+        usage            = .DEPTH_STENCIL_ATTACHMENT,
+        allocation_flags = .DEDICATED_MEMORY,
+        aspect_mask      = .DEPTH,
     );
 
     if error {
@@ -2976,6 +3118,7 @@ create_image :: (
     usage:            VK.Image_Usage_Flags,
     allocation_flags: VMA.Allocation_Create_Flags,
     aspect_mask:      VK.Image_Aspect_Flags,
+    mip_level_count:  u32 = 1,
 ) -> error: string, Image_Info {
     image_info: Image_Info;
 
@@ -2987,7 +3130,7 @@ create_image :: (
             height = height,
             depth  = depth,
         },
-        mip_levels     = 1,
+        mip_levels     = mip_level_count,
         array_layers   = 1,
         samples        = ._1,
         tiling         = tiling,
@@ -3017,6 +3160,7 @@ create_image :: (
         image_info.image,
         format,
         aspect_mask,
+        mip_level_count,
     );
     if error {
         return error, image_info;
@@ -3039,10 +3183,11 @@ destroy_image :: (
 }
 
 create_image_view :: (
-    device: VK.Device,
-    image: VK.Image,
-    format: VK.Format,
+    device:      VK.Device,
+    image:       VK.Image,
+    format:      VK.Format,
     aspect_mask: VK.Image_Aspect_Flags,
+    level_count: u32,
 ) -> error: string, VK.Image_View {
     image_view_create_info := VK.Image_View_Create_Info.{
         image     = image,
@@ -3050,7 +3195,7 @@ create_image_view :: (
         format    = format,
         subresource_range = {
             aspect_mask = aspect_mask,
-            level_count = 1,
+            level_count = level_count,
             layer_count = 1,
         },
     };
