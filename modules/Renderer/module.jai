@@ -606,6 +606,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         frame_resources_index,
         frame_resources.command_buffer,
         renderer.scene_info,
+        renderer.transforms,
         renderer.allocator,
     );
 

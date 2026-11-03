@@ -4,10 +4,12 @@
 #extension GL_EXT_scalar_block_layout                    : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
-layout(push_constant, scalar) uniform Constants {
+layout(push_constant, scalar, row_major) uniform Constants {
     uint64_t vertex_buffer_address;
     uint64_t material_buffer_address;
     uint64_t instance_buffer_address;
+
+    mat4x4   view_projection_transform;
 } constants;
 
 struct Vertex {
@@ -23,12 +25,11 @@ layout(buffer_reference, scalar) readonly buffer Vertex_Buffer {
 };
 
 struct Instance {
-    mat4x4 wvp_transform;
     mat4x4 world_transform;
     uint   material_index;
 };
 
-layout(buffer_reference, scalar) readonly buffer Instance_Buffer {
+layout(buffer_reference, scalar, row_major) readonly buffer Instance_Buffer {
     Instance instances[];
 };
 
@@ -48,7 +49,7 @@ void main() {
     Vertex   vertex   = vertex_buffer.vertices[gl_VertexIndex];
     Instance instance = instance_buffer.instances[gl_InstanceIndex];
 
-    gl_Position = instance.wvp_transform * vec4(vertex.position, 1);
+    gl_Position = constants.view_projection_transform * instance.world_transform * vec4(vertex.position, 1);
 
     vertex_output.color                      = vertex.color;
     vertex_output.uv                         = vertex.uv;

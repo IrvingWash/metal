@@ -161,12 +161,15 @@ do_model_pass :: (
     frame_index:    u64,
     command_buffer: VK.Command_Buffer,
     scene_info:     Scene_Info,
+    transforms:     Transforms,
     allocator:      VMA.Allocator,
 ) {
     push_constants: Push_Constants = {
         vertex_buffer_address   = geometry_info.vertex_buffer_info.device_address,
         material_buffer_address = materials_info.material_buffer_info.device_address,
         instance_buffer_address = model_pass.instance_buffer_infos[frame_index].device_address,
+
+        view_projection_transform = transforms.view_projection,
     };
 
     VK.cmd_push_constants(
@@ -272,7 +275,6 @@ MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Co
 MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
 Instance :: struct @Gpu {
-    wvp_transform:   Matrix4;
     world_transform: Matrix4;
     material_index:  u32;
 }
@@ -281,6 +283,8 @@ Push_Constants :: struct @Gpu {
     vertex_buffer_address:   VK.Device_Address;
     material_buffer_address: VK.Device_Address;
     instance_buffer_address: VK.Device_Address;
+
+    view_projection_transform: Matrix4;
 }
 
 Pbr_Pipeline_Info :: struct {
@@ -345,8 +349,7 @@ add_model_node_to_draw_bucket :: (
                     vertex_offset  = cast(s32, mesh.vertex_start),
                 },
                 instance = {
-                    wvp_transform   = transpose(global_transforms.view_projection * world_transform),
-                    world_transform = transpose(world_transform),
+                    world_transform = world_transform,
                     material_index  = mesh.material_index,
                 },
             },
