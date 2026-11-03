@@ -275,8 +275,9 @@ MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Co
 MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
 Instance :: struct @Gpu {
-    world_transform: Matrix4;
-    material_index:  u32;
+    world_transform:                   Matrix4;
+    inverse_transpose_world_transform: Matrix3;
+    material_index:                    u32;
 }
 
 Push_Constants :: struct @Gpu {
@@ -334,6 +335,10 @@ add_model_node_to_draw_bucket :: (
 ) {
     world_transform := parent_transform * node.local_transform;
 
+    inversed_ok, inversed_world_matrix := inverse(world_transform);
+    assert(inversed_ok, "Got a false on inverse, interesting");
+    inverse_transpose_world_transform := transpose(inversed_world_matrix);
+
     for mesh: node.meshes {
         material := materials_info.materials[mesh.material_index];
 
@@ -349,8 +354,9 @@ add_model_node_to_draw_bucket :: (
                     vertex_offset  = cast(s32, mesh.vertex_start),
                 },
                 instance = {
-                    world_transform = world_transform,
-                    material_index  = mesh.material_index,
+                    world_transform                   = world_transform,
+                    inverse_transpose_world_transform = make_matrix3(inverse_transpose_world_transform),
+                    material_index                    = mesh.material_index,
                 },
             },
         );

@@ -26,6 +26,7 @@ layout(buffer_reference, scalar) readonly buffer Vertex_Buffer {
 
 struct Instance {
     mat4x4 world_transform;
+    mat3x3 inverse_transpose_world_transform;
     uint   material_index;
 };
 
@@ -55,7 +56,7 @@ void main() {
     vertex_output.uv                         = vertex.uv;
     vertex_output.material_index             = instance.material_index;
     vertex_output.fragment_world_position    = (instance.world_transform * vec4(vertex.position, 1)).xyz;
-    vertex_output.world_space_normal         = mat3x3(transpose(inverse(instance.world_transform))) * vertex.normal; // @Todo: upload the matrix from CPU
+    vertex_output.world_space_normal         = instance.inverse_transpose_world_transform * vertex.normal;
     vertex_output.world_space_tangent        = vec4(
         mat3(instance.world_transform) * vertex.tangent.xyz,
         vertex.tangent.w

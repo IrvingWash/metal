@@ -34,6 +34,7 @@ Renderer :: struct {
     geometry_info: Geometry_Info;
 
     model_pass: Model_Pass;
+    shadow_pass: Shadow_Pass;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
@@ -288,6 +289,14 @@ init :: (
             renderer;
     }
 
+    error, renderer.shadow_pass = create_shadow_pass(
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     return
         "",
         renderer;
@@ -295,6 +304,10 @@ init :: (
 
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
+
+    destroy_shadow_pass(
+        *renderer.shadow_pass,
+    );
 
     destroy_model_pass(
         *renderer.model_pass,
@@ -598,6 +611,8 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         };
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
+
+    do_shadow_pass(*renderer.shadow_pass);
 
     do_model_pass(
         *renderer.model_pass,
@@ -2977,3 +2992,4 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
 
 #load "model.jai";
 #load "model_pass.jai";
+#load "shadow_pass.jai";
