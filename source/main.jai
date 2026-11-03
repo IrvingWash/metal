@@ -59,8 +59,7 @@ main :: () {
     );
 
     add_model :: (path: string, translation: Vector3 = {}, scale: Vector3 = {1, 1, 1}) {
-        error, model := asset_manager_upload_model(*state.asset_manager, path);
-        assert(!error, error);
+        model := asset_manager_upload_model(*state.asset_manager, path);
 
         transform := make_translation_matrix4(translation) * make_scale_matrix4(scale);
 

@@ -51,7 +51,6 @@ Vertex_Dto :: struct {
     position: Vector3;
     normal:   Vector3;
     uv0:      Vector2;
-    uv1:      Vector2;
     tangent:  Vector4 = { 1, 0, 0, 1 };
     color:    Vector4 = { 1, 1, 1, 1 };
 }
@@ -149,6 +148,8 @@ Min_Filter_Dto :: enum {
 }
 
 destroy :: (model_dto: *Model_Dto) {
+    #if DEBUG log("Model_Dto: Destroying %", model_dto.name);
+
     free(model_dto.name);
 
     for node: model_dto.nodes {

@@ -5,7 +5,7 @@ GLTF_FILE_EXTENSIONS :: string.[
     Gltf.GLB_FILE_EXTENSION,
 ];
 
-convert_gltf :: (path: string, $validate: bool = false) -> error: string, Model_Dto {
+convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
     assert(
         context.allocator.proc != temporary_allocator_proc,
         "Temp allocator is forbidden for this procedure, because it's auto_released here",
@@ -20,16 +20,8 @@ convert_gltf :: (path: string, $validate: bool = false) -> error: string, Model_
     } else {
         error, gltf = Gltf.read_glb_from_file(path, validate,, temp);
     }
-    if error {
-        return
-            error,
-            .{};
-    }
-    if gltf.scenes.count != 1 {
-        return
-            tprint("GLTF at % has multiple scenes", path),
-            .{};
-    }
+    assert(!error, "Failed to load gltf (%): %", path, error);
+    assert(gltf.scenes.count == 1, "GLTF at % has % scenes, only 1 is supported", path, gltf.scenes.count);
 
     model_dto: Model_Dto;
 
@@ -43,6 +35,8 @@ convert_gltf :: (path: string, $validate: bool = false) -> error: string, Model_
     // It's a little bit hairy, because we flatten gltf_meshes and gltf_primitives into a single array of mesh_dtos.
     first_mesh_indices: [..]u32;
     first_mesh_indices.allocator = temp;
+
+    assert (gltf.meshes.count > 0, "Gltf at % doesn't have meshes");
 
     for gltf_mesh: gltf.meshes {
         array_add(*first_mesh_indices, cast(u32, model_dto.meshes.count));
@@ -102,7 +96,7 @@ convert_gltf :: (path: string, $validate: bool = false) -> error: string, Model_
         }
     }
 
-    return "", model_dto;
+    return model_dto;
 }
 
 
@@ -174,12 +168,14 @@ make_texture_dto :: (
 
     identifier_for_errors: string,
 ) -> Texture_Dto {
-    gltf_texture      := gltf.textures[gltf_texture_info._index];
+    gltf_texture := gltf.textures[gltf_texture_info._index];
     assert(
         gltf_texture._source != Gltf.SENTINEL,
         "The texture doesn't have a source (%)",
         identifier_for_errors,
     );
+
+    name := sprint("%-%", name_prefix, gltf_texture.name);
 
     gltf_sampler := ifx gltf_texture._sampler != Gltf.SENTINEL
         then gltf.samplers[gltf_texture._sampler]
@@ -192,7 +188,7 @@ make_texture_dto :: (
     );
 
     return Texture_Dto.{
-        name        = sprint("%-%", name_prefix, gltf_texture.name),
+        name        = name,
         image_index = cast(u32, gltf_texture._source),
         tex_coord   = cast(u32, gltf_texture_info.tex_coord),
 
@@ -451,7 +447,7 @@ convert_gltf_primitive_to_mesh_dto :: (
         );
     } else {
         log(
-            "No normals in the primitive (%)",
+            "GLTF Converter: No normals in the primitive (%)",
             identifier_for_errors,
             flags = .WARNING
         );
@@ -485,22 +481,6 @@ convert_gltf_primitive_to_mesh_dto :: (
             *mesh_dto.vertices[0].uv0,
             size_of(Vertex_Dto),
             attribute_key_for_errors = "TEXCOORD_0",
-            identifier_for_errors,
-        );
-    }
-    if gltf_primitive.attributes._tex_coord_1 != Gltf.SENTINEL {
-        gltf_tex_coord_1_accessor := gltf.accessors[gltf_primitive.attributes._tex_coord_1];
-        assert(
-            gltf_tex_coord_1_accessor.count == mesh_dto.vertices.count,
-            "There is less tex_coord_1s than positions",
-            identifier_for_errors,
-        );
-        parse_gltf_attribute(
-            gltf,
-            gltf_tex_coord_1_accessor,
-            *mesh_dto.vertices[0].uv1,
-            size_of(Vertex_Dto),
-            attribute_key_for_errors = "TEXCOORD_1",
             identifier_for_errors,
         );
     }

@@ -38,25 +38,20 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
 
 // @Todo: In the future, this will just upload our own binaries.
 // The convertation would be run via a script, like shader compilation
-asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> error: string, Renderer.Model {
+asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> Renderer.Model {
     renderer_model: Renderer.Model;
 
     maybe_model_dto: Option(Model_Dto);
 
     extension := path_extension(path);
     if array_find(GLTF_FILE_EXTENSIONS, extension) {
-        error, result := convert_gltf(path, DEBUG);
-        if error {
-            return error, renderer_model;
-        }
+        result := convert_gltf(path, DEBUG);
 
         set(*maybe_model_dto, result);
     }
 
     if maybe_model_dto.kind != .SOME {
-        return
-            tprint("Unsupported model format: '%'", extension),
-            renderer_model;
+        assert(false, "Failed to load model from %", path);
     }
 
     model_dto := maybe_model_dto.some;
@@ -88,16 +83,12 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                 "Base color texture has tex_ccord %, but we don't support that much",
                 pbr.base_color_texture.some.tex_coord,
             );
-            error, material.base_color_texture_index =
-                get_or_upload_texture(
-                    *texture_cache,
-                    *model_dto,
-                    pbr.base_color_texture.some,
-                    .SRGB,
-                );
-            if error {
-                return error, renderer_model;
-            }
+            material.base_color_texture_index = get_or_upload_texture(
+                *texture_cache,
+                *model_dto,
+                pbr.base_color_texture.some,
+                .SRGB,
+            );
         }
         if pbr.metallic_roughness_texture.kind == .SOME {
             assert(
@@ -105,16 +96,12 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                 "Metallic roughness texture has tex_ccord %, but we don't support that much",
                 pbr.metallic_roughness_texture.some.tex_coord,
             );
-            error, material.metallic_roughness_texture_index =
-                get_or_upload_texture(
-                    *texture_cache,
-                    *model_dto,
-                    pbr.metallic_roughness_texture.some,
-                    .UNORM,
-                );
-            if error {
-                return error, renderer_model;
-            }
+            material.metallic_roughness_texture_index = get_or_upload_texture(
+                *texture_cache,
+                *model_dto,
+                pbr.metallic_roughness_texture.some,
+                .UNORM,
+            );
         }
         if material_dto.normal_texture.kind == .SOME {
             assert(
@@ -124,15 +111,12 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             );
             normal_texture_dto := material_dto.normal_texture.some;
             material.normal_scale = normal_texture_dto.scale;
-            error, material.normal_texture_index = get_or_upload_texture(
+            material.normal_texture_index = get_or_upload_texture(
                 *texture_cache,
                 *model_dto,
                 normal_texture_dto.texture,
                 .UNORM,
             );
-            if error {
-                return error, renderer_model;
-            }
         }
         if material_dto.occlusion_texture.kind == .SOME {
             assert(
@@ -142,16 +126,12 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             );
             occlusion_texture_dto := material_dto.occlusion_texture.some;
             material.occlusion_strength = occlusion_texture_dto.strength;
-            error, material.occlusion_texture_index =
-                get_or_upload_texture(
-                    *texture_cache,
-                    *model_dto,
-                    occlusion_texture_dto.texture,
-                    .UNORM,
-                );
-            if error {
-                return error, renderer_model;
-            }
+            material.occlusion_texture_index = get_or_upload_texture(
+                *texture_cache,
+                *model_dto,
+                occlusion_texture_dto.texture,
+                .UNORM,
+            );
         }
         if material_dto.emissive_texture.kind == .SOME {
             assert(
@@ -159,16 +139,12 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                 "Emissive texture has tex_ccord %, but we don't support that much",
                 material_dto.emissive_texture.some.tex_coord,
             );
-            error, material.emissive_texture_index =
-                get_or_upload_texture(
-                    *texture_cache,
-                    *model_dto,
-                    material_dto.emissive_texture.some,
-                    .SRGB,
-                );
-            if error {
-                return error, renderer_model;
-            }
+            material.emissive_texture_index = get_or_upload_texture(
+                *texture_cache,
+                *model_dto,
+                material_dto.emissive_texture.some,
+                .SRGB,
+            );
         }
 
         error=, material_ids := Renderer.upload_materials(
@@ -176,9 +152,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             .[material],,
             temp,
         );
-        if error {
-            return error, renderer_model;
-        }
+        assert(!error, error);
         array_add(*uploaded_renderer_material_ids, ..material_ids);
     }
 
@@ -197,9 +171,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                 *state.renderer,
                 mesh_dto.indices,
             );
-            if error {
-                return error, renderer_model;
-            }
+            assert(!error, error);
 
             mesh.index_start = start;
             mesh.index_count = count;
@@ -223,9 +195,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
                 *state.renderer,
                 converted_vertices,
             );
-            if error {
-                return error, renderer_model;
-            }
+            assert(!error, error);
 
             mesh.vertex_start = start;
             mesh.vertex_count = count;
@@ -257,7 +227,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
         );
     }
 
-    return "", renderer_model;
+    return renderer_model;
 }
 
 
@@ -275,7 +245,7 @@ convert_alpha_mode_dto :: (dto_alpha_mode: Alpha_Mode_Dto) -> Renderer.Alpha_Mod
     }
 }
 
-create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, sampler_id: u32 {
+create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> sampler_id: u32 {
     params: Renderer.Create_Sampler_Params;
 
     if #complete texture_dto.mag_filter == {
@@ -340,11 +310,9 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
         *state.renderer,
         params,
     );
-    if error {
-        return error, 0;
-    }
+    assert(!error, error);
 
-    return "", sampler_index;
+    return sampler_index;
 }
 
 Texture_Cache_Key :: #type u64;
@@ -364,7 +332,7 @@ get_or_upload_texture :: (
     model_dto:    *Model_Dto,
     texture_dto:  Texture_Dto,
     format_kind:  type_of(Renderer.Image_Params.format_kind),
-) -> error: string, texture_id: u32 {
+) -> texture_id: u32 {
     // want_mipmapping := texture_dto.min_filter != .NEAREST && texture_dto.min_filter != .LINEAR;
     want_mipmapping :: true;
     sampler_id: u32;
@@ -377,10 +345,7 @@ get_or_upload_texture :: (
 
         found:, sampler_id = table_find(*cache.sampler_id_by_key, sampler_key);
         if !found {
-            error:, sampler_id = create_sampler_from_texture_dto(texture_dto);
-            if error {
-                return error, 0;
-            }
+            sampler_id = create_sampler_from_texture_dto(texture_dto);
             table_set(*cache.sampler_id_by_key, sampler_key, sampler_id);
         }
     }
@@ -404,9 +369,7 @@ get_or_upload_texture :: (
                 }],,
                 temp
             );
-            if error {
-                return error, 0;
-            }
+            assert(!error, error);
 
             image_id = image_ids[0];
             table_set(*cache.image_id_by_key, image_key, image_id);
@@ -423,16 +386,14 @@ get_or_upload_texture :: (
                 .[{ image_index = image_id, sampler_index = sampler_id }],,
                 temp
             );
-            if error {
-                return error, 0;
-            }
+            assert(!error, error);
 
             texture_id = texture_ids[0];
             table_set(*cache.texture_id_by_key, texture_key, texture_id);
         }
     }
 
-    return "", texture_id;
+    return texture_id;
 }
 
 #import "System";
