@@ -103,7 +103,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             assert(
                 pbr.metallic_roughness_texture.some.tex_coord == 0,
                 "Metallic roughness texture has tex_ccord %, but we don't support that much",
-                pbr.base_color_texture.some.tex_coord,
+                pbr.metallic_roughness_texture.some.tex_coord,
             );
             error, material.metallic_roughness_texture_index =
                 get_or_upload_texture(
@@ -120,7 +120,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             assert(
                 material_dto.normal_texture.some.texture.tex_coord == 0,
                 "Normal texture has tex_ccord %, but we don't support that much",
-                pbr.base_color_texture.some.tex_coord,
+                material_dto.normal_texture.some.texture.tex_coord,
             );
             normal_texture_dto := material_dto.normal_texture.some;
             material.normal_scale = normal_texture_dto.scale;
@@ -138,7 +138,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             assert(
                 material_dto.occlusion_texture.some.texture.tex_coord == 0,
                 "Occlusion texture has tex_ccord %, but we don't support that much",
-                pbr.base_color_texture.some.tex_coord,
+                material_dto.occlusion_texture.some.texture.tex_coord,
             );
             occlusion_texture_dto := material_dto.occlusion_texture.some;
             material.occlusion_strength = occlusion_texture_dto.strength;
@@ -157,7 +157,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> e
             assert(
                 material_dto.emissive_texture.some.tex_coord == 0,
                 "Emissive texture has tex_ccord %, but we don't support that much",
-                pbr.base_color_texture.some.tex_coord,
+                material_dto.emissive_texture.some.tex_coord,
             );
             error, material.emissive_texture_index =
                 get_or_upload_texture(
@@ -289,26 +289,33 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> error: string, 
 
     if #complete texture_dto.min_filter == {
         case .UNDEFINED;
-            params.min_filter = .LINEAR;
+            params.min_filter  = .LINEAR;
             params.mipmap_mode = .LINEAR;
+            params.max_lod     = Renderer.NO_LOD_CLAMP;
         case .NEAREST;
-            params.min_filter = .NEAREST;
+            params.min_filter  = .NEAREST;
             params.mipmap_mode = .NEAREST;
+            params.max_lod     = 0.25;
         case .LINEAR;
-            params.min_filter = .LINEAR;
+            params.min_filter  = .LINEAR;
             params.mipmap_mode = .NEAREST;
+            params.max_lod     = 0.25;
         case .NEAREST_MIPMAP_NEAREST;
-            params.min_filter = .NEAREST;
+            params.min_filter  = .NEAREST;
             params.mipmap_mode = .NEAREST;
+            params.max_lod     = Renderer.NO_LOD_CLAMP;
         case .LINEAR_MIPMAP_NEAREST;
-            params.min_filter = .LINEAR;
+            params.min_filter  = .LINEAR;
             params.mipmap_mode = .NEAREST;
+            params.max_lod     = Renderer.NO_LOD_CLAMP;
         case .NEAREST_MIPMAP_LINEAR;
-            params.min_filter = .NEAREST;
+            params.min_filter  = .NEAREST;
             params.mipmap_mode = .LINEAR;
+            params.max_lod     = Renderer.NO_LOD_CLAMP;
         case .LINEAR_MIPMAP_LINEAR;
-            params.min_filter = .LINEAR;
+            params.min_filter  = .LINEAR;
             params.mipmap_mode = .LINEAR;
+            params.max_lod     = Renderer.NO_LOD_CLAMP;
     }
 
     if #complete texture_dto.wrap_s == {
@@ -355,36 +362,11 @@ Texture_Cache :: struct {
 get_or_upload_texture :: (
     cache:        *Texture_Cache,
     model_dto:    *Model_Dto,
-    texture_dto:  Texture_Dto,           // whatever the type of `.some` is
+    texture_dto:  Texture_Dto,
     format_kind:  type_of(Renderer.Image_Params.format_kind),
 ) -> error: string, texture_id: u32 {
-    image_id: u32;
-    { // Image
-        image_key: Texture_Cache_Key = (cast(u64, texture_dto.image_index) << 1)
-            | cast(u64, format_kind == .UNORM);
-
-        found:, image_id = table_find(*cache.image_id_by_key, image_key);
-        if !found {
-            image_dto := model_dto.images[texture_dto.image_index];
-            error, image_ids := Renderer.upload_texture_images(
-                *state.renderer,
-                .[{
-                    width       = image_dto.width,
-                    height      = image_dto.height,
-                    bytes       = image_dto.bytes,
-                    format_kind = format_kind,
-                }],,
-                temp
-            );
-            if error {
-                return error, 0;
-            }
-
-            image_id = image_ids[0];
-            table_set(*cache.image_id_by_key, image_key, image_id);
-        }
-    }
-
+    // want_mipmapping := texture_dto.min_filter != .NEAREST && texture_dto.min_filter != .LINEAR;
+    want_mipmapping :: true;
     sampler_id: u32;
     { // Sampler
         sampler_key: Texture_Cache_Key =
@@ -400,6 +382,34 @@ get_or_upload_texture :: (
                 return error, 0;
             }
             table_set(*cache.sampler_id_by_key, sampler_key, sampler_id);
+        }
+    }
+
+    image_id: u32;
+    { // Image
+        image_key: Texture_Cache_Key = (cast(u64, texture_dto.image_index) << 1)
+            | cast(u64, format_kind == .UNORM);
+
+        found:, image_id = table_find(*cache.image_id_by_key, image_key);
+        if !found {
+            image_dto := model_dto.images[texture_dto.image_index];
+            error, image_ids := Renderer.upload_texture_images(
+                *state.renderer,
+                .[{
+                    width           = image_dto.width,
+                    height          = image_dto.height,
+                    bytes           = image_dto.bytes,
+                    format_kind     = format_kind,
+                    want_mipmapping = want_mipmapping,
+                }],,
+                temp
+            );
+            if error {
+                return error, 0;
+            }
+
+            image_id = image_ids[0];
+            table_set(*cache.image_id_by_key, image_key, image_id);
         }
     }
 

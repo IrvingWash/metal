@@ -330,7 +330,7 @@ convert_gltf_image_to_image_dto :: (
 
     width, height: s32;
     channel_count: s32;
-    DESIRED_CHANNEL_COUNT :: 4;
+    DESIRED_CHANNEL_COUNT :: cast(s32, STBI.rgb_alpha);
     loaded_bytes: *u8;
 
     if gltf_image.uri {
@@ -374,7 +374,7 @@ convert_gltf_image_to_image_dto :: (
 
     image_dto.width         = cast(u32, width);
     image_dto.height        = cast(u32, height);
-    image_dto.channel_count = DESIRED_CHANNEL_COUNT;
+    image_dto.channel_count = cast(u8, DESIRED_CHANNEL_COUNT);
 
     image_dto.bytes.count = width * height * DESIRED_CHANNEL_COUNT;
     image_dto.bytes.data = alloc(image_dto.bytes.count);

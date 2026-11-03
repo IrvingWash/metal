@@ -1,5 +1,7 @@
 # Issues
 
+- Add logs everywhere
+
 - Refactor pbr shader
 
 - Generate tangents
