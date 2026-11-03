@@ -355,18 +355,21 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     if renderer.swapchain_info.should_recreate {
         VK.device_wait_idle(renderer.device);
 
-        destroy_swapchain(renderer.device, *renderer.swapchain_info);
-
-        error:, renderer.swapchain_info = create_swapchain(
+        error, new_swapchain_info := create_swapchain(
             renderer.physical_device,
             renderer.surface,
             renderer.device,
             renderer.window,
             renderer.get_window_render_size,
+            old_swapchain = renderer.swapchain_info.swapchain,
         );
         if error {
             return error;
         }
+
+        destroy_swapchain(renderer.device, *renderer.swapchain_info);
+
+        renderer.swapchain_info = new_swapchain_info;
 
         renderer.swapchain_info.should_recreate = false;
     }
@@ -2656,6 +2659,7 @@ create_swapchain :: (
     device:                 VK.Device,
     window:                 Window_Type,
     get_window_render_size: Get_Window_Render_Size,
+    old_swapchain:          VK.Swapchain_Khr = null,
 ) -> error: string, Swapchain_Info {
     swapchain_info: Swapchain_Info;
 
@@ -2715,6 +2719,7 @@ create_swapchain :: (
             composite_alpha    = .OPAQUE_KHR,
             present_mode       = DEFAULT_PRESENT_MODE,
             clipped            = VK.TRUE,
+            old_swapchain      = old_swapchain,
         };
 
         result, swapchain_info.swapchain = VK.create_swapchain_khr(device, *swapchain_info.config);
