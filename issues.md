@@ -11,3 +11,7 @@
 - Refactor `assert_manager_upload_model` so it batches or uploads
 
 - Refactor `upload_*` procedures in `Renderer` so there's better batching
+
+- HDR
+
+- Everything is opaque
