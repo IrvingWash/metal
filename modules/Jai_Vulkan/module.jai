@@ -5177,7 +5177,12 @@ cmd_clear_color_image :: inline (
 cmd_blit_image_2 :: (
     command_buffer: Command_Buffer,
     p_blit_image_info: *Blit_Image_Info_2,
-) -> void #foreign "vkCmdBlitImage2";
+) -> void #foreign libvulkan "vkCmdBlitImage2";
+
+cmd_set_cull_mode :: (
+    command_buffer: Command_Buffer,
+    cull_mode: Cull_Mode_Flags,
+) -> void #foreign libvulkan "vkCmdSetCullMode";
 
 
 

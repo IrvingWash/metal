@@ -1,5 +1,7 @@
 # Issues
 
+- Group instances so instance_count is not hardoced to 1 in Draw_Indexed_Indirect_Command
+
 - Add logs everywhere
 
 - Refactor pbr shader
@@ -13,5 +15,3 @@
 - Refactor `upload_*` procedures in `Renderer` so there's better batching
 
 - HDR
-
-- Everything is opaque

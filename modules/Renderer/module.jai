@@ -33,14 +33,14 @@ Renderer :: struct {
     materials_info: Materials_Info;
     geometry_info: Geometry_Info;
 
-    pbr_pipeline_info: Pipeline_Info;
+    pbr_pipeline_info: Pbr_Pipeline_Info;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
 
     transforms: Transforms;
 
-    models_this_frame: [..]Model;
+    model_draw_buckets_this_frame: Model_Draw_Buckets;
 
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
@@ -295,6 +295,8 @@ init :: (
             renderer;
     }
 
+    renderer.model_draw_buckets_this_frame = init_model_draw_buckets();
+
     return
         "",
         renderer;
@@ -303,12 +305,12 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
-    array_free(renderer.models_this_frame);
+    destroy_model_draw_buckets(*renderer.model_draw_buckets_this_frame);
 
     destroy_geometry_info(renderer.allocator, *renderer.geometry_info);
     destroy_materials_info(renderer.device, renderer.allocator, *renderer.materials_info);
 
-    destroy_pipeline(renderer.device, *renderer.pbr_pipeline_info);
+    destroy_pbr_pipeline(renderer.device, *renderer.pbr_pipeline_info);
 
     for *frame_resources: renderer.frame_resources_list {
         destroy_frame_resources(
@@ -350,7 +352,7 @@ deinit :: (renderer: *Renderer) {
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     renderer.scene_info.scene_data.camera_world_position = camera.position;
 
-    array_reset_keeping_memory(*renderer.models_this_frame);
+    reset_model_draw_buckets(*renderer.model_draw_buckets_this_frame);
 
     if renderer.swapchain_info.should_recreate {
         VK.device_wait_idle(renderer.device);
@@ -430,7 +432,20 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
 }
 
 draw_model :: (renderer: *Renderer, model: Model) {
-    array_add(*renderer.models_this_frame, model);
+    for node: model.nodes {
+        if node.parent_index.kind != .NONE {
+            continue;
+        }
+
+        add_model_node_to_draw_bucket(
+            renderer.materials_info,
+            renderer.transforms,
+            *renderer.model_draw_buckets_this_frame,
+            node,
+            model.nodes,
+            model.transform,
+        );
+    }
 }
 
 finish_drawing :: (renderer: *Renderer) -> error: string {
@@ -496,23 +511,30 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     renderer.frame_index += 1;
     renderer.timeline_semaphore_info.next_signal_value += 1;
 
-    draw_index: int;
-    for model: renderer.models_this_frame {
-        for node: model.nodes {
-            if node.parent_index.kind != .NONE {
-                continue;
-            }
+    draw_passes := into_draw_passes(*renderer.model_draw_buckets_this_frame, renderer.pbr_pipeline_info);
+    { // Check
+        count: int;
+        for draw_pass: draw_passes {
+            count += draw_pass.bucket.count;
+        }
+        assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
+    }
 
-            draw_node(
-                renderer,
-                node,
-                *draw_index,
-                model.nodes,
-                *frame_resources,
-                model.transform,
-            );
+    { // Copy to buffers
+        cursor: u32;
+        for pass: draw_passes {
+            for entry: pass.bucket {
+                command := entry.command;
+                command.first_instance = cursor;
+
+                frame_resources.indirect_draw_pointer[cursor] = command;
+                frame_resources.instance_pointer[cursor]      = entry.instance;
+
+                cursor += 1;
+            }
         }
     }
+
     VMA.flush_allocation(
         renderer.allocator,
         frame_resources.indirect_draw_buffer_info.allocation,
@@ -663,19 +685,33 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
 
-    VK.cmd_bind_pipeline(
-        frame_resources.command_buffer,
-        .GRAPHICS,
-        renderer.pbr_pipeline_info.pipeline,
-    );
+    { // Draw
+        offset: int;
+        bound_pipeline:  VK.Pipeline;
+        for draw_pass: draw_passes {
+            if draw_pass.bucket.count == 0 {
+                continue;
+            }
 
-    VK.cmd_draw_indexed_indirect(
-        frame_resources.command_buffer,
-        frame_resources.indirect_draw_buffer_info.buffer,
-        offset = 0,
-        draw_count = cast(u32, draw_index),
-        stride = size_of(VK.Draw_Indexed_Indirect_Command),
-    );
+            if draw_pass.pipeline != bound_pipeline {
+                VK.cmd_bind_pipeline(frame_resources.command_buffer, .GRAPHICS, draw_pass.pipeline);
+                bound_pipeline = draw_pass.pipeline;
+            }
+
+            VK.cmd_set_cull_mode(frame_resources.command_buffer, draw_pass.cull_mode);
+
+            VK.cmd_draw_indexed_indirect(
+                frame_resources.command_buffer,
+                frame_resources.indirect_draw_buffer_info.buffer,
+                offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
+                draw_count = cast(u32, draw_pass.bucket.count),
+                stride     = size_of(VK.Draw_Indexed_Indirect_Command),
+            );
+
+            offset += draw_pass.bucket.count;
+        }
+    }
+
 
     VK.cmd_end_rendering(frame_resources.command_buffer);
 
@@ -757,7 +793,6 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     }
 
     { // Scaling and bliting
-        // @Todo: make this nicer
         left_x, left_y, right_x, right_y := scale_keeping_ratio_and_get_rect(
             renderer.color_target.extent,
             renderer.swapchain_info.config.image_extent,
@@ -987,7 +1022,6 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
     return "", material_ids;
 }
 
-// @Todo: batching
 upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, start: u32, count: u32 {
     start := renderer.geometry_info.vertices_offset;
     count := cast(u32, vertices.count);
@@ -1018,7 +1052,6 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
     return "", start, count;
 }
 
-// @Todo: batching
 upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start: u32, count: u32 {
     start := renderer.geometry_info.indices_offset;
     count := cast(u32, indices.count);
@@ -1049,7 +1082,6 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
     return "", start, count;
 }
 
-// @Todo: batching
 upload_texture_images :: (
     renderer:          *Renderer,
     image_params_list: []Image_Params,
@@ -1099,7 +1131,6 @@ upload_texture_images :: (
     return "", image_ids;
 }
 
-// @Todo: can we batch this?
 upload_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error: string, index: u32 {
     if renderer.materials_info.samplers.count >= MAX_SAMPLER_COUNT {
         return "Max sampler count reached", 0;
@@ -1118,6 +1149,24 @@ upload_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error:
     );
 
     return "", cast(u32, renderer.materials_info.samplers.count - 1);
+}
+
+
+
+#scope_module
+
+MAX_TEXTURE_COUNT        :: 256;
+MAX_SAMPLER_COUNT        :: 256;
+MAX_MATERIAL_COUNT       :: 256;
+MAX_DRAW_COUNT           :: 4096;
+MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
+MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
+
+Pbr_Pipeline_Info :: struct {
+    layout:          VK.Pipeline_Layout;
+    opaque_pipeline: VK.Pipeline;
+    blend_pipeline:  VK.Pipeline;
+    mask_pipeline:   VK.Pipeline;
 }
 
 
@@ -1146,14 +1195,6 @@ DEVICE_EXTENSIONS :: *u8.[
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
-MAX_TEXTURE_COUNT        :: 256;
-MAX_SAMPLER_COUNT        :: 256;
-MAX_MATERIAL_COUNT       :: 256;
-MAX_DRAW_COUNT           :: 4096;
-MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
-MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
-
-
 HAVE_MORE_DEBUG :: DEBUG && true;
 
 #if DEBUG {
@@ -1171,11 +1212,6 @@ HAVE_MORE_DEBUG :: DEBUG && true;
         message_type      = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
         pfn_user_callback = debug_utils_messenger_callback,
     };
-}
-
-Pipeline_Info :: struct {
-    pipeline: VK.Pipeline;
-    layout:   VK.Pipeline_Layout;
 }
 
 Queue_Info :: struct {
@@ -1446,6 +1482,7 @@ create_materials_info :: (device: VK.Device, allocator: VMA.Allocator) -> error:
 
     array_reserve(*materials_info.samplers, MAX_SAMPLER_COUNT);
     array_reserve(*materials_info.images, MAX_TEXTURE_COUNT);
+    array_reserve(*materials_info.materials, MAX_MATERIAL_COUNT);
 
     return "", materials_info;
 }
@@ -1473,6 +1510,8 @@ destroy_materials_info :: (device: VK.Device, allocator: VMA.Allocator, material
 
     destroy_descriptor_info(device, *materials_info.texture_descriptor_info);
 
+    array_free(materials_info.materials);
+
     materials_info.* = {};
 }
 
@@ -1491,48 +1530,48 @@ destroy_geometry_info :: (allocator: VMA.Allocator, geometry_info: *Geometry_Inf
     geometry_info.* = {};
 }
 
-draw_node :: (
-    renderer: *Renderer,
+add_model_node_to_draw_bucket :: (
+    materials_info: Materials_Info,
+    global_transforms: Transforms,
+    draw_buckets: *Model_Draw_Buckets,
     node: Node,
-    draw_index: *int,
     nodes: []Node,
-    frame_resources: *Frame_Resources,
     parent_transform: Matrix4,
 ) {
     world_transform := parent_transform * node.local_transform;
 
-    assert(
-        draw_index.* + node.meshes.count <= MAX_DRAW_COUNT,
-        "Indirect buffer size is full",
-    );
-
     for mesh: node.meshes {
-        frame_resources.indirect_draw_pointer[draw_index.*] = {
-            index_count    = mesh.index_count,
-            instance_count = 1,
-            first_index    = mesh.index_start,
-            vertex_offset  = cast(s32, mesh.vertex_start),
-            first_instance = cast(u32, draw_index.*),
-        };
+        material := materials_info.materials[mesh.material_index];
 
-        frame_resources.instance_pointer[draw_index.*] = {
-            wvp_transform   = transpose(renderer.transforms.view_projection * world_transform),
-            world_transform = transpose(world_transform),
-            material_index  = mesh.material_index,
-        };
+        bucket := get_model_draw_bucket_by_material(draw_buckets, material);
 
-        draw_index.* += 1;
+        array_add(
+            bucket,
+            {
+                command = {
+                    index_count    = mesh.index_count,
+                    instance_count = 1, // @Todo
+                    first_index    = mesh.index_start,
+                    vertex_offset  = cast(s32, mesh.vertex_start),
+                },
+                instance = {
+                    wvp_transform   = transpose(global_transforms.view_projection * world_transform),
+                    world_transform = transpose(world_transform),
+                    material_index  = mesh.material_index,
+                },
+            },
+        );
     }
 
     for child_node_index: node.children_ids {
         child_node := nodes[child_node_index];
 
-        draw_node(
-            renderer,
+        add_model_node_to_draw_bucket(
+            materials_info,
+            global_transforms,
+            draw_buckets,
             child_node,
-            draw_index,
             nodes,
-            frame_resources,
             world_transform,
         );
     }
@@ -2036,8 +2075,8 @@ create_pbr_pipeline :: (
     color_attachment_formats: []VK.Format,
     depth_attachment_format:  VK.Format,
     descriptor_set_layouts:   []VK.Descriptor_Set_Layout,
-) -> error: string, Pipeline_Info {
-    pipeline_info: Pipeline_Info;
+) -> error: string, Pbr_Pipeline_Info {
+    pipeline_info: Pbr_Pipeline_Info;
 
     { // Layout
         push_constant_range := VK.Push_Constant_Range.{
@@ -2077,6 +2116,21 @@ create_pbr_pipeline :: (
     }
     defer VK.destroy_shader_module(device, fragment_shader);
 
+    specialization_map_entry := VK.Specialization_Map_Entry.{
+        constant_id = 0, // As in the shader
+        offset      = 0,
+        size        = size_of(Alpha_Mode),
+    };
+
+    alpha_mode := Alpha_Mode.OPAQUE;
+
+    specialization_info := VK.Specialization_Info.{
+        map_entry_count = 1,
+        p_map_entries   = *specialization_map_entry,
+        data_size       = size_of(Alpha_Mode),
+        p_data          = *alpha_mode,
+    };
+
     shader_stage_create_infos := VK.Pipeline_Shader_Stage_Create_Info.[
         {
             stage  = .VERTEX,
@@ -2087,6 +2141,7 @@ create_pbr_pipeline :: (
             stage  = .FRAGMENT,
             module = fragment_shader,
             p_name = "main",
+            p_specialization_info = *specialization_info,
         },
     ];
 
@@ -2121,21 +2176,26 @@ create_pbr_pipeline :: (
         rasterization_samples = ._1,
     };
 
-    color_blend_attachment_states := VK.Pipeline_Color_Blend_Attachment_State.[
-        {
-            blend_enable = VK.FALSE,
-            color_write_mask = .R | .G | .B | .A,
-        },
-    ];
+    color_blend_attachment_state := VK.Pipeline_Color_Blend_Attachment_State.{
+        blend_enable = VK.FALSE,
+        src_color_blend_factor = .SRC_ALPHA,
+        dst_color_blend_factor = .ONE_MINUS_SRC_ALPHA,
+        color_blend_op         = .ADD,
+        src_alpha_blend_factor = .ONE,
+        dst_alpha_blend_factor = .ONE_MINUS_SRC_ALPHA,
+        alpha_blend_op         = .ADD,
+        color_write_mask = .R | .G | .B | .A,
+    };
 
     color_blend_state_create_info := VK.Pipeline_Color_Blend_State_Create_Info.{
-        attachment_count = color_blend_attachment_states.count,
-        p_attachments    = color_blend_attachment_states.data,
+        attachment_count = 1,
+        p_attachments    = *color_blend_attachment_state,
     };
 
     dynamic_states := VK.Dynamic_State.[
         .VIEWPORT,
         .SCISSOR,
+        .CULL_MODE,
     ];
 
     dynamic_state_create_info := VK.Pipeline_Dynamic_State_Create_Info.{
@@ -2165,22 +2225,55 @@ create_pbr_pipeline :: (
         render_pass            = null,
     };
 
-    result:, pipeline_info.pipeline = VK.create_graphics_pipeline(
-        device,
-        null,
-        *pipeline_create_info,
-    );
-    if result != .SUCCESS {
-        return
-            tprint("Failed to create pbr pipeline: %", result),
-            pipeline_info;
+    { // Opaque
+        alpha_mode = .OPAQUE;
+        result:, pipeline_info.opaque_pipeline = VK.create_graphics_pipeline(
+            device,
+            null,
+            *pipeline_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create opaque pbr pipeline: %", result),
+                pipeline_info;
+        }
+    }
+    { // Mask
+        alpha_mode = .MASK;
+        result:, pipeline_info.mask_pipeline = VK.create_graphics_pipeline(
+            device,
+            null,
+            *pipeline_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create mask pbr pipeline: %", result),
+                pipeline_info;
+        }
+    }
+    { // Blend
+        alpha_mode = .BLEND;
+        color_blend_attachment_state.blend_enable = VK.TRUE;
+        depth_stencil_state_create_info.depth_write_enable = VK.FALSE;
+        result:, pipeline_info.blend_pipeline = VK.create_graphics_pipeline(
+            device,
+            null,
+            *pipeline_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create blend pbr pipeline: %", result),
+                pipeline_info;
+        }
     }
 
     return "", pipeline_info;
 }
 
-destroy_pipeline :: (device: VK.Device, pipeline_info: *Pipeline_Info) {
-    VK.destroy_pipeline(device, pipeline_info.pipeline);
+destroy_pbr_pipeline :: (device: VK.Device, pipeline_info: *Pbr_Pipeline_Info) {
+    VK.destroy_pipeline(device, pipeline_info.opaque_pipeline);
+    VK.destroy_pipeline(device, pipeline_info.mask_pipeline);
+    VK.destroy_pipeline(device, pipeline_info.blend_pipeline);
     VK.destroy_pipeline_layout(device, pipeline_info.layout);
 
     pipeline_info.* = {};
@@ -2814,6 +2907,7 @@ create_device :: (physical_device: VK.Physical_Device, queues_to_create: []Queue
         if (
             !features_13.dynamic_rendering
             || !features_13.synchronization_2
+            || !features_13.shader_demote_to_helper_invocation
             || !features_12.timeline_semaphore
             || !features_12.buffer_device_address
             || !features_12.descriptor_binding_sampled_image_update_after_bind
@@ -2833,8 +2927,9 @@ create_device :: (physical_device: VK.Physical_Device, queues_to_create: []Queue
     required_features_14: VK.Physical_Device_Vulkan_1_4_Features;
     required_features_13 := VK.Physical_Device_Vulkan_1_3_Features.{
         p_next            = *required_features_14,
-        synchronization_2 = VK.TRUE,
-        dynamic_rendering = VK.TRUE,
+        shader_demote_to_helper_invocation = VK.TRUE,
+        synchronization_2                  = VK.TRUE,
+        dynamic_rendering                  = VK.TRUE,
     };
     required_features_12 := VK.Physical_Device_Vulkan_1_2_Features.{
         p_next                                             = *required_features_13,
@@ -3333,3 +3428,4 @@ VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 }
 
 #load "model.jai";
+#load "model_draw_buckets.jai";

@@ -27,20 +27,20 @@ Texture :: struct {
 
 Material :: struct @Gpu {
     base_color_factor:        Vector4 = { 1, 1, 1, 1 };
-    base_color_texture_index: u32;
+    base_color_texture_index: u32 = FALLBACK_COLOR_TEXTURE_ID;
 
     metallic_factor:                  float = 1;
     roughness_factor:                 float = 1;
-    metallic_roughness_texture_index: u32;
+    metallic_roughness_texture_index: u32 = FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID;
 
     normal_scale:         float = 1;
-    normal_texture_index: u32;
+    normal_texture_index: u32 = FALLBACK_NORMAL_TEXTURE_ID;
 
     occlusion_strength:      float = 1;
-    occlusion_texture_index: u32;
+    occlusion_texture_index: u32 = FALLBACK_OCCLUSION_TEXTURE_ID;
 
     emissive_factor:        Vector3;
-    emissive_texture_index: u32;
+    emissive_texture_index: u32 = FALLBACK_EMISSIVE_TEXTURE_ID;
 
     alpha_cutoff: float = 0.5;
     alpha_mode:   Alpha_Mode;

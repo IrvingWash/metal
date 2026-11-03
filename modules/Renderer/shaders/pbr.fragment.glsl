@@ -93,13 +93,15 @@ vec3 get_normal_from_texel(vec3 vertex_normal, vec4 tangent, vec3 normal_texel, 
     return N;
 }
 
+const uint ALPHA_MODE_OPAQUE = 0;
+const uint ALPHA_MODE_MASK   = 1;
+const uint ALPHA_MODE_BLEND  = 2;
+
+layout(constant_id = 0) const uint ALPHA_MODE = 0;
+
 layout(push_constant, scalar) uniform Constants {
     layout(offset = 8) uint64_t material_buffer_address;
 } constants;
-
-#define ALPHA_MODE_OPAQUE 0
-#define ALPHA_MODE_MASK   1
-#define ALPHA_MODE_BLEND  2
 
 layout(buffer_reference, scalar) readonly buffer Material_Buffer {
     Material materials[];
@@ -135,14 +137,18 @@ void main() {
     vec4 occlusion_texel          = texture(textures[material.occlusion_texture_index], vertex_input.uv);
     vec4 emissive_texel           = texture(textures[material.emissive_texture_index], vertex_input.uv);
 
+    vec4 albedo = base_color_texel * material.base_color_factor * vertex_input.color;
+
+    if (ALPHA_MODE == ALPHA_MODE_MASK && albedo.a < material.alpha_cutoff) {
+        discard;
+    }
+
     float metallic = metallic_roughness_texel.b * material.metallic_factor;
     float occlusion = 1 + material.occlusion_strength * (occlusion_texel.r - 1);
     vec3 emissive  = material.emissive_factor * emissive_texel.rgb;
     float roughness = metallic_roughness_texel.g * material.roughness_factor;
     float roughness_clamped = max(roughness, 0.045); // 0.045 - see https://google.github.io/filament/Filament.md.html#imagingpipeline/physicallybasedcamera/bloom:~:text=1%20The%20Frostbite%20engine%20clamps%20the%20roughness%20of%20analytical%20lights%20to%200%2E045%20to%20reduce%20specular%20aliasing%2E%20This%20is%20possible%20when%20using%20single%20precision%20floats%20%28fp32%29%2E
     float roughness_squared  = roughness_clamped * roughness_clamped;
-
-    vec4 albedo = base_color_texel * material.base_color_factor * vertex_input.color;
 
     // 0.04 - see https://learnopengl.com/PBR/Theory#:~:text=metals%2E-,The,notes%3A
     vec3 F0 = mix(vec3(0.04), albedo.rgb, metallic);
@@ -153,6 +159,9 @@ void main() {
         normal_texel.rgb,
         material.normal_scale
     );
+    if (!gl_FrontFacing) {
+        N = -N;
+    }
 
     vec3 V = normalize(scene_data.camera_world_position - vertex_input.fragment_world_position);
 
@@ -184,5 +193,5 @@ void main() {
     // @Todo: maybe use https://github.com/KhronosGroup/ToneMapping/blob/main/PBR_Neutral/pbrNeutral.glsl
     vec3 tone_mapped = vec3(1.0) - exp(-final_color * scene_data.exposure);
 
-    fragment_color = vec4(tone_mapped, albedo.a);
+    fragment_color = vec4(tone_mapped, ALPHA_MODE == ALPHA_MODE_BLEND ? albedo.a : 1.0);
 }
