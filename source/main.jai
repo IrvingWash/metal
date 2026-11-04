@@ -68,12 +68,12 @@ main :: () {
         array_add(*state.models, model);
     }
 
-    // add_model("../../Models/damaged_helmet/scene.glb", translation = { -1, 0 ,0 });
-    // add_model("../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf", translation = {1, 0, 0 });
+    add_model("../../Models/damaged_helmet/scene.glb", translation = { -1, 0 ,0 });
+    add_model("../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf", translation = {1, 0, 0 });
     // add_model("assets/models/snowy_mountain/snowy_mountain.glb", scale = { 100, 100, 100 });
-    // add_model("../../Models/death_valley.glb", scale = { 100, 100, 100 });
+    add_model("../../Models/death_valley.glb", scale = { 100, 100, 100 });
     // add_model("../../Models/AlphaBlendModeTest/glTF-Binary/AlphaBlendModeTest.glb");
-    add_model("../../Models/Sponza/Sponza.gltf");
+    // add_model("../../Models/Sponza/Sponza.gltf");
 
     while !state.should_quit {
         dt := calculate_delta_time();
