@@ -123,17 +123,27 @@ layout(scalar, set = 1, binding = 0) uniform Scene_Data {
     vec3 camera_world_position;
     vec3 ambient_color;
     float exposure;
-
-    mat4x4 light_view_projection_transform;
 } scene_data;
 
-layout(set = 2, binding = 0) uniform sampler2D shadow_depth_texture;
+layout(set = 2, binding = 0) uniform sampler2DShadow shadow_map;
 
 layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
     mat4x4 light_view_projection_transform;
 } shadow_pass_data;
 
 layout(location = 0) out vec4 fragment_color;
+
+float calculate_shadow(vec3 fragment_world_position, mat4x4 light_view_projection_transform) {
+    vec4 light_space_position = light_view_projection_transform * vec4(fragment_world_position, 1);
+    vec3 ndc_position = light_space_position.xyz / light_space_position.w;
+
+    if (ndc_position.z > 1.0) {
+        return 0; // Beyond far plane
+    }
+
+    vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);  // y flipped like the shadow pass viewport
+    return 1 - texture(shadow_map, vec3(uv, ndc_position.z));
+}
 
 void main() {
     Material_Buffer material_buffer = Material_Buffer(constants.material_buffer_address);
@@ -144,6 +154,11 @@ void main() {
     vec4 metallic_roughness_texel = texture(textures[material.metallic_roughness_texture_index], vertex_input.uv);
     vec4 occlusion_texel          = texture(textures[material.occlusion_texture_index], vertex_input.uv);
     vec4 emissive_texel           = texture(textures[material.emissive_texture_index], vertex_input.uv);
+
+    float shadow = calculate_shadow(
+        vertex_input.fragment_world_position,
+        shadow_pass_data.light_view_projection_transform
+    );
 
     vec4 albedo = base_color_texel * material.base_color_factor * vertex_input.color;
 
@@ -157,11 +172,6 @@ void main() {
     float roughness = metallic_roughness_texel.g * material.roughness_factor;
     float roughness_clamped = max(roughness, 0.045); // 0.045 - see https://google.github.io/filament/Filament.md.html#imagingpipeline/physicallybasedcamera/bloom:~:text=1%20The%20Frostbite%20engine%20clamps%20the%20roughness%20of%20analytical%20lights%20to%200%2E045%20to%20reduce%20specular%20aliasing%2E%20This%20is%20possible%20when%20using%20single%20precision%20floats%20%28fp32%29%2E
     float roughness_squared  = roughness_clamped * roughness_clamped;
-
-    vec3 fragment_light_space_position = (
-        shadow_pass_data.light_view_projection_transform
-        * vec4(vertex_input.fragment_world_position, 1)
-    ).rgb;
 
     // 0.04 - see https://learnopengl.com/PBR/Theory#:~:text=metals%2E-,The,notes%3A
     vec3 F0 = mix(vec3(0.04), albedo.rgb, metallic);
@@ -179,7 +189,6 @@ void main() {
     vec3 V = normalize(scene_data.camera_world_position - vertex_input.fragment_world_position);
 
     vec3 Lo = vec3(0);
-
     { // Directional light
         vec3 radiance = scene_data.directional_light.color * scene_data.directional_light.intensity;
 
@@ -195,7 +204,7 @@ void main() {
         vec3  kS = F; // "Energy consevration"
         vec3  kD = (vec3(1.0) - kS) * (1.0 - metallic); // Diffuse contribution coeff (nothing for metalls)
 
-        Lo += (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0);
+        Lo += (1 - shadow) * (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0);
     }
 
     vec3 ambient = scene_data.ambient_color * albedo.rgb * occlusion;

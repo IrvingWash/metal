@@ -696,7 +696,7 @@ create_shadow_pass_pipeline_info :: (
 create_view_projection_transform_for_light_source :: (light_source: Light_Source) -> Matrix4 {
     if #complete light_source.kind == {
         case .DIRECTIONAL;
-            RADIUS :: 100;
+            RADIUS :: 50; // @Todo: Hardcode
             CENTER :: Vector3.{};
 
             // @Todo: check this is if shadows are broken
