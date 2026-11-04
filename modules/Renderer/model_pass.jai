@@ -136,7 +136,6 @@ add_model_to_model_pass :: (
     model_pass:     *Model_Pass,
     model:          Model,
     materials_info: Materials_Info,
-    transforms:     Transforms,
 ) {
     for node: model.nodes {
         if node.parent_index.kind != .NONE {
@@ -145,7 +144,6 @@ add_model_to_model_pass :: (
 
         add_model_node_to_draw_bucket(
             materials_info,
-            transforms,
             *model_pass.model_draw_buckets,
             node,
             model.nodes,
@@ -199,7 +197,6 @@ do_model_pass :: (
         ],
         .[],
     );
-
 
     draw_passes := into_draw_passes(*model_pass.model_draw_buckets, model_pass.pbr_pipeline_info);
     { // Check
@@ -327,7 +324,6 @@ init_model_draw_buckets :: () -> Model_Draw_Buckets {
 
 add_model_node_to_draw_bucket :: (
     materials_info: Materials_Info,
-    global_transforms: Transforms,
     draw_buckets: *Model_Draw_Buckets,
     node: Node,
     nodes: []Node,
@@ -369,7 +365,6 @@ add_model_node_to_draw_bucket :: (
 
         add_model_node_to_draw_bucket(
             materials_info,
-            global_transforms,
             draw_buckets,
             child_node,
             nodes,
