@@ -141,7 +141,9 @@ float calculate_shadow(vec3 fragment_world_position, mat4x4 light_view_projectio
         return 0; // Beyond far plane
     }
 
-    vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);  // y flipped like the shadow pass viewport
+    // Shadow pass viewport is y-flipped, so flipping here
+    vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);
+
     return 1 - texture(shadow_map, vec3(uv, ndc_position.z));
 }
 
