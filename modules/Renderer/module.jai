@@ -1403,7 +1403,7 @@ DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
 ];
 
-HAVE_MORE_DEBUG :: DEBUG && true;
+HAVE_MORE_DEBUG :: DEBUG && false;
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[

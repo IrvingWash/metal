@@ -181,7 +181,7 @@ Uniform_Kind :: enum u32 {
     UNORDERED_ACCESS_VIEW :: 5;
 }
 
-Include_Type :: enum u32 {
+Include_Type :: enum s32 {
     RELATIVE :: 0;
     STANDARD :: 1;
 }
@@ -248,7 +248,7 @@ Include_Result :: struct {
 Include_Resolve_Proc :: #type (
     user_data:         *void,
     requested_source:  *u8,
-    type:              s32,
+    type:              Include_Type,
     requesting_source: *u8,
     include_depth:     u64,
 ) -> *Include_Result #c_call;

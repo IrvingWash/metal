@@ -12,6 +12,13 @@ compile_glsl_shaders :: (optimization_type: Optimization_Type, output_root: stri
     compile_options := Shaderc.compile_options_initialize();
     defer Shaderc.compile_options_release(compile_options);
 
+    Shaderc.compile_options_set_include_callbacks(
+        compile_options,
+        resolve_include,
+        release_include_result,
+        null,
+    );
+
     Shaderc.compile_options_set_target_env(compile_options, .VULKAN, .VULKAN_1_4);
     Shaderc.compile_options_set_target_spirv(compile_options, ._1_6);
     if optimization_type < .OPTIMIZED {
@@ -113,6 +120,47 @@ SHADER_META_INFOS :: Shader_Meta_Info.[
         kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
     },
 ];
+
+resolve_include: Shaderc.Include_Resolve_Proc : (
+    user_data:         *void,
+    requested_source:  *u8,
+    type:              Shaderc.Include_Type,
+    requesting_source: *u8,
+    include_depth:     u64,
+) -> *Shaderc.Include_Result #c_call {
+    push_context {
+        result := New(Shaderc.Include_Result);
+
+        requesting_source_root := path_strip_filename(to_string(requesting_source));
+        requested_source_full_path := path_join(
+            requesting_source_root,
+            to_string(requested_source),,
+            temp
+        );
+
+        file, ok := read_entire_file(requested_source_full_path,, temp);
+
+        if !ok {
+            message := tprint("Failed to read %", requested_source_full_path);
+            result.content = message.data;
+            result.content_length = xx message.count;
+        }
+
+        result.source_name = requested_source_full_path.data;
+        result.source_name_length = xx requested_source_full_path.count;
+        result.content = file.data;
+        result.content_length = xx file.count;
+
+        return result;
+    }
+}
+
+release_include_result: Shaderc.Include_Result_Release_Proc : (
+    user_data:      *void,
+    include_result: *Shaderc.Include_Result,
+) #c_call {
+    // All temp
+};
 
 #import "Basic";
 #import "File";

@@ -1,39 +1,13 @@
 #version 460
 
+#include "types.glsl"
+
 #extension GL_EXT_nonuniform_qualifier                   : require
 #extension GL_EXT_scalar_block_layout                    : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_buffer_reference                       : require
 
 const float PI = 3.14159265359;
-
-struct Directional_Light {
-    vec3 direction;
-    float intensity;
-    vec3 color;
-};
-
-struct Material {
-    vec4 base_color_factor;
-    uint base_color_texture_index;
-
-    float metallic_factor;
-    float roughness_factor;
-    uint metallic_roughness_texture_index;
-
-    float normal_scale;
-    uint  normal_texture_index;
-
-    float occlusion_strength;
-    uint occlusion_texture_index;
-
-    vec3 emissive_factor;
-    uint emissive_texture_index;
-
-    float alpha_cutoff;
-    uint alpha_mode;
-    uint double_sided; // 0 or 1
-};
 
 float calculate_shadow(
     sampler2DShadow shadow_map,
