@@ -34,17 +34,12 @@ layout(buffer_reference, scalar, row_major) readonly buffer Instance_Buffer {
     Instance instances[];
 };
 
-layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
-    mat4x4 light_view_projection_transform;
-} shadow_pass_data;
-
 layout(location = 0) out Vertex_Output {
          vec4 color;
          vec3 world_space_normal;
          vec4 world_space_tangent;
          vec2 uv;
          vec3 fragment_world_position;
-         vec3 fragment_light_space_position;
     flat uint material_index;
 } vertex_output;
 
@@ -61,10 +56,6 @@ void main() {
     vertex_output.uv                         = vertex.uv;
     vertex_output.material_index             = instance.material_index;
     vertex_output.fragment_world_position    = (instance.world_transform * vec4(vertex.position, 1)).xyz;
-    vertex_output.fragment_light_space_position = (
-        shadow_pass_data.light_view_projection_transform
-        * vec4(vertex_output.fragment_world_position, 1)
-    ).rgb;
     vertex_output.world_space_normal         = instance.inverse_transpose_world_transform * vertex.normal;
     vertex_output.world_space_tangent        = vec4(
         mat3(instance.world_transform) * vertex.tangent.xyz,

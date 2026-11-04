@@ -113,7 +113,6 @@ layout(location = 0) in Vertex_Input {
          vec4 world_space_tangent;
          vec2 uv;
          vec3 fragment_world_position;
-         vec3 fragment_light_space_position;
     flat uint material_index;
 } vertex_input;
 
@@ -129,6 +128,10 @@ layout(scalar, set = 1, binding = 0) uniform Scene_Data {
 } scene_data;
 
 layout(set = 2, binding = 0) uniform sampler2D shadow_depth_texture;
+
+layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
+    mat4x4 light_view_projection_transform;
+} shadow_pass_data;
 
 layout(location = 0) out vec4 fragment_color;
 
@@ -154,6 +157,11 @@ void main() {
     float roughness = metallic_roughness_texel.g * material.roughness_factor;
     float roughness_clamped = max(roughness, 0.045); // 0.045 - see https://google.github.io/filament/Filament.md.html#imagingpipeline/physicallybasedcamera/bloom:~:text=1%20The%20Frostbite%20engine%20clamps%20the%20roughness%20of%20analytical%20lights%20to%200%2E045%20to%20reduce%20specular%20aliasing%2E%20This%20is%20possible%20when%20using%20single%20precision%20floats%20%28fp32%29%2E
     float roughness_squared  = roughness_clamped * roughness_clamped;
+
+    vec3 fragment_light_space_position = (
+        shadow_pass_data.light_view_projection_transform
+        * vec4(vertex_input.fragment_world_position, 1)
+    ).rgb;
 
     // 0.04 - see https://learnopengl.com/PBR/Theory#:~:text=metals%2E-,The,notes%3A
     vec3 F0 = mix(vec3(0.04), albedo.rgb, metallic);

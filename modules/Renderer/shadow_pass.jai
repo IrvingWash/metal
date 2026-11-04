@@ -478,7 +478,7 @@ create_shadow_pass_descriptors :: (device: VK.Device) -> error: string,
                 binding          = 1,
                 descriptor_type  = .UNIFORM_BUFFER,
                 descriptor_count = 1,
-                stage_flags      = .VERTEX,
+                stage_flags      = .FRAGMENT,
             }
         ];
 
