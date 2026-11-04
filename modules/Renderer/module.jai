@@ -525,6 +525,15 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         }
     }
 
+    // =============================================================================
+    // Writing model passes
+    // =============================================================================
+    write_model_draw_passes(
+        *renderer.model_pass,
+        frame_resources_index,
+        renderer.allocator,
+    );
+
     // =========================================================================
     // Shadow pass start
     // =========================================================================
@@ -627,7 +636,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     };
     VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
 
-    do_model_pass(
+    draw_model_passes(
         *renderer.model_pass,
         renderer.geometry_info,
         renderer.materials_info,
@@ -635,7 +644,6 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         frame_resources.command_buffer,
         renderer.scene_info,
         renderer.transforms,
-        renderer.allocator,
     );
 
     VK.cmd_end_rendering(frame_resources.command_buffer);

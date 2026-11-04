@@ -2,7 +2,9 @@
 
 Model_Pass :: struct {
     pbr_pipeline_info: Pbr_Pipeline_Info;
-    model_draw_buckets: Model_Draw_Buckets;
+
+    draw_buckets: Model_Draw_Buckets;
+    draw_passes:  [6]Model_Draw_Pass;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     instance_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*Instance;
@@ -38,7 +40,7 @@ create_model_pass :: (
             model_pass;
     }
 
-    model_pass.model_draw_buckets = init_model_draw_buckets();
+    model_pass.draw_buckets = init_model_draw_buckets();
 
     // Indirect draw buffer
     for *indirect_draw_buffer_info: model_pass.indirect_draw_buffer_infos {
@@ -121,7 +123,7 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
         );
     }
 
-    destroy_model_draw_buckets(*model_pass.model_draw_buckets);
+    destroy_model_draw_buckets(*model_pass.draw_buckets);
 
     destroy_pbr_pipeline(device, *model_pass.pbr_pipeline_info);
 
@@ -129,7 +131,8 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
 }
 
 reset_model_pass :: (model_pass: *Model_Pass) {
-    reset_model_draw_buckets(*model_pass.model_draw_buckets);
+    model_pass.draw_passes = .[{}, {}, {}, {}, {}, {}];
+    reset_model_draw_buckets(*model_pass.draw_buckets);
 }
 
 add_model_to_model_pass :: (
@@ -144,7 +147,7 @@ add_model_to_model_pass :: (
 
         add_model_node_to_draw_bucket(
             materials_info,
-            *model_pass.model_draw_buckets,
+            *model_pass.draw_buckets,
             node,
             model.nodes,
             model.transform,
@@ -152,7 +155,48 @@ add_model_to_model_pass :: (
     }
 }
 
-do_model_pass :: (
+write_model_draw_passes :: (
+    model_pass:  *Model_Pass,
+    frame_index: u64,
+    allocator:   VMA.Allocator,
+) {
+    model_pass.draw_passes = into_draw_passes(*model_pass.draw_buckets, model_pass.pbr_pipeline_info);
+    { // Check
+        count: int;
+        for draw_pass: model_pass.draw_passes {
+            count += draw_pass.bucket.count;
+        }
+        assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
+    }
+
+    cursor: u32;
+    for pass: model_pass.draw_passes {
+        for entry: pass.bucket {
+            command := entry.command;
+            command.first_instance = cursor;
+
+            model_pass.indirect_draw_buffer_pointers[frame_index][cursor] = command;
+            model_pass.instance_buffer_pointers[frame_index][cursor]      = entry.instance;
+
+            cursor += 1;
+        }
+    }
+
+    VMA.flush_allocation(
+        allocator,
+        model_pass.indirect_draw_buffer_infos[frame_index].allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
+    VMA.flush_allocation(
+        allocator,
+        model_pass.instance_buffer_infos[frame_index].allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
+}
+
+draw_model_passes :: (
     model_pass:     *Model_Pass,
     geometry_info:  Geometry_Info,
     materials_info: Materials_Info,
@@ -160,7 +204,6 @@ do_model_pass :: (
     command_buffer: VK.Command_Buffer,
     scene_info:     Scene_Info,
     transforms:     Transforms,
-    allocator:      VMA.Allocator,
 ) {
     push_constants: Push_Constants = {
         vertex_buffer_address   = geometry_info.vertex_buffer_info.device_address,
@@ -198,47 +241,10 @@ do_model_pass :: (
         .[],
     );
 
-    draw_passes := into_draw_passes(*model_pass.model_draw_buckets, model_pass.pbr_pipeline_info);
-    { // Check
-        count: int;
-        for draw_pass: draw_passes {
-            count += draw_pass.bucket.count;
-        }
-        assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
-    }
-
-    { // Copy to buffers
-        cursor: u32;
-        for pass: draw_passes {
-            for entry: pass.bucket {
-                command := entry.command;
-                command.first_instance = cursor;
-
-                model_pass.indirect_draw_buffer_pointers[frame_index][cursor] = command;
-                model_pass.instance_buffer_pointers[frame_index][cursor]      = entry.instance;
-
-                cursor += 1;
-            }
-        }
-    }
-
-    VMA.flush_allocation(
-        allocator,
-        model_pass.indirect_draw_buffer_infos[frame_index].allocation,
-        offset = 0,
-        VK.WHOLE_SIZE,
-    );
-    VMA.flush_allocation(
-        allocator,
-        model_pass.instance_buffer_infos[frame_index].allocation,
-        offset = 0,
-        VK.WHOLE_SIZE,
-    );
-
     { // Draw
         offset: int;
         bound_pipeline:  VK.Pipeline;
-        for draw_pass: draw_passes {
+        for draw_pass: model_pass.draw_passes {
             if draw_pass.bucket.count == 0 {
                 continue;
             }
@@ -307,7 +313,7 @@ Model_Draw_Bucket_Entry :: struct {
     instance: Instance;
 }
 
-Draw_Pass :: struct {
+Model_Draw_Pass :: struct {
     bucket:    []Model_Draw_Bucket_Entry;
     pipeline:  VK.Pipeline;
     cull_mode: VK.Cull_Mode_Flags;
@@ -373,43 +379,6 @@ add_model_node_to_draw_bucket :: (
     }
 }
 
-into_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pbr_pipeline_info: Pbr_Pipeline_Info) -> [6]Draw_Pass {
-    #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
-
-    return .[
-        {
-            bucket    = draw_buckets.single_opaque,
-            pipeline  = pbr_pipeline_info.opaque_pipeline,
-            cull_mode = .BACK,
-        },
-        {
-            bucket    = draw_buckets.double_opaque,
-            pipeline  = pbr_pipeline_info.opaque_pipeline,
-            cull_mode = .NONE,
-        },
-        {
-            bucket    = draw_buckets.single_mask,
-            pipeline  = pbr_pipeline_info.mask_pipeline,
-            cull_mode = .BACK,
-        },
-        {
-            bucket    = draw_buckets.double_mask,
-            pipeline  = pbr_pipeline_info.mask_pipeline,
-            cull_mode = .NONE,
-        },
-        {
-            bucket    = draw_buckets.single_blend,
-            pipeline  = pbr_pipeline_info.blend_pipeline,
-            cull_mode = .BACK,
-        },
-        {
-            bucket    = draw_buckets.double_blend,
-            pipeline  = pbr_pipeline_info.blend_pipeline,
-            cull_mode = .NONE,
-        },
-    ];
-}
-
 get_model_draw_bucket_by_material :: (draw_buckets: *Model_Draw_Buckets, material: Material) -> *[..]Model_Draw_Bucket_Entry {
     if material.double_sided {
         if #complete material.alpha_mode == {
@@ -451,6 +420,43 @@ destroy_model_draw_buckets :: (draw_buckets: *Model_Draw_Buckets) {
 
 
 #scope_file
+
+into_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pbr_pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Pass {
+    #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
+
+    return .[
+        {
+            bucket    = draw_buckets.single_opaque,
+            pipeline  = pbr_pipeline_info.opaque_pipeline,
+            cull_mode = .BACK,
+        },
+        {
+            bucket    = draw_buckets.double_opaque,
+            pipeline  = pbr_pipeline_info.opaque_pipeline,
+            cull_mode = .NONE,
+        },
+        {
+            bucket    = draw_buckets.single_mask,
+            pipeline  = pbr_pipeline_info.mask_pipeline,
+            cull_mode = .BACK,
+        },
+        {
+            bucket    = draw_buckets.double_mask,
+            pipeline  = pbr_pipeline_info.mask_pipeline,
+            cull_mode = .NONE,
+        },
+        {
+            bucket    = draw_buckets.single_blend,
+            pipeline  = pbr_pipeline_info.blend_pipeline,
+            cull_mode = .BACK,
+        },
+        {
+            bucket    = draw_buckets.double_blend,
+            pipeline  = pbr_pipeline_info.blend_pipeline,
+            cull_mode = .NONE,
+        },
+    ];
+}
 
 into_array :: (draw_buckets: *Model_Draw_Buckets) -> [6]*[..]Model_Draw_Bucket_Entry {
     #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
