@@ -4,6 +4,8 @@ Shadow_Pass :: struct {
     depth_image_info: Image_Info;
 
     pipeline_info: Shadow_Pass_Pipeline_Info;
+
+    directional_light_view_projection_transform: Matrix4 = Matrix4_Identity;
 }
 
 Light_Source :: union kind: Light_Source_Kind {
@@ -86,7 +88,7 @@ do_shadow_pass :: (
     materials_info: Materials_Info,
     model_pass:     Model_Pass,
     frame_index:    u64,
-) -> Matrix4 {
+) {
     view_projection_transform := create_view_projection_transform_for_light_source(light_source);
 
     { // Transition to depth attachment
@@ -260,7 +262,7 @@ do_shadow_pass :: (
         VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
     }
 
-    return view_projection_transform;
+    shadow_pass.directional_light_view_projection_transform = view_projection_transform;
 }
 
 

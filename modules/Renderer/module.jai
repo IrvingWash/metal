@@ -540,7 +540,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     light_source: Light_Source;
     light_source.kind = .DIRECTIONAL;
     light_source.directional.direction = renderer.scene_info.scene_data.directional_light.direction;
-    light_view_projection_transform := do_shadow_pass(
+    do_shadow_pass(
         *renderer.shadow_pass,
         light_source,
         frame_resources.command_buffer,
