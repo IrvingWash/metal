@@ -36,6 +36,7 @@ layout(buffer_reference, scalar, row_major) readonly buffer Instance_Buffer {
 
 layout(location = 0) out Vertex_Output {
          vec2 uv;
+         vec4 color;
     flat uint material_index;
 } vertex_output;
 
@@ -51,4 +52,5 @@ void main() {
 
     vertex_output.uv             = vertex.uv;
     vertex_output.material_index = instance.material_index;
+    vertex_output.color          = vertex.color;
 }

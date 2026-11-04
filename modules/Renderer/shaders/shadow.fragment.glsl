@@ -39,6 +39,7 @@ layout(set = 0, binding = 0) uniform sampler2D textures[];
 
 layout(location = 0) in Vertex_Input {
          vec2 uv;
+         vec4 color;
     flat uint material_index;
 } vertex_input;
 
@@ -46,7 +47,9 @@ void main() {
     Material_Buffer material_buffer = Material_Buffer(constants.material_buffer_address);
     Material material = material_buffer.materials[vertex_input.material_index];
 
-    float alpha = texture(textures[material.base_color_texture_index], vertex_input.uv).a * material.base_color_factor.a;
+    float alpha = texture(textures[material.base_color_texture_index], vertex_input.uv).a
+        * vertex_input.color.a
+        * material.base_color_factor.a;
 
     if (alpha < material.alpha_cutoff) {
         discard;

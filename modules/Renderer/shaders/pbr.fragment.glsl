@@ -56,7 +56,7 @@ float calculate_shadow(
     vec4 light_space_position = light_view_projection_transform * vec4(offset_position, 1);
     vec3 ndc_position = light_space_position.xyz / light_space_position.w;
 
-    if (ndc_position.z > 1.0) {
+    if (ndc_position.z < 0 || ndc_position.z > 1) {
         return 0; // Beyond far plane
     }
 
@@ -64,16 +64,16 @@ float calculate_shadow(
     vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);
 
     // PCF
-    vec2 texel = 1.0 / shadow_map_size;
-    float lit = 0.0;
+    vec2 texel = 1 / shadow_map_size;
+    float lit = 0;
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
             lit += texture(shadow_map, vec3(uv + vec2(x, y) * texel, ndc_position.z));
         }
     }
-    lit /= 9.0;
+    lit /= 9;
 
-    return 1.0 - lit;
+    return 1 - lit;
 }
 
 // Normal distribution function (Trowbridge-Reitz) - D

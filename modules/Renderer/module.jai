@@ -2631,6 +2631,7 @@ create_device :: (physical_device: VK.Physical_Device, queues_to_create: []Queue
             || !features_12.descriptor_binding_partially_bound
             || !features_12.scalar_block_layout
             || !features_12.runtime_descriptor_array
+            || !features.features.shader_sampled_image_array_dynamic_indexing
             || !features.features.multi_draw_indirect
             || !features.features.draw_indirect_first_instance
             || !features.features.shader_int64
@@ -2660,9 +2661,10 @@ create_device :: (physical_device: VK.Physical_Device, queues_to_create: []Queue
     required_features := VK.Physical_Device_Features_2.{
         p_next = *required_features_12,
         features = {
-            multi_draw_indirect          = VK.TRUE,
-            shader_int64                 = VK.TRUE,
-            draw_indirect_first_instance = VK.TRUE,
+            multi_draw_indirect                         = VK.TRUE,
+            shader_int64                                = VK.TRUE,
+            draw_indirect_first_instance                = VK.TRUE,
+            shader_sampled_image_array_dynamic_indexing = VK.TRUE,
         }
     };
 
