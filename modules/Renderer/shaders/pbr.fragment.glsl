@@ -113,6 +113,7 @@ layout(location = 0) in Vertex_Input {
          vec4 world_space_tangent;
          vec2 uv;
          vec3 fragment_world_position;
+         vec3 fragment_light_space_position;
     flat uint material_index;
 } vertex_input;
 
@@ -128,10 +129,6 @@ layout(scalar, set = 1, binding = 0) uniform Scene_Data {
 } scene_data;
 
 layout(set = 2, binding = 0) uniform sampler2D shadow_depth_texture;
-
-layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
-    mat4x4 light_view_projection_transform;
-} shadow_pass_data;
 
 layout(location = 0) out vec4 fragment_color;
 
