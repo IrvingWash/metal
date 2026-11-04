@@ -144,7 +144,16 @@ float calculate_shadow(vec3 fragment_world_position, mat4x4 light_view_projectio
     // Shadow pass viewport is y-flipped, so flipping here
     vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);
 
-    return 1 - texture(shadow_map, vec3(uv, ndc_position.z));
+    vec2 texel = 1.0 / vec2(textureSize(shadow_map, 0));
+    float lit = 0.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            lit += texture(shadow_map, vec3(uv + vec2(x, y) * texel, ndc_position.z));
+        }
+    }
+    lit /= 9.0;
+
+    return 1.0 - lit;
 }
 
 void main() {

@@ -15,3 +15,5 @@
 - Refactor `upload_*` procedures in `Renderer` so there's better batching
 
 - HDR
+
+- Figure out shadow improvemetns - PCF, RADIUS calculatino, etc

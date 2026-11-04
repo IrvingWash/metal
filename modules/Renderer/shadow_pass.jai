@@ -328,7 +328,7 @@ do_shadow_pass :: (
         command_buffer,
         constant_factor = 1.25,
         clamp = 0,
-        slope_factor = 1.75,
+        slope_factor = 2, // 1.75 // @Todo: hardoced
     );
 
     { // Draw

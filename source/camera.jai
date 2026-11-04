@@ -68,22 +68,26 @@ fly :: (camera: *Camera, dt: float) {
         camera.fov_vertical = clamp(camera.fov_vertical, MIN_FOV_VERTICAL, MAX_FOV_VERTICAL);
     }
 
+    speed := camera.speed;
+    if state.input_state.keys[Input.Scan_Code.LSHIFT] & .DOWN {
+        speed = camera.speed * 2;
+    }
     if state.input_state.keys[Input.Scan_Code.W] & .DOWN {
-        camera.position += camera.speed * camera.front * dt;
+        camera.position += speed * camera.front * dt;
     }
     if state.input_state.keys[Input.Scan_Code.S] & .DOWN {
-        camera.position -= camera.speed * camera.front * dt;
+        camera.position -= speed * camera.front * dt;
     }
     if state.input_state.keys[Input.Scan_Code.A] & .DOWN {
-        camera.position -= normalize(cross(camera.front, camera.up)) * camera.speed * dt;
+        camera.position -= normalize(cross(camera.front, camera.up)) * speed * dt;
     }
     if state.input_state.keys[Input.Scan_Code.D] & .DOWN {
-        camera.position += normalize(cross(camera.front, camera.up)) * camera.speed * dt;
+        camera.position += normalize(cross(camera.front, camera.up)) * speed * dt;
     }
     if state.input_state.keys[Input.Scan_Code.E] & .DOWN {
-        camera.position += normalize(cross(camera.right, camera.front)) * camera.speed * dt;
+        camera.position += normalize(cross(camera.right, camera.front)) * speed * dt;
     }
     if state.input_state.keys[Input.Scan_Code.Q] & .DOWN {
-        camera.position -= normalize(cross(camera.right, camera.front)) * camera.speed * dt;
+        camera.position -= normalize(cross(camera.right, camera.front)) * speed * dt;
     }
 }
