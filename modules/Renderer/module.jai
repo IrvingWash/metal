@@ -1432,6 +1432,7 @@ Swapchain_Info :: struct {
     config:                     VK.Swapchain_Create_Info_Khr;
 
     images:                     [..]VK.Image;
+    image_views:                [..]VK.Image_View;
     render_complete_semaphores: [..]VK.Semaphore;
 
     should_recreate: bool;
@@ -2623,7 +2624,7 @@ create_swapchain :: (
             image_color_space  = DEFAULT_SURFACE_FORMAT.color_space,
             image_extent       = image_extent,
             image_array_layers = 1,
-            image_usage        = .TRANSFER_DST,
+            image_usage        = .TRANSFER_DST | .COLOR_ATTACHMENT,
             image_sharing_mode = .EXCLUSIVE,
             pre_transform      = surface_capabilities.current_transform,
             composite_alpha    = .OPAQUE_KHR,
@@ -2646,6 +2647,26 @@ create_swapchain :: (
             return
                 tprint("Failed to get swapchain images: %", result),
                 swapchain_info;
+        }
+    }
+
+    { // Image views
+        for image: swapchain_info.images {
+            error, image_view := create_image_view(
+                device,
+                image,
+                swapchain_info.config.image_format,
+                aspect_mask = .COLOR,
+                1,
+            );
+            if error {
+                return error, swapchain_info;
+            }
+
+            array_add(
+                *swapchain_info.image_views,
+                image_view,
+            );
         }
     }
 
@@ -2674,6 +2695,11 @@ destroy_swapchain :: (device: VK.Device, swapchain_info: *Swapchain_Info) {
         VK.destroy_semaphore(device, semaphore);
     }
     array_free(swapchain_info.render_complete_semaphores);
+
+    for image_view: swapchain_info.image_views {
+        VK.destroy_image_view(device, image_view);
+    }
+    array_free(swapchain_info.image_views);
 
     array_free(swapchain_info.images);
 

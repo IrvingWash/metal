@@ -23,13 +23,11 @@ SDL_INCLUDE_PATH    :: #run path_join(#filepath, "..", "vendored", "SDL", "inclu
         exit(1);
     }
 
-/* // There are some wrong types generated, cleaned up by hand
-    error := generate_bindings();
+    error = generate_bindings();
     if error {
         log_error("Failed to generate bindings: %", error);
         exit(1);
     }
-*/
 }
 
 generate_bindings :: () -> error: string {
@@ -89,9 +87,10 @@ build :: () -> error: string {
         path_join(IMGUI_PATH, "imgui_draw.cpp",,    temp),
         path_join(IMGUI_PATH, "imgui_tables.cpp",,  temp),
         path_join(IMGUI_PATH, "imgui_widgets.cpp",, temp),
+        path_join(IMGUI_PATH, "imgui_demo.cpp",,    temp),
 
-        path_join(IMGUI_BACKENDS_PATH, "imgui_impl_sdl3.cpp"),
-        path_join(IMGUI_BACKENDS_PATH, "imgui_impl_vulkan.cpp"),
+        path_join(IMGUI_BACKENDS_PATH, "imgui_impl_sdl3.cpp",, temp),
+        path_join(IMGUI_BACKENDS_PATH, "imgui_impl_vulkan.cpp",, temp),
     ];
 
     ok := make_directory_if_it_does_not_exist(OUTPUT_PATH);
@@ -103,7 +102,7 @@ build :: () -> error: string {
     }
 
     #if OS == .LINUX {
-        build_cpp_static_lib(
+        ok = build_cpp_static_lib(
             path_join(OUTPUT_PATH, "libimgui"),
             ..imgui_src_files,
             extra = .[
@@ -117,6 +116,9 @@ build :: () -> error: string {
             ],
             debug = false,
         );
+        if !ok {
+            return "Failed to build ImGui";
+        }
     } else {
         #assert false, "Unsupported OS";
     }

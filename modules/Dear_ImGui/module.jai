@@ -12,7 +12,7 @@ ImDrawCallback :: #type (parent_list: *ImDrawList, cmd: *ImDrawCmd) #c_call;
 
 #if OS == .LINUX {
     libimgui :: #library,no_dll "./LINUX/libimgui";
-    #load "./LINUX.jai";
+    #load "./MANUAL_LINUX.jai";
 }
 
 

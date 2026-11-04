@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai ./modules/Dear_ImGui/generate.jai
+// jai modules/Dear_ImGui/generate.jai
 //
 
 
@@ -2936,12 +2936,16 @@ EndFrame :: () -> void #foreign libimgui "_ZN5ImGui8EndFrameEv";
 Render :: () -> void #foreign libimgui "_ZN5ImGui6RenderEv";
 GetDrawData :: () -> *ImDrawData #foreign libimgui "_ZN5ImGui11GetDrawDataEv";
 
+// Demo, Debug, Information
+ShowDemoWindow :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui14ShowDemoWindowEPb";
 ShowMetricsWindow :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui17ShowMetricsWindowEPb";
 ShowDebugLogWindow :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui18ShowDebugLogWindowEPb";
 ShowIDStackToolWindow :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui21ShowIDStackToolWindowEPb";
-
+ShowAboutWindow :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui15ShowAboutWindowEPb";
+ShowStyleEditor :: (ref: *Style = null) -> void #foreign libimgui "_ZN5ImGui15ShowStyleEditorEP10ImGuiStyle";
+ShowStyleSelector :: (label: *u8) -> bool #foreign libimgui "_ZN5ImGui17ShowStyleSelectorEPKc";
 ShowFontSelector :: (label: *u8) -> void #foreign libimgui "_ZN5ImGui16ShowFontSelectorEPKc";
-
+ShowUserGuide :: () -> void #foreign libimgui "_ZN5ImGui13ShowUserGuideEv";
 GetVersion :: () -> *u8 #foreign libimgui "_ZN5ImGui10GetVersionEv";
 
 // Styles
@@ -3182,17 +3186,26 @@ GetFrameHeightWithSpacing :: () -> float #foreign libimgui "_ZN5ImGui25GetFrameH
 //   whereas "str_id" denote a string that is only used as an ID and not normally displayed.
 PushID :: (str_id: *u8) -> void #foreign libimgui "_ZN5ImGui6PushIDEPKc";
 PushID :: (str_id_begin: *u8, str_id_end: *u8) -> void #foreign libimgui "_ZN5ImGui6PushIDEPKcS1_";
+PushID :: (str_id_begin: *u8, str_id_end: *u8) #no_context {
+    PushID(str_id_begin, str_id_end);
+}
 PushID :: (ptr_id: *void) -> void #foreign libimgui "_ZN5ImGui6PushIDEPKv";
 PushID :: (int_id: s32) -> void #foreign libimgui "_ZN5ImGui6PushIDEi";
 PopID :: () -> void #foreign libimgui "_ZN5ImGui5PopIDEv";
 GetID :: (str_id: *u8) -> ID #foreign libimgui "_ZN5ImGui5GetIDEPKc";
 GetID :: (str_id_begin: *u8, str_id_end: *u8) -> ID #foreign libimgui "_ZN5ImGui5GetIDEPKcS1_";
+GetID :: (str_id_begin: *u8, str_id_end: *u8) -> ID #no_context {
+    return GetID(str_id_begin, str_id_end);
+}
 GetID :: (ptr_id: *void) -> ID #foreign libimgui "_ZN5ImGui5GetIDEPKv";
 GetID :: (int_id: s32) -> ID #foreign libimgui "_ZN5ImGui5GetIDEi";
 
 // Widgets: Text
 // - Note that all functions taking format strings in the API may be passed ("%s", text) or ("%.*s", text_len, text): which will automatically bypass the formatter.
 TextUnformatted :: (text: *u8, text_end: *u8 = null) -> void #foreign libimgui "_ZN5ImGui15TextUnformattedEPKcS1_";
+TextUnformatted :: (text: *u8, text_end: *u8 = null) #no_context {
+    TextUnformatted(text, text_end);
+}
 Text_CFormat :: (fmt: *u8, __args: ..Any) -> void #foreign libimgui "_ZN5ImGui4TextEPKcz";
 Text :: (fmt: string, __args: ..Any) {
     push_allocator(temp);
@@ -3782,6 +3795,9 @@ GetStateStorage :: () -> *Storage #foreign libimgui "_ZN5ImGui15GetStateStorageE
 
 // Text Utilities
 CalcTextSize :: (text: *u8, text_end: *u8 = null, hide_text_after_double_hash := false, wrap_width: float = -1.0) -> ImVec2 #foreign libimgui "_ZN5ImGui12CalcTextSizeEPKcS1_bf";
+CalcTextSize :: (text: *u8, text_end: *u8 = null, hide_text_after_double_hash := false, wrap_width: float = -1.0) -> ImVec2 #no_context {
+    return CalcTextSize(text, text_end, hide_text_after_double_hash, wrap_width);
+}
 
 // Color Utilities
 ColorConvertU32ToFloat4 :: (in: ImU32) -> ImVec4 #foreign libimgui "_ZN5ImGui23ColorConvertU32ToFloat4Ej";
@@ -5502,6 +5518,9 @@ InputTextCallbackData :: struct {
     Constructor :: (this: *InputTextCallbackData) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackDataC1Ev";
     DeleteChars :: (this: *InputTextCallbackData, pos: s32, bytes_count: s32) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackData11DeleteCharsEii";
     InsertChars :: (this: *InputTextCallbackData, pos: s32, text: *u8, text_end: *u8 = null) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackData11InsertCharsEiPKcS1_";
+    InsertChars :: (this: *InputTextCallbackData, pos: s32, text: *u8, text_end: *u8 = null) #no_context {
+        InsertChars(this, pos, text, text_end);
+    }
 }
 
 // Resizing callback data to apply custom constraint. As enabled by SetNextWindowSizeConstraints(). Callback is called during the next Begin().
@@ -5537,6 +5556,9 @@ TextFilterItem :: struct {}
 TextFilter :: struct {
     Constructor :: (this: *TextFilter, default_filter: *u8 = "") -> void #cpp_method #foreign libimgui "_ZN15ImGuiTextFilterC1EPKc";
     PassFilter :: (this: *TextFilter, text: *u8, text_end: *u8 = null) -> bool #cpp_method #foreign libimgui "_ZNK15ImGuiTextFilter10PassFilterEPKcS1_";
+    PassFilter :: (this: *TextFilter, text: *u8, text_end: *u8 = null) -> bool #no_context {
+        return PassFilter(this, text, text_end);
+    }
     Build :: (this: *TextFilter) -> void #cpp_method #foreign libimgui "_ZN15ImGuiTextFilter5BuildEv";
 
     // Helper to call InputText() + Build() when buffer is changed.
@@ -5594,6 +5616,12 @@ Storage :: struct {
 
     // Obsolete: use on your own storage if you know only integer are being stored (open/close all tree nodes)
     SetAllInt :: (this: *Storage, val: s32) -> void #cpp_method #foreign libimgui "_ZN12ImGuiStorage9SetAllIntEi";
+}
+
+// [Internal] Used for small stacks. Do not use.
+ImSmallStack_ :: struct(T: Type, Capacity: s32, SZ_T: Type = xx ImU16) {
+    LocalData: [Capacity] T; // FIXME: should evolve into using heap, e.g union {} with T* HeapData + add SZ_T Capacity.
+    Size:      SZ_T = 0;
 }
 
 // Flags for ImGuiListClipper (currently not fully exposed in function calls: a future refactor will likely add this to ImGuiListClipper::Begin function equivalent)
@@ -5874,6 +5902,8 @@ ImDrawFlags :: enum_flags s32 {
     RoundMask_               :: 0x1f0;
     AllowInPushScope_        :: 0x7e71f0;
     AllowInFrameScope_       :: 0xfe71f0;
+    StrokeMask_              :: 0xe0000;
+    InvalidMask_             :: 0xffffffff8000000f;
 
     RoundCornersTopLeft      :: 0x10;
     RoundCornersTopRight     :: 0x20;
@@ -5922,6 +5952,8 @@ ImDrawFlags :: enum_flags s32 {
     ImDrawFlags_RoundMask_               :: RoundMask_;
     ImDrawFlags_AllowInPushScope_        :: AllowInPushScope_;
     ImDrawFlags_AllowInFrameScope_       :: AllowInFrameScope_;
+    ImDrawFlags_StrokeMask_              :: StrokeMask_;
+    ImDrawFlags_InvalidMask_             :: InvalidMask_;
 
     ImDrawFlags_RoundCornersTopLeft      :: RoundCornersTopLeft;
     ImDrawFlags_RoundCornersTopRight     :: RoundCornersTopRight;
@@ -5961,6 +5993,7 @@ ImDrawList :: struct {
     _ClipRectStack:        ImVector(ImVec4); // [Internal]
     _TextureStack:         ImVector(ImTextureRef); // [Internal]
     _CallbacksDataBuf:     ImVector(ImU8); // [Internal]
+    _DrawFlagsStack:       ImSmallStack_(ImDrawFlags, 3) = 3; // [Internal]
     _FringeScale:          float; // [Internal] anti-alias fringe is scaled by this value, this helps to keep things sharp while zooming at vertex buffer content
     _InvFringeScale:       float; // [internal] 1.0 / _FringeScale // FIXME: Consider renaming to _PixelDensity.
     _FringeScaleIsInteger: bool; // [Internal] true if 1/_FringeScale is a whole number, used to select fast path for rendering
@@ -6375,6 +6408,9 @@ ImFontGlyphRangesBuilder :: struct {
     UsedChars: ImVector(ImU32); // Store 1-bit per Unicode code point (0=unused, 1=used)
 
     AddText :: (this: *ImFontGlyphRangesBuilder, text: *u8, text_end: *u8 = null) -> void #cpp_method #foreign libimgui "_ZN24ImFontGlyphRangesBuilder7AddTextEPKcS1_";
+    AddText :: (this: *ImFontGlyphRangesBuilder, text: *u8, text_end: *u8 = null) #no_context {
+        AddText(this, text, text_end);
+    }
     AddRanges :: (this: *ImFontGlyphRangesBuilder, ranges: *ImWchar) -> void #cpp_method #foreign libimgui "_ZN24ImFontGlyphRangesBuilder9AddRangesEPKt";
     BuildRanges :: (this: *ImFontGlyphRangesBuilder, out_ranges: *ImVector(ImWchar)) -> void #cpp_method #foreign libimgui "_ZN24ImFontGlyphRangesBuilder11BuildRangesEP8ImVectorItE";
 }
@@ -6670,7 +6706,13 @@ ImFont :: struct {
     // 'wrap_width' enable automatic word-wrapping across multiple lines to fit into given width. 0.0f to disable.
     GetFontBaked :: (this: *ImFont, font_size: float, density: float = -1.0) -> *ImFontBaked #cpp_method #foreign libimgui "_ZN6ImFont12GetFontBakedEff";
     CalcTextSizeA :: (this: *ImFont, size: float, max_width: float, wrap_width: float, text_begin: *u8, text_end: *u8 = null, out_remaining: **u8 = null) -> ImVec2 #cpp_method #foreign libimgui "_ZN6ImFont13CalcTextSizeAEfffPKcS1_PS1_";
+    CalcTextSizeA :: (this: *ImFont, size: float, max_width: float, wrap_width: float, text_begin: *u8, text_end: *u8 = null, out_remaining: **u8 = null) -> ImVec2 #no_context {
+        return CalcTextSizeA(this, size, max_width, wrap_width, text_begin, text_end, out_remaining);
+    }
     CalcWordWrapPosition :: (this: *ImFont, size: float, text: *u8, text_end: *u8, wrap_width: float) -> *u8 #cpp_method #foreign libimgui "_ZN6ImFont20CalcWordWrapPositionEfPKcS1_f";
+    CalcWordWrapPosition :: (this: *ImFont, size: float, text: *u8, text_end: *u8, wrap_width: float) -> *u8 #no_context {
+        return CalcWordWrapPosition(this, size, text, text_end, wrap_width);
+    }
     RenderChar :: (this: *ImFont, draw_list: *ImDrawList, size: float, pos: *ImVec2, col: ImU32, c: ImWchar, cpu_fine_clip: *ImVec4 = null) -> void #cpp_method #foreign libimgui "_ZN6ImFont10RenderCharEP10ImDrawListfRK6ImVec2jtPK6ImVec4";
     RenderChar :: (this: *ImFont, draw_list: *ImDrawList, size: float, pos: ImVec2, col: ImU32, c: ImWchar, cpu_fine_clip: *ImVec4 = null) #no_context {
         RenderChar(this, draw_list, size, *pos, col, c, cpu_fine_clip);

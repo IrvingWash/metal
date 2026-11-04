@@ -21,6 +21,10 @@ Renderer      :: #import "Renderer"()(
 #load "asset_manager.jai";
 #load "camera.jai";
 
+#if DEBUG {
+    #load "editor.jai";
+}
+
 State :: struct {
     window:        *Windowing.Window;
     input_state:   Input.Input_State;
@@ -144,9 +148,17 @@ init :: () {
         get_compiled_shader,
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
+
+    #if DEBUG {
+        init_editor();
+    }
 }
 
 deinit :: () {
+    #if DEBUG {
+        deinit_editor();
+    }
+
     Renderer.deinit(*state.renderer);
 
     deinit_asset_manager(*state.asset_manager);
