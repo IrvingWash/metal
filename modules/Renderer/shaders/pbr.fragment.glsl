@@ -35,6 +35,41 @@ struct Material {
     uint double_sided; // 0 or 1
 };
 
+float calculate_shadow(
+    sampler2DShadow shadow_map,
+    vec3 fragment_world_position,
+    mat4x4 light_view_projection_transform,
+    vec3 world_space_normal,
+    float radius
+) {
+    // Normal offset
+    vec2 shadow_map_size = vec2(textureSize(shadow_map, 0));
+    float texel_world = (2.0 * radius) / shadow_map_size.x;
+    vec3 offset_position = fragment_world_position + normalize(world_space_normal) * texel_world * 1.5;
+
+    vec4 light_space_position = light_view_projection_transform * vec4(offset_position, 1);
+    vec3 ndc_position = light_space_position.xyz / light_space_position.w;
+
+    if (ndc_position.z > 1.0) {
+        return 0; // Beyond far plane
+    }
+
+    // Shadow pass viewport is y-flipped, so flipping here
+    vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);
+
+    // PCF
+    vec2 texel = 1.0 / shadow_map_size;
+    float lit = 0.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            lit += texture(shadow_map, vec3(uv + vec2(x, y) * texel, ndc_position.z));
+        }
+    }
+    lit /= 9.0;
+
+    return 1.0 - lit;
+}
+
 // Normal distribution function (Trowbridge-Reitz) - D
 float ndf_ggx(float alpha, vec3 N, vec3 H) {
     float alpha_squared = alpha * alpha;
@@ -129,32 +164,10 @@ layout(set = 2, binding = 0) uniform sampler2DShadow shadow_map;
 
 layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
     mat4x4 light_view_projection_transform;
+    float  radius;
 } shadow_pass_data;
 
 layout(location = 0) out vec4 fragment_color;
-
-float calculate_shadow(vec3 fragment_world_position, mat4x4 light_view_projection_transform) {
-    vec4 light_space_position = light_view_projection_transform * vec4(fragment_world_position, 1);
-    vec3 ndc_position = light_space_position.xyz / light_space_position.w;
-
-    if (ndc_position.z > 1.0) {
-        return 0; // Beyond far plane
-    }
-
-    // Shadow pass viewport is y-flipped, so flipping here
-    vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);
-
-    vec2 texel = 1.0 / vec2(textureSize(shadow_map, 0));
-    float lit = 0.0;
-    for (int x = -1; x <= 1; x++) {
-        for (int y = -1; y <= 1; y++) {
-            lit += texture(shadow_map, vec3(uv + vec2(x, y) * texel, ndc_position.z));
-        }
-    }
-    lit /= 9.0;
-
-    return 1.0 - lit;
-}
 
 void main() {
     Material_Buffer material_buffer = Material_Buffer(constants.material_buffer_address);
@@ -167,8 +180,11 @@ void main() {
     vec4 emissive_texel           = texture(textures[material.emissive_texture_index], vertex_input.uv);
 
     float shadow = calculate_shadow(
+        shadow_map,
         vertex_input.fragment_world_position,
-        shadow_pass_data.light_view_projection_transform
+        shadow_pass_data.light_view_projection_transform,
+        vertex_input.world_space_normal,
+        shadow_pass_data.radius
     );
 
     vec4 albedo = base_color_texel * material.base_color_factor * vertex_input.color;

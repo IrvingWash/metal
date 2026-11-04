@@ -328,7 +328,7 @@ do_shadow_pass :: (
         command_buffer,
         constant_factor = 1.25,
         clamp = 0,
-        slope_factor = 2, // 1.75 // @Todo: hardoced
+        slope_factor = 1.75,
     );
 
     { // Draw
@@ -397,12 +397,16 @@ do_shadow_pass :: (
 
 #scope_file
 
+DIRECTIONAL_LIGHT_RADIUS :: 50; // @Todo: Hardcode
+DIRECTIONAL_LIGHT_CENTER :: Vector3.{};
+
 DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
 DEFAULT_SHADOW_DEPTH_IMAGE_WIDTH  :: 2048;
 DEFAULT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
 
 Shadow_Pass_Data :: struct @Gpu {
     view_projection_transform: Matrix4;
+    radius:                    float = 50;
 }
 
 Shadow_Pass_Pipeline_Info :: struct {
@@ -696,24 +700,19 @@ create_shadow_pass_pipeline_info :: (
 create_view_projection_transform_for_light_source :: (light_source: Light_Source) -> Matrix4 {
     if #complete light_source.kind == {
         case .DIRECTIONAL;
-            RADIUS :: 50; // @Todo: Hardcode
-            CENTER :: Vector3.{};
-
-            // @Todo: check this is if shadows are broken
             projection_transform := orthographic_projection_matrix(
-                left           = -RADIUS,
-                right          = RADIUS,
-                bottom         = -RADIUS,
-                top            = RADIUS,
+                left           = -DIRECTIONAL_LIGHT_RADIUS,
+                right          = DIRECTIONAL_LIGHT_RADIUS,
+                bottom         = -DIRECTIONAL_LIGHT_RADIUS,
+                top            = DIRECTIONAL_LIGHT_RADIUS,
                 near           = 0,
-                far            = 2 * RADIUS,
+                far            = 2 * DIRECTIONAL_LIGHT_RADIUS,
                 depth_range_01 = true,
             );
 
-            // @Todo: check this is if shadows are broken
             view_transform := make_look_at_matrix(
-                viewpoint = CENTER - normalize(light_source.directional.direction) * RADIUS,
-                look_at   = CENTER,
+                viewpoint = DIRECTIONAL_LIGHT_CENTER - normalize(light_source.directional.direction) * DIRECTIONAL_LIGHT_RADIUS,
+                look_at   = DIRECTIONAL_LIGHT_CENTER,
                 reference_up_vector = calculate_reference_up_vector(light_source.directional.direction),
                 x_is_forward = false,
             );
