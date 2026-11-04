@@ -237,7 +237,7 @@ draw_model_passes :: (
         model_pass.pipeline_info.layout,
         first_set = 0,
         .[
-            materials_info.texture_descriptor_info.set,
+            materials_info.texture_descriptor_set,
             scene_info.descriptor_sets[frame_index],
         ],
         .[],

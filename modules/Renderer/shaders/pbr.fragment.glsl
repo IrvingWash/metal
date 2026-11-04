@@ -123,6 +123,8 @@ layout(scalar, set = 1, binding = 0) uniform Scene_Data {
     vec3 camera_world_position;
     vec3 ambient_color;
     float exposure;
+
+    mat4x4 light_view_projection_transform;
 } scene_data;
 
 layout(location = 0) out vec4 fragment_color;

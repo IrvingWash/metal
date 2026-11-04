@@ -1,11 +1,17 @@
 #scope_module
 
 Shadow_Pass :: struct {
+    descriptor_pool:       VK.Descriptor_Pool;
+    descriptor_set_layout: VK.Descriptor_Set_Layout;
+    descriptor_sets:       [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
+
     depth_image_info: Image_Info;
+    sampler:          VK.Sampler;
 
-    pipeline_info: Shadow_Pass_Pipeline_Info;
+    pipeline_info:    Shadow_Pass_Pipeline_Info;
 
-    directional_light_view_projection_transform: Matrix4 = Matrix4_Identity;
+    buffer_infos: [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
+    pointers:     [FRAMES_IN_FLIGHT_COUNT]*Shadow_Pass_Data;
 }
 
 Light_Source :: union kind: Light_Source_Kind {
@@ -28,7 +34,17 @@ create_shadow_pass :: (
 ) -> error: string, Shadow_Pass {
     shadow_pass: Shadow_Pass;
 
-    error:, shadow_pass.depth_image_info = create_image_info(
+    error:,
+        shadow_pass.descriptor_pool,
+        shadow_pass.descriptor_set_layout,
+        shadow_pass.descriptor_sets = create_shadow_pass_descriptors(device);
+    if error {
+        return
+            tprint("Failed to create descriptors for shadow pass: %", error),
+            shadow_pass;
+    }
+
+    error, shadow_pass.depth_image_info = create_image_info(
         device,
         allocator,
         DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT,
@@ -44,6 +60,95 @@ create_shadow_pass :: (
         return
             tprint("Failed to create depth image for shadow pass: %", error),
             shadow_pass;
+    }
+
+    result:, shadow_pass.sampler = VK.create_sampler(
+        device,
+        *(VK.Sampler_Create_Info.{
+            min_filter     = .LINEAR,
+            mag_filter     = .LINEAR,
+            address_mode_u = .CLAMP_TO_BORDER,
+            address_mode_v = .CLAMP_TO_BORDER,
+            border_color   = .FLOAT_OPAQUE_WHITE,
+            compare_enable = VK.TRUE,
+            compare_op     = .LESS_OR_EQUAL,
+        }),
+    );
+    if result != .SUCCESS {
+        return
+            tprint("Failed to create depth image sampler shadow pass: %", result),
+            shadow_pass;
+    }
+
+    { // Write image
+        image_descriptor := VK.Descriptor_Image_Info.{
+            sampler      = shadow_pass.sampler,
+            image_view   = shadow_pass.depth_image_info.image_view,
+            image_layout = .SHADER_READ_ONLY_OPTIMAL,
+        };
+
+        writes: [FRAMES_IN_FLIGHT_COUNT]VK.Write_Descriptor_Set;
+        for set: shadow_pass.descriptor_sets {
+            writes[it_index] = VK.Write_Descriptor_Set.{
+                dst_set           = set,
+                dst_binding       = 0,
+                dst_array_element = 0,
+                descriptor_count  = 1,
+                descriptor_type   = .COMBINED_IMAGE_SAMPLER,
+                p_image_info      = *image_descriptor,
+            };
+        }
+
+        VK.update_descriptor_sets(device, writes, .[]);
+    }
+
+    // Create and write buffers
+    for *buffer_info: shadow_pass.buffer_infos {
+        error, new_buffer_info := create_buffer(
+            device,
+            allocator,
+            usage = .UNIFORM_BUFFER,
+            size_of(Shadow_Pass_Data),
+            memory_usage = .AUTO,
+            mappable = true,
+        );
+        if error {
+            return
+                tprint("Failed to create shadow pass uniform buffer: %", error),
+                shadow_pass;
+        }
+
+        buffer_info.* = new_buffer_info;
+
+        result:, shadow_pass.pointers[it_index] = VMA.map_memory(
+            allocator,
+            buffer_info.allocation,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to map shadow pass buffer memory: %", result),
+                shadow_pass;
+        }
+
+        descriptor_buffer_info := VK.Descriptor_Buffer_Info.{
+            buffer = buffer_info.buffer,
+            offset = 0,
+            range = size_of(Shadow_Pass_Data),
+        };
+
+        write_descriptor_set := VK.Write_Descriptor_Set.{
+            dst_set          = shadow_pass.descriptor_sets[it_index],
+            dst_binding      = 1,
+            descriptor_count = 1,
+            descriptor_type  = .UNIFORM_BUFFER,
+            p_buffer_info    = *descriptor_buffer_info,
+        };
+
+        VK.update_descriptor_sets(
+            device,
+            .[write_descriptor_set],
+            .[],
+        );
     }
 
     error, shadow_pass.pipeline_info = create_shadow_pass_pipeline_info(
@@ -66,6 +171,20 @@ destroy_shadow_pass :: (
     device:      VK.Device,
     allocator:   VMA.Allocator,
 ) {
+    VK.destroy_descriptor_set_layout(device, shadow_pass.descriptor_set_layout);
+    VK.destroy_descriptor_pool(device, shadow_pass.descriptor_pool);
+
+    VK.destroy_sampler(device, shadow_pass.sampler);
+
+    for buffer_info: shadow_pass.buffer_infos {
+        VMA.unmap_memory(allocator, buffer_info.allocation);
+        VMA.destroy_buffer(
+            allocator,
+            buffer_info.buffer,
+            buffer_info.allocation,
+        );
+    }
+
     destroy_shadow_pass_pipeline_info(
         *shadow_pass.pipeline_info,
         device,
@@ -88,8 +207,19 @@ do_shadow_pass :: (
     materials_info: Materials_Info,
     model_pass:     Model_Pass,
     frame_index:    u64,
+    allocator:      VMA.Allocator,
 ) {
     view_projection_transform := create_view_projection_transform_for_light_source(light_source);
+
+    shadow_pass.pointers[frame_index].* = Shadow_Pass_Data.{
+        view_projection_transform = view_projection_transform,
+    };
+    VMA.flush_allocation(
+        allocator,
+        shadow_pass.buffer_infos[frame_index].allocation,
+        offset = 0,
+        VK.WHOLE_SIZE,
+    );
 
     { // Transition to depth attachment
         image_memory_barrier := VK.Image_Memory_Barrier_2.{
@@ -189,7 +319,7 @@ do_shadow_pass :: (
         shadow_pass.pipeline_info.layout,
         first_set = 0,
         .[
-            materials_info.texture_descriptor_info.set,
+            materials_info.texture_descriptor_set,
         ],
         .[],
     );
@@ -261,8 +391,6 @@ do_shadow_pass :: (
         };
         VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
     }
-
-    shadow_pass.directional_light_view_projection_transform = view_projection_transform;
 }
 
 
@@ -272,6 +400,10 @@ do_shadow_pass :: (
 DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
 DEFAULT_SHADOW_DEPTH_IMAGE_WIDTH  :: 2048;
 DEFAULT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
+
+Shadow_Pass_Data :: struct @Gpu {
+    view_projection_transform: Matrix4;
+}
 
 Shadow_Pass_Pipeline_Info :: struct {
     layout:   VK.Pipeline_Layout;
@@ -296,6 +428,108 @@ destroy_shadow_pass_pipeline_info :: (
     VK.destroy_pipeline_layout(device, pipeline_info.layout);
 
     pipeline_info.* = {};
+}
+
+create_shadow_pass_descriptors :: (device: VK.Device) -> error: string,
+    VK.Descriptor_Pool,
+    VK.Descriptor_Set_Layout,
+    [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set
+{
+    descriptor_pool:       VK.Descriptor_Pool;
+    descriptor_set_layout: VK.Descriptor_Set_Layout;
+    descriptor_sets:       [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
+
+    { // Pool
+        descriptor_pool_sizes := VK.Descriptor_Pool_Size.[
+            {
+                type             = .COMBINED_IMAGE_SAMPLER,
+                descriptor_count = FRAMES_IN_FLIGHT_COUNT,
+            },
+            {
+                type             = .UNIFORM_BUFFER,
+                descriptor_count = FRAMES_IN_FLIGHT_COUNT,
+            }
+        ];
+
+        descriptor_pool_create_info := VK.Descriptor_Pool_Create_Info.{
+            max_sets        = FRAMES_IN_FLIGHT_COUNT,
+            pool_size_count = descriptor_pool_sizes.count,
+            p_pool_sizes    = descriptor_pool_sizes.data,
+        };
+        result:, descriptor_pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create descriptor pool for shadow pass: %", result),
+                descriptor_pool,
+                descriptor_set_layout,
+                descriptor_sets;
+        }
+    }
+
+    { // Layout
+        bindings := VK.Descriptor_Set_Layout_Binding.[
+            {
+                binding          = 0,
+                descriptor_type  = .COMBINED_IMAGE_SAMPLER,
+                descriptor_count = 1,
+                stage_flags      = .FRAGMENT,
+            },
+            {
+                binding          = 1,
+                descriptor_type  = .UNIFORM_BUFFER,
+                descriptor_count = 1,
+                stage_flags      = .FRAGMENT,
+            }
+        ];
+
+        descriptor_set_layout_create_info := VK.Descriptor_Set_Layout_Create_Info.{
+            binding_count = bindings.count,
+            p_bindings    = bindings.data,
+        };
+
+        result:, descriptor_set_layout = VK.create_descriptor_set_layout(
+            device,
+            *descriptor_set_layout_create_info,
+        );
+        if result != .SUCCESS {
+            return
+                tprint("Failed to create descriptor set layout for shadow pass: %", result),
+                descriptor_pool,
+                descriptor_set_layout,
+                descriptor_sets;
+        }
+    }
+
+    { // Set
+        layouts: [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set_Layout;
+        for *layout: layouts {
+            layout.* = descriptor_set_layout;
+        }
+        descriptor_set_allocate_info := VK.Descriptor_Set_Allocate_Info.{
+            descriptor_pool      = descriptor_pool,
+            descriptor_set_count = layouts.count,
+            p_set_layouts        = layouts.data,
+        };
+
+        result, created_descriptor_sets := VK.allocate_descriptor_sets(device, *descriptor_set_allocate_info,, temp);
+        if result != .SUCCESS {
+            return
+                tprint("Failed to allocate descriptor sets for shadow pass: %", result),
+                descriptor_pool,
+                descriptor_set_layout,
+                descriptor_sets;
+        }
+
+        for set: created_descriptor_sets {
+            descriptor_sets[it_index] = set;
+        }
+    }
+
+    return
+        "",
+        descriptor_pool,
+        descriptor_set_layout,
+        descriptor_sets;
 }
 
 create_shadow_pass_pipeline_info :: (

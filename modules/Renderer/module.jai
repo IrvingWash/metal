@@ -280,7 +280,7 @@ init :: (
         get_compiled_shader,
         color_target_image_format    = renderer.color_target.image_info.format,
         depth_image_format           = renderer.depth_image_info.format,
-        texture_descriptor_layout    = renderer.materials_info.texture_descriptor_info.layout,
+        texture_descriptor_layout    = renderer.materials_info.texture_descriptor_set_layout,
         scene_info_descriptor_layout = renderer.scene_info.descriptor_set_layout,
     );
     if error {
@@ -293,7 +293,7 @@ init :: (
         renderer.device,
         renderer.allocator,
         get_compiled_shader,
-        renderer.materials_info.texture_descriptor_info.layout,
+        renderer.materials_info.texture_descriptor_set_layout,
     );
     if error {
         return
@@ -537,18 +537,21 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // =========================================================================
     // Shadow pass start
     // =========================================================================
-    light_source: Light_Source;
-    light_source.kind = .DIRECTIONAL;
-    light_source.directional.direction = renderer.scene_info.scene_data.directional_light.direction;
-    do_shadow_pass(
-        *renderer.shadow_pass,
-        light_source,
-        frame_resources.command_buffer,
-        renderer.geometry_info,
-        renderer.materials_info,
-        renderer.model_pass,
-        frame_resources_index,
-    );
+    {
+        light_source: Light_Source;
+        light_source.kind = .DIRECTIONAL;
+        light_source.directional.direction = renderer.scene_info.scene_data.directional_light.direction;
+        directional_light_shadow_pass_result := do_shadow_pass(
+            *renderer.shadow_pass,
+            light_source,
+            frame_resources.command_buffer,
+            renderer.geometry_info,
+            renderer.materials_info,
+            renderer.model_pass,
+            frame_resources_index,
+            renderer.allocator,
+        );
+    }
 
     // =========================================================================
     // Color target start
@@ -914,10 +917,10 @@ upload_textures :: (renderer: *Renderer, textures: []Texture) -> error: string, 
     }
 
     write_descriptor_set := VK.Write_Descriptor_Set.{
-        dst_set           = renderer.materials_info.texture_descriptor_info.set,
+        dst_set           = renderer.materials_info.texture_descriptor_set,
         dst_binding       = 0,
         dst_array_element = cast(u32, prev_count),
-        descriptor_count  = xx        image_descriptors.count,
+        descriptor_count  = cast(u32, image_descriptors.count),
         descriptor_type   = .COMBINED_IMAGE_SAMPLER,
         p_image_info      = image_descriptors.data,
     };
@@ -1056,7 +1059,7 @@ upload_texture_images :: (
             return error, image_ids;
         }
 
-        array_add(*image_ids, xx renderer.materials_info.images.count);
+        array_add(*image_ids, cast(u32, renderer.materials_info.images.count));
         array_add(*renderer.materials_info.images, image);
         array_add(*staging_buffers, staging_buffer);
     }
@@ -1157,7 +1160,10 @@ Materials_Info :: struct {
     material_buffer_info: Buffer_Info;
     materials: [..]Material;
     texture_count:  u32;
-    texture_descriptor_info: Descriptor_Info;
+
+    texture_descriptor_pool: VK.Descriptor_Pool;
+    texture_descriptor_set_layout: VK.Descriptor_Set_Layout;
+    texture_descriptor_set: VK.Descriptor_Set;
 }
 
 destroy_image_info :: (
@@ -1387,12 +1393,6 @@ Scene_Data :: struct @Gpu {
     exposure:              float   = 1;
 }
 
-Descriptor_Info :: struct {
-    pool:   VK.Descriptor_Pool;
-    layout: VK.Descriptor_Set_Layout;
-    set:    VK.Descriptor_Set;
-}
-
 create_color_target :: (
     device: VK.Device,
     allocator: VMA.Allocator,
@@ -1532,7 +1532,10 @@ create_geometry_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: 
 create_materials_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Materials_Info {
     materials_info: Materials_Info;
 
-    error:, materials_info.texture_descriptor_info = create_texture_descriptor_info(device);
+    error:,
+        materials_info.texture_descriptor_pool,
+        materials_info.texture_descriptor_set_layout,
+        materials_info.texture_descriptor_set = create_texture_descriptor_info(device);
     if error {
         return
             error,
@@ -1581,7 +1584,8 @@ destroy_materials_info :: (device: VK.Device, allocator: VMA.Allocator, material
         materials_info.material_buffer_info.allocation,
     );
 
-    destroy_descriptor_info(device, *materials_info.texture_descriptor_info);
+    VK.destroy_descriptor_set_layout(device, materials_info.texture_descriptor_set_layout);
+    VK.destroy_descriptor_pool(device, materials_info.texture_descriptor_pool);
 
     array_free(materials_info.materials);
 
@@ -2195,8 +2199,14 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
     return "", scene_info;
 }
 
-create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descriptor_Info {
-    descriptor_info: Descriptor_Info;
+create_texture_descriptor_info :: (device: VK.Device) -> error: string,
+    VK.Descriptor_Pool,
+    VK.Descriptor_Set_Layout,
+    VK.Descriptor_Set
+{
+    descriptor_pool:       VK.Descriptor_Pool;
+    descriptor_set_layout: VK.Descriptor_Set_Layout;
+    descriptor_set:        VK.Descriptor_Set;
 
     { // Pool
         descriptor_pool_sizes := VK.Descriptor_Pool_Size.[
@@ -2212,11 +2222,13 @@ create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descript
             pool_size_count = descriptor_pool_sizes.count,
             p_pool_sizes    = descriptor_pool_sizes.data,
         };
-        result:, descriptor_info.pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
+        result:, descriptor_pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
         if result != .SUCCESS {
             return
                 tprint("Failed to create descriptor pool for textures: %", result),
-                descriptor_info;
+                descriptor_pool,
+                descriptor_set_layout,
+                descriptor_set;
         }
     }
 
@@ -2246,42 +2258,43 @@ create_texture_descriptor_info :: (device: VK.Device) -> error: string, Descript
             p_bindings    = bindings.data,
         };
 
-        result:, descriptor_info.layout = VK.create_descriptor_set_layout(
+        result:, descriptor_set_layout = VK.create_descriptor_set_layout(
             device,
             *descriptor_set_layout_create_info,
         );
         if result != .SUCCESS {
             return
                 tprint("Failed to create descriptor set layout for textures: %", result),
-                descriptor_info;
+                descriptor_pool,
+                descriptor_set_layout,
+                descriptor_set;
         }
     }
 
     { // Set
         descriptor_set_allocate_info := VK.Descriptor_Set_Allocate_Info.{
-            descriptor_pool      = descriptor_info.pool,
+            descriptor_pool      = descriptor_pool,
             descriptor_set_count = 1,
-            p_set_layouts        = *descriptor_info.layout,
+            p_set_layouts        = *descriptor_set_layout,
         };
 
         result, descriptor_sets := VK.allocate_descriptor_sets(device, *descriptor_set_allocate_info,, temp);
         if result != .SUCCESS {
             return
                 tprint("Failed to allocate descriptor set for textures: %", result),
-                descriptor_info;
+                descriptor_pool,
+                descriptor_set_layout,
+                descriptor_set;
         }
 
-        descriptor_info.set = descriptor_sets[0];
+        descriptor_set = descriptor_sets[0];
     }
 
-    return "", descriptor_info;
-}
-
-destroy_descriptor_info :: (device: VK.Device, descriptor_set_info: *Descriptor_Info) {
-    VK.destroy_descriptor_set_layout(device, descriptor_set_info.layout);
-    VK.destroy_descriptor_pool(device, descriptor_set_info.pool);
-
-    descriptor_set_info.* = {};
+    return
+        "",
+        descriptor_pool,
+        descriptor_set_layout,
+        descriptor_set;
 }
 
 destroy_frame_resources :: (
