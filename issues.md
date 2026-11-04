@@ -16,4 +16,4 @@
 
 - HDR
 
-- Figure out shadow improvemetns - PCF, RADIUS calculatino, etc
+- Calculate radius for shadowing, instead of hardcoding
