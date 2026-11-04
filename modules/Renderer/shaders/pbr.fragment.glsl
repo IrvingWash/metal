@@ -45,7 +45,13 @@ float calculate_shadow(
     // Normal offset
     vec2 shadow_map_size = vec2(textureSize(shadow_map, 0));
     float texel_world = (2.0 * radius) / shadow_map_size.x;
-    vec3 offset_position = fragment_world_position + normalize(world_space_normal) * texel_world * 1.5;
+    // Fix offset for double sided materials
+    vec3 geometric_normal = normalize(world_space_normal);
+    if (!gl_FrontFacing) {
+        geometric_normal = -geometric_normal;
+    }
+
+    vec3 offset_position = fragment_world_position + geometric_normal * texel_world * 1.5;
 
     vec4 light_space_position = light_view_projection_transform * vec4(offset_position, 1);
     vec3 ndc_position = light_space_position.xyz / light_space_position.w;
@@ -114,11 +120,11 @@ vec3 specular_brdf(float D, float G, vec3 F, vec3 N, vec3 V, vec3 L) {
     return numerator / denominator;
 }
 
-vec3 get_normal_from_texel(vec3 vertex_normal, vec4 tangent, vec3 normal_texel, float normal_scale) {
-    vec3 N = normalize(vertex_normal);
-    vec3 T = normalize(tangent.xyz);
+vec3 get_normal_from_texel(vec3 world_space_vertex_normal, vec4 vertex_tangent, vec3 normal_texel, float normal_scale) {
+    vec3 N = normalize(world_space_vertex_normal);
+    vec3 T = normalize(vertex_tangent.xyz);
     T = normalize(T - dot(T, N) * N);
-    vec3 B = cross(N, T) * tangent.w;
+    vec3 B = cross(N, T) * vertex_tangent.w;
 
     vec3 normal_tangent_space = normal_texel * 2 - 1; // Range is [-1;1]
     normal_tangent_space.xy *= normal_scale;
