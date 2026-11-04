@@ -127,6 +127,12 @@ layout(scalar, set = 1, binding = 0) uniform Scene_Data {
     mat4x4 light_view_projection_transform;
 } scene_data;
 
+layout(set = 2, binding = 0) uniform sampler2D shadow_depth_texture;
+
+layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
+    mat4x4 light_view_projection_transform;
+} shadow_pass_data;
+
 layout(location = 0) out vec4 fragment_color;
 
 void main() {

@@ -14,13 +14,14 @@ Model_Pass :: struct {
 }
 
 create_model_pass :: (
-    device:                       VK.Device,
-    allocator:                    VMA.Allocator,
-    get_compiled_shader:          Get_Compiled_Shader,
-    color_target_image_format:    VK.Format,
-    depth_image_format:           VK.Format,
-    texture_descriptor_layout:    VK.Descriptor_Set_Layout,
-    scene_info_descriptor_layout: VK.Descriptor_Set_Layout,
+    device:                        VK.Device,
+    allocator:                     VMA.Allocator,
+    get_compiled_shader:           Get_Compiled_Shader,
+    color_target_image_format:     VK.Format,
+    depth_image_format:            VK.Format,
+    texture_descriptor_layout:     VK.Descriptor_Set_Layout,
+    scene_info_descriptor_layout:  VK.Descriptor_Set_Layout,
+    shadow_pass_descriptor_layout: VK.Descriptor_Set_Layout,
 ) -> error: string, Model_Pass {
     model_pass: Model_Pass;
 
@@ -32,6 +33,7 @@ create_model_pass :: (
         .[
             texture_descriptor_layout,
             scene_info_descriptor_layout,
+            shadow_pass_descriptor_layout,
         ],
     );
     if error {
@@ -197,13 +199,14 @@ write_model_draw_passes :: (
 }
 
 draw_model_passes :: (
-    model_pass:     *Model_Pass,
-    geometry_info:  Geometry_Info,
-    materials_info: Materials_Info,
-    frame_index:    u64,
-    command_buffer: VK.Command_Buffer,
-    scene_info:     Scene_Info,
-    transforms:     Transforms,
+    model_pass:                 *Model_Pass,
+    geometry_info:              Geometry_Info,
+    materials_info:             Materials_Info,
+    frame_index:                u64,
+    command_buffer:             VK.Command_Buffer,
+    scene_info_descriptor_set:  VK.Descriptor_Set,
+    shadow_pass_descriptor_set: VK.Descriptor_Set,
+    transforms:                 Transforms,
 ) {
     { // Push constants
         push_constants: Push_Constants = {
@@ -238,7 +241,8 @@ draw_model_passes :: (
         first_set = 0,
         .[
             materials_info.texture_descriptor_set,
-            scene_info.descriptor_sets[frame_index],
+            scene_info_descriptor_set,
+            shadow_pass_descriptor_set,
         ],
         .[],
     );

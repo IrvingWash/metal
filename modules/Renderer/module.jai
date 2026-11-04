@@ -274,14 +274,11 @@ init :: (
             renderer;
     }
 
-    error, renderer.model_pass = create_model_pass(
+    error, renderer.shadow_pass = create_shadow_pass(
         renderer.device,
         renderer.allocator,
         get_compiled_shader,
-        color_target_image_format    = renderer.color_target.image_info.format,
-        depth_image_format           = renderer.depth_image_info.format,
-        texture_descriptor_layout    = renderer.materials_info.texture_descriptor_set_layout,
-        scene_info_descriptor_layout = renderer.scene_info.descriptor_set_layout,
+        renderer.materials_info.texture_descriptor_set_layout,
     );
     if error {
         return
@@ -289,11 +286,15 @@ init :: (
             renderer;
     }
 
-    error, renderer.shadow_pass = create_shadow_pass(
+    error, renderer.model_pass = create_model_pass(
         renderer.device,
         renderer.allocator,
         get_compiled_shader,
-        renderer.materials_info.texture_descriptor_set_layout,
+        color_target_image_format     = renderer.color_target.image_info.format,
+        depth_image_format            = renderer.depth_image_info.format,
+        texture_descriptor_layout     = renderer.materials_info.texture_descriptor_set_layout,
+        scene_info_descriptor_layout  = renderer.scene_info.descriptor_set_layout,
+        shadow_pass_descriptor_layout = renderer.shadow_pass.descriptor_set_layout,
     );
     if error {
         return
@@ -655,7 +656,8 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         renderer.materials_info,
         frame_resources_index,
         frame_resources.command_buffer,
-        renderer.scene_info,
+        renderer.scene_info.descriptor_sets[frame_resources_index],
+        renderer.shadow_pass.descriptor_sets[frame_resources_index],
         renderer.transforms,
     );
 
@@ -2218,7 +2220,7 @@ create_texture_descriptor_info :: (device: VK.Device) -> error: string,
 
         descriptor_pool_create_info := VK.Descriptor_Pool_Create_Info.{
             flags           = .UPDATE_AFTER_BIND,
-            max_sets        = 1, // Only one, set = 0
+            max_sets        = 1,
             pool_size_count = descriptor_pool_sizes.count,
             p_pool_sizes    = descriptor_pool_sizes.data,
         };
