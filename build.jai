@@ -6,8 +6,9 @@
 #import "Metaprogram_Plugins";
 #import "File";
 #import "Process";
+Glsl_Compiler :: #import "Glsl_Compiler";
 
-#import,file "compile_glsl_shaders.jai";
+#load "shaders_to_compile.jai";
 
 Config :: struct {
     should_help:             bool;
@@ -32,7 +33,9 @@ DEFAULT_PLUGINS_TO_CREATE :: Plugin_To_Create.[
 
 EXECUTABLE_NAME :: "metal";
 
-BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
+BUILD_ENTRY_FILE :: #run path_join(#filepath, "source", "main.jai");
+
+COMPILED_SHADERS_ROOT_DIR_NAME :: "shaders";
 
 #run,stallable {
     defer reset_temporary_storage();
@@ -61,11 +64,15 @@ BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
         }
     }
 
-    output_path := tprint("%bin/%", #filepath, config.optimization_type);
+    output_path := path_join(#filepath, "bin", tprint("%", config.optimization_type));
 
     #if !#exists(JAILS_DIAGNOSTICS_BUILD) {
         log("Compiling shaders...");
-        error = compile_glsl_shaders(config.optimization_type, output_path);
+        error = Glsl_Compiler.compile_shaders(
+            config.optimization_type,
+            path_join(output_path, COMPILED_SHADERS_ROOT_DIR_NAME),
+            SHADERS_TO_COMPILE,
+        );
         if error {
             fail_compilation_with_message("Failed to compile shaders: %", error);
             return;
@@ -208,6 +215,8 @@ handle_compiler_messages :: (
     while true {
         message := compiler_wait_for_message();
 
+        Glsl_Compiler.handle_gpu_structs(message);
+
         for plugin: plugins {
             if plugin.message {
                 plugin.message(plugin, message);
@@ -217,18 +226,6 @@ handle_compiler_messages :: (
         try_to_fill_debug_placeholder(message, config, w);
 
         if message.kind == {
-            case .TYPECHECKED;
-                if config.optimization_type < .OPTIMIZED {
-                    typechecked := cast(*Message_Typechecked) message;
-
-                    for _struct: typechecked.structs {
-                        for note: _struct.expression.notes {
-                            if note.text == "Gpu" {
-                                log("% has Gpu note", _struct.expression.defined_type.name);
-                            }
-                        }
-                    }
-                }
             case. COMPLETE;
                 break;
         }

@@ -108,10 +108,6 @@ vec3 get_normal_from_texel(vec3 world_space_vertex_normal, vec4 vertex_tangent, 
     return N;
 }
 
-const uint ALPHA_MODE_OPAQUE = 0;
-const uint ALPHA_MODE_MASK   = 1;
-const uint ALPHA_MODE_BLEND  = 2;
-
 layout(constant_id = 0) const uint ALPHA_MODE = 0;
 
 layout(push_constant, scalar) uniform Constants {
@@ -121,15 +117,6 @@ layout(push_constant, scalar) uniform Constants {
 layout(buffer_reference, scalar) readonly buffer Material_Buffer {
     Material materials[];
 };
-
-layout(location = 0) in Vertex_Input {
-         vec4 color;
-         vec3 world_space_normal;
-         vec4 world_space_tangent;
-         vec2 uv;
-         vec3 fragment_world_position;
-    flat uint material_index;
-} vertex_input;
 
 layout(set = 0, binding = 0) uniform sampler2D textures[];
 
@@ -145,6 +132,16 @@ layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
     mat4x4 light_view_projection_transform;
     float  radius;
 } shadow_pass_data;
+
+
+layout(location = 0) in Vertex_Input {
+         vec4 color;
+         vec3 world_space_normal;
+         vec4 world_space_tangent;
+         vec2 uv;
+         vec3 fragment_world_position;
+    flat uint material_index;
+} vertex_input;
 
 layout(location = 0) out vec4 fragment_color;
 

@@ -1,6 +1,10 @@
 #ifndef TYPES_GLSL
 #define TYPES_GLSL
 
+const uint ALPHA_MODE_OPAQUE = 0;
+const uint ALPHA_MODE_MASK   = 1;
+const uint ALPHA_MODE_BLEND  = 2;
+
 struct Material {
     vec4 base_color_factor;
     uint base_color_texture_index;

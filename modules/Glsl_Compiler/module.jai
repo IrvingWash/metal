@@ -1,9 +1,20 @@
-compile_glsl_shaders :: (optimization_type: Optimization_Type, output_root: string) -> error: string {
-    output_path := tprint("%/shaders", output_root);
+Shader_Meta_Info :: struct {
+    absolute_source_path: string;
+    compiled_name:        string;
+    entry_point_name:     string = "main";
+    kind:                 Shaderc.Shader_Kind;
+}
 
-    ok := make_directory_if_it_does_not_exist(output_path, recursive = true);
+Shader_Kind :: Shaderc.Shader_Kind;
+
+compile_shaders :: (
+    optimization_type: Optimization_Type,
+    output_root:       string,
+    shader_meta_infos: []Shader_Meta_Info,
+) -> error: string {
+    ok := make_directory_if_it_does_not_exist(output_root, recursive = true);
     if !ok {
-        return tprint("Failed to create directory at %", output_path);
+        return tprint("Failed to create directory at %", output_root);
     }
 
     compiler := Shaderc.compiler_initialize();
@@ -29,12 +40,10 @@ compile_glsl_shaders :: (optimization_type: Optimization_Type, output_root: stri
         Shaderc.compile_options_set_optimization_level(compile_options, .PERFORMANCE);
     }
 
-    for shader_meta_info: SHADER_META_INFOS {
-        absolute_source_path := path_join(#filepath, shader_meta_info.relative_source_path,, temp);
-
-        content, ok := read_entire_file(absolute_source_path,, temp);
+    for shader_meta_info: shader_meta_infos {
+        content, ok := read_entire_file(shader_meta_info.absolute_source_path,, temp);
         if !ok {
-            return tprint("Failed to read file at '%'", absolute_source_path);
+            return tprint("Failed to read file at '%'", shader_meta_info.absolute_source_path);
         }
 
         compilation_result := Shaderc.compile_into_spv(
@@ -42,7 +51,7 @@ compile_glsl_shaders :: (optimization_type: Optimization_Type, output_root: stri
             content.data,
             cast(u64, content.count),
             shader_meta_info.kind,
-            temp_c_string(absolute_source_path),
+            temp_c_string(shader_meta_info.absolute_source_path),
             temp_c_string(shader_meta_info.entry_point_name),
             compile_options,
         );
@@ -61,7 +70,7 @@ compile_glsl_shaders :: (optimization_type: Optimization_Type, output_root: stri
         size := Shaderc.result_get_length(compilation_result);
         bytes := Shaderc.result_get_bytes(compilation_result);
 
-        compiled_path := path_join(output_path, shader_meta_info.compiled_name,, temp);
+        compiled_path := path_join(output_root, shader_meta_info.compiled_name,, temp);
         ok = write_entire_file(compiled_path, bytes, cast(int, size));
         if !ok {
             return tprint("Failed to save spv at '%'", compiled_path);
@@ -71,55 +80,29 @@ compile_glsl_shaders :: (optimization_type: Optimization_Type, output_root: stri
     return "";
 }
 
+builder: String_Builder;
+
+handle_gpu_structs :: (message: *Message) {
+    if message.kind == {
+        case .TYPECHECKED;
+            typechecked := cast(*Message_Typechecked) message;
+
+            for _struct: typechecked.structs {
+                for note: _struct.expression.notes {
+                    if note.text == GPU_NOTE {
+                        tis := _struct.expression.defined_type;
+                        log("% has @Gpu", tis.name);
+                    }
+                }
+            }
+    }
+}
+
 
 
 #scope_file
 
-Shader_Meta_Info :: struct {
-    relative_source_path: string;
-    compiled_name:        string;
-    entry_point_name:     string = "main";
-    kind:                 Shaderc.Shader_Kind;
-}
-
-SHADER_META_INFOS :: Shader_Meta_Info.[
-    {
-        relative_source_path = "modules/Renderer/shaders/pbr.vertex.glsl",
-        compiled_name        = "pbr.vertex.spv",
-        entry_point_name     = "main",
-        kind                 = Shaderc.Shader_Kind.VERTEX_SHADER,
-    },
-    {
-        relative_source_path = "modules/Renderer/shaders/pbr.fragment.glsl",
-        compiled_name        = "pbr.fragment.spv",
-        entry_point_name     = "main",
-        kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
-    },
-    {
-        relative_source_path = "modules/Renderer/shaders/shadow.vertex.glsl",
-        compiled_name        = "shadow.vertex.spv",
-        entry_point_name     = "main",
-        kind                 = Shaderc.Shader_Kind.VERTEX_SHADER,
-    },
-    {
-        relative_source_path = "modules/Renderer/shaders/shadow.fragment.glsl",
-        compiled_name        = "shadow.fragment.spv",
-        entry_point_name     = "main",
-        kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
-    },
-    {
-        relative_source_path = "modules/Renderer/shaders/tonemap.vertex.glsl",
-        compiled_name        = "tonemap.vertex.spv",
-        entry_point_name     = "main",
-        kind                 = Shaderc.Shader_Kind.VERTEX_SHADER,
-    },
-    {
-        relative_source_path = "modules/Renderer/shaders/tonemap.fragment.glsl",
-        compiled_name        = "tonemap.fragment.spv",
-        entry_point_name     = "main",
-        kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
-    },
-];
+GPU_NOTE :: "Gpu";
 
 resolve_include: Shaderc.Include_Resolve_Proc : (
     user_data:         *void,
@@ -167,3 +150,5 @@ release_include_result: Shaderc.Include_Result_Release_Proc : (
 #import "Compiler";
 #import "String";
 Shaderc :: #import "Shaderc";
+#import "Compiler";
+#import "Math";
