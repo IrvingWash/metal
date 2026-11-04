@@ -163,7 +163,6 @@ layout(scalar, set = 1, binding = 0) uniform Scene_Data {
     Directional_Light directional_light;
     vec3 camera_world_position;
     vec3 ambient_color;
-    float exposure;
 } scene_data;
 
 layout(set = 2, binding = 0) uniform sampler2DShadow shadow_map;
@@ -235,7 +234,7 @@ void main() {
         vec3 specular = specular_brdf(D, G, F, N, V, L);
 
         vec3  kS = F; // "Energy consevration"
-        vec3  kD = (vec3(1.0) - kS) * (1.0 - metallic); // Diffuse contribution coeff (nothing for metalls)
+        vec3  kD = (vec3(1) - kS) * (1 - metallic); // Diffuse contribution coeff (nothing for metalls)
 
         Lo += (1 - shadow) * (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0);
     }
@@ -244,9 +243,8 @@ void main() {
 
     vec3 final_color = ambient + Lo + emissive;
 
-    // Tonemapping
-    // @Todo: maybe use https://github.com/KhronosGroup/ToneMapping/blob/main/PBR_Neutral/pbrNeutral.glsl
-    vec3 tone_mapped = vec3(1.0) - exp(-final_color * scene_data.exposure);
-
-    fragment_color = vec4(tone_mapped, ALPHA_MODE == ALPHA_MODE_BLEND ? albedo.a : 1.0);
+    fragment_color = vec4(
+        final_color,
+        ALPHA_MODE == ALPHA_MODE_BLEND ? albedo.a : 1
+    );
 }

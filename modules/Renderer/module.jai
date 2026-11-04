@@ -23,9 +23,10 @@ Renderer :: struct {
     timeline_semaphore_info: Timeline_Semaphore_Info;
     transient_command_pool:  VK.Command_Pool;
 
-    swapchain_info:   Swapchain_Info;
-    depth_image_info: Image_Info;
-    color_target:     Color_Target;
+    swapchain_info:      Swapchain_Info;
+    depth_image_info:    Image_Info;
+    color_hdr_target:    Color_Hdr_Target;
+    color_ldr_target: Image_Info;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
@@ -33,8 +34,9 @@ Renderer :: struct {
     materials_info: Materials_Info;
     geometry_info: Geometry_Info;
 
-    model_pass: Model_Pass;
-    shadow_pass: Shadow_Pass;
+    model_pass:   Model_Pass;
+    shadow_pass:  Shadow_Pass;
+    tonemap_pass: Tonemap_Pass;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
@@ -86,6 +88,8 @@ Camera :: struct {
     z_far:  float;
 
     fov_vertical: float;
+
+    exposure: float = 1;
 }
 
 Directional_Light :: struct @Gpu {
@@ -94,7 +98,7 @@ Directional_Light :: struct @Gpu {
     color:     Vector3 = { 1, 1, 1 };
 }
 
-Color_Target :: struct {
+Color_Hdr_Target :: struct {
     image_info:       Image_Info;
     requested_extent: VK.Extent_2D;
     should_recreate:  bool;
@@ -206,7 +210,7 @@ init :: (
             renderer;
     }
 
-    error, renderer.color_target = create_color_target(
+    error, renderer.color_hdr_target = create_color_hdr_target(
         renderer.device,
         renderer.allocator,
         renderer.swapchain_info.config.image_extent.width,
@@ -218,11 +222,23 @@ init :: (
             renderer;
     }
 
+    error, renderer.color_ldr_target = create_color_ldr_target(
+        renderer.device,
+        renderer.allocator,
+        renderer.color_hdr_target.image_info.extent.width,
+        renderer.color_hdr_target.image_info.extent.height,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     error, renderer.depth_image_info = create_depth_image(
         renderer.device,
         renderer.allocator,
-        renderer.color_target.image_info.extent.width,
-        renderer.color_target.image_info.extent.height,
+        renderer.color_hdr_target.image_info.extent.width,
+        renderer.color_hdr_target.image_info.extent.height,
     );
     if error {
         return
@@ -290,11 +306,23 @@ init :: (
         renderer.device,
         renderer.allocator,
         get_compiled_shader,
-        color_target_image_format     = renderer.color_target.image_info.format,
+        color_target_image_format     = renderer.color_hdr_target.image_info.format,
         depth_image_format            = renderer.depth_image_info.format,
         texture_descriptor_layout     = renderer.materials_info.texture_descriptor_set_layout,
         scene_info_descriptor_layout  = renderer.scene_info.descriptor_set_layout,
         shadow_pass_descriptor_layout = renderer.shadow_pass.descriptor_set_layout,
+    );
+    if error {
+        return
+            error,
+            renderer;
+    }
+
+    error, renderer.tonemap_pass = create_tonemap_pass(
+        renderer.device,
+        get_compiled_shader,
+        renderer.color_ldr_target.format,
+        renderer.color_hdr_target.image_info.image_view,
     );
     if error {
         return
@@ -309,6 +337,8 @@ init :: (
 
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
+
+    destroy_tonemap_pass(*renderer.tonemap_pass, renderer.device);
 
     destroy_shadow_pass(
         *renderer.shadow_pass,
@@ -340,7 +370,8 @@ deinit :: (renderer: *Renderer) {
         renderer.allocator,
         *renderer.depth_image_info,
     );
-    destroy_image_info(renderer.device, renderer.allocator, *renderer.color_target.image_info);
+    destroy_image_info(renderer.device, renderer.allocator, *renderer.color_ldr_target);
+    destroy_image_info(renderer.device, renderer.allocator, *renderer.color_hdr_target.image_info);
     destroy_swapchain(renderer.device, *renderer.swapchain_info);
 
     VK.destroy_command_pool(renderer.device, renderer.transient_command_pool);
@@ -364,6 +395,7 @@ deinit :: (renderer: *Renderer) {
 
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     renderer.scene_info.scene_data.camera_world_position = camera.position;
+    renderer.tonemap_pass.exposure = camera.exposure;
 
     reset_model_pass(*renderer.model_pass);
 
@@ -390,39 +422,60 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         renderer.swapchain_info.should_recreate = false;
     }
 
-    if renderer.color_target.should_recreate {
+    if renderer.color_hdr_target.should_recreate {
         VK.device_wait_idle(renderer.device);
 
-        error, new_color_target := create_color_target(
+        error, new_color_hdr_target := create_color_hdr_target(
             renderer.device,
             renderer.allocator,
-            renderer.color_target.requested_extent.width,
-            renderer.color_target.requested_extent.height,
+            renderer.color_hdr_target.requested_extent.width,
+            renderer.color_hdr_target.requested_extent.height,
         );
         if error {
-            destroy_image_info(renderer.device, renderer.allocator, *new_color_target.image_info);
-            return tprint("Failed to create new color target: %", error);
+            destroy_image_info(renderer.device, renderer.allocator, *new_color_hdr_target.image_info);
+            return tprint("Failed to create new color hdr target: %", error);
         }
 
         error =, new_depth_image := create_depth_image(
             renderer.device,
             renderer.allocator,
-            new_color_target.image_info.extent.width,
-            new_color_target.image_info.extent.height,
+            new_color_hdr_target.image_info.extent.width,
+            new_color_hdr_target.image_info.extent.height,
         );
         if error {
-            destroy_image_info(renderer.device, renderer.allocator, *new_color_target.image_info);
+            destroy_image_info(renderer.device, renderer.allocator, *new_color_hdr_target.image_info);
             destroy_image_info(renderer.device, renderer.allocator, *new_depth_image);
             return tprint("Failed to create new depth image: %", error);
         }
 
-        destroy_image_info(renderer.device, renderer.allocator, *renderer.color_target.image_info);
+        error =, new_color_ldr_target := create_color_ldr_target(
+            renderer.device,
+            renderer.allocator,
+            new_color_hdr_target.image_info.extent.width,
+            new_color_hdr_target.image_info.extent.height,
+        );
+        if error {
+            destroy_image_info(renderer.device, renderer.allocator, *new_color_ldr_target);
+            destroy_image_info(renderer.device, renderer.allocator, *new_color_hdr_target.image_info);
+            destroy_image_info(renderer.device, renderer.allocator, *new_depth_image);
+            return tprint("Failed to create new color ldr image: %", error);
+        }
+
+        destroy_image_info(renderer.device, renderer.allocator, *renderer.color_ldr_target);
+        destroy_image_info(renderer.device, renderer.allocator, *renderer.color_hdr_target.image_info);
         destroy_image_info(renderer.device, renderer.allocator, *renderer.depth_image_info);
 
-        renderer.color_target = new_color_target;
+        renderer.color_ldr_target = new_color_ldr_target;
+        renderer.color_hdr_target = new_color_hdr_target;
         renderer.depth_image_info = new_depth_image;
 
-        renderer.color_target.should_recreate = false; // Just in case
+        set_hdr_color_target_image_view_to_tonemap_pass(
+            *renderer.tonemap_pass,
+            renderer.color_hdr_target.image_info.image_view,
+            renderer.device,
+        );
+
+        renderer.color_hdr_target.should_recreate = false; // Just in case
     }
 
     renderer.transforms.view = make_look_at_matrix(
@@ -431,8 +484,8 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         camera.up,
         x_is_forward = false,
     );
-    aspect_ratio := cast(float, renderer.color_target.image_info.extent.width)
-        / cast(float, renderer.color_target.image_info.extent.height);
+    aspect_ratio := cast(float, renderer.color_hdr_target.image_info.extent.width)
+        / cast(float, renderer.color_hdr_target.image_info.extent.height);
     renderer.transforms.projection = make_projection_matrix(
         camera.fov_vertical,
         aspect_ratio,
@@ -560,13 +613,13 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     { // Transition the color target image into a renderable layout, so we can draw on it.
         render_layout_barriers := VK.Image_Memory_Barrier_2.[
             {
-                src_stage_mask    = .BLIT, // For synchronization
-                src_access_mask   = 0,
+                src_stage_mask    = .FRAGMENT_SHADER, // For synchronization
+                src_access_mask   = .SHADER_SAMPLED_READ,
                 dst_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
                 dst_access_mask   = .COLOR_ATTACHMENT_WRITE,
                 old_layout        = .UNDEFINED,
                 new_layout        = .COLOR_ATTACHMENT_OPTIMAL,
-                image             = renderer.color_target.image_info.image,
+                image             = renderer.color_hdr_target.image_info.image,
                 subresource_range = {
                     aspect_mask      = .COLOR,
                     level_count      = 1,
@@ -600,7 +653,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
     { // Specify the color and depth attachments for passes which use the color target and start rendering
         color_rendering_attachment_info := VK.Rendering_Attachment_Info.{
-            image_view                 = renderer.color_target.image_info.image_view,
+            image_view                 = renderer.color_hdr_target.image_info.image_view,
             image_layout               = .COLOR_ATTACHMENT_OPTIMAL,
             load_op                    = .CLEAR,
             store_op                   = .STORE,
@@ -618,7 +671,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         rendering_info := VK.Rendering_Info.{
             render_area = {
                 offset = { x = 0, y = 0 },
-                extent = renderer.color_target.image_info.extent,
+                extent = renderer.color_hdr_target.image_info.extent,
             },
             layer_count = 1,
             color_attachment_count = 1,
@@ -632,9 +685,9 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     { // Set viewport and scissor
         viewport := VK.Viewport.{
             x      = 0,
-            y      = cast(float, renderer.color_target.image_info.extent.height),
-            width  = cast(float, renderer.color_target.image_info.extent.width),
-            height = -cast(float, renderer.color_target.image_info.extent.height),
+            y      = cast(float, renderer.color_hdr_target.image_info.extent.height),
+            width  = cast(float, renderer.color_hdr_target.image_info.extent.width),
+            height = -cast(float, renderer.color_hdr_target.image_info.extent.height),
             min_depth = 0,
             max_depth = 1,
         };
@@ -645,7 +698,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 x = 0,
                 y = 0,
             },
-            extent = renderer.color_target.image_info.extent,
+            extent = renderer.color_hdr_target.image_info.extent,
         };
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
@@ -663,7 +716,14 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
     VK.cmd_end_rendering(frame_resources.command_buffer);
 
-    { // Color target to src, swapchain image to dst
+    do_tonemap_pass(
+        *renderer.tonemap_pass,
+        renderer.color_hdr_target,
+        renderer.color_ldr_target,
+        frame_resources.command_buffer,
+    );
+
+    { // Color LDR target to src, swapchain image to dst
         barriers := VK.Image_Memory_Barrier_2.[
             {
                 src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
@@ -672,7 +732,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 dst_access_mask = .TRANSFER_READ,
                 old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
                 new_layout      = .TRANSFER_SRC_OPTIMAL,
-                image           = renderer.color_target.image_info.image,
+                image           = renderer.color_ldr_target.image,
                 subresource_range = {
                     aspect_mask = .COLOR,
                     level_count = 1,
@@ -742,7 +802,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
     { // Scaling and bliting
         left_x, left_y, right_x, right_y := scale_keeping_ratio_and_get_rect(
-            renderer.color_target.image_info.extent,
+            renderer.color_ldr_target.extent,
             renderer.swapchain_info.config.image_extent,
         );
 
@@ -754,8 +814,8 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             src_offsets     = .[
                 .{ 0, 0, 0 },
                 .{
-                    cast(s32, renderer.color_target.image_info.extent.width),
-                    cast(s32, renderer.color_target.image_info.extent.height),
+                    cast(s32, renderer.color_ldr_target.extent.width),
+                    cast(s32, renderer.color_ldr_target.extent.height),
                     1,
                 },
             ],
@@ -770,7 +830,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         };
 
         blit_info := VK.Blit_Image_Info_2.{
-            src_image        = renderer.color_target.image_info.image,
+            src_image        = renderer.color_ldr_target.image,
             src_image_layout = .TRANSFER_SRC_OPTIMAL,
             dst_image        = renderer.swapchain_info.images[swapchain_image_index],
             dst_image_layout = .TRANSFER_DST_OPTIMAL,
@@ -876,15 +936,15 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
 set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
     if (
-        width == renderer.color_target.image_info.extent.width
-        && height == renderer.color_target.image_info.extent.height
+        width == renderer.color_hdr_target.image_info.extent.width
+        && height == renderer.color_hdr_target.image_info.extent.height
     )
     {
         return;
     }
 
-    renderer.color_target.should_recreate  = true;
-    renderer.color_target.requested_extent = { width, height };
+    renderer.color_hdr_target.should_recreate  = true;
+    renderer.color_hdr_target.requested_extent = { width, height };
 }
 
 set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
@@ -1329,7 +1389,8 @@ DEFAULT_SURFACE_FORMAT :: VK.Surface_Format_Khr.{
     color_space = .SRGB_NONLINEAR_KHR,
 };
 
-DEFAULT_COLOR_TARGET_FORMAT :: VK.Format.R8G8B8A8_SRGB;
+DEFAULT_COLOR_HDR_TARGET_FORMAT :: VK.Format.R16G16B16A16_SFLOAT;
+DEFAULT_COLOR_LDR_TARGET_FORMAT :: VK.Format.R8G8B8A8_SRGB;
 
 DEFAULT_PRESENT_MODE :: VK.Present_Mode_Khr.FIFO_KHR;
 
@@ -1392,39 +1453,70 @@ Scene_Data :: struct @Gpu {
     directional_light:     Directional_Light;
     camera_world_position: Vector3;
     ambient_color:         Vector3 = { 0.03, 0.03, 0.03 };
-    exposure:              float   = 1;
 }
 
-create_color_target :: (
+create_color_hdr_target :: (
     device: VK.Device,
     allocator: VMA.Allocator,
     width: u32,
     height: u32,
-) -> error: string, Color_Target {
-    color_target: Color_Target;
+) -> error: string, Color_Hdr_Target {
+    color_hdr_target: Color_Hdr_Target;
 
-    error:, color_target.image_info = create_image_info(
+    error:, color_hdr_target.image_info = create_image_info(
         device,
         allocator,
-        DEFAULT_COLOR_TARGET_FORMAT,
+        DEFAULT_COLOR_HDR_TARGET_FORMAT,
         width,
         height,
         depth            = 1,
         tiling           = .OPTIMAL,
-        usage            = .COLOR_ATTACHMENT | .TRANSFER_SRC,
+        usage            = .COLOR_ATTACHMENT | .SAMPLED,
         allocation_flags = .DEDICATED_MEMORY,
         aspect_mask      = .COLOR,
     );
 
     if error {
         return
-            tprint("Failed to create color target: %", error),
-            color_target;
+            tprint("Failed to create color hdr target: %", error),
+            color_hdr_target;
     }
 
     return
         "",
-        color_target;
+        color_hdr_target;
+}
+
+create_color_ldr_target :: (
+    device: VK.Device,
+    allocator: VMA.Allocator,
+    width: u32,
+    height: u32,
+) -> error: string, Image_Info {
+    color_ldr_target: Image_Info = ---;
+
+    error:, color_ldr_target = create_image_info(
+        device,
+        allocator,
+        DEFAULT_COLOR_LDR_TARGET_FORMAT,
+        width,
+        height,
+        depth            = 1,
+        tiling           = .OPTIMAL,
+        usage            = .TRANSFER_SRC | .COLOR_ATTACHMENT,
+        allocation_flags = .DEDICATED_MEMORY,
+        aspect_mask      = .COLOR,
+    );
+
+    if error {
+        return
+            tprint("Failed to create ldr color target: %", error),
+            color_ldr_target;
+    }
+
+    return
+        "",
+        color_ldr_target;
 }
 
 upload_to_buffer :: (
@@ -3042,3 +3134,4 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
 #load "model.jai";
 #load "model_pass.jai";
 #load "shadow_pass.jai";
+#load "tonemap_pass.jai";

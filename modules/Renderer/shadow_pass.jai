@@ -8,7 +8,7 @@ Shadow_Pass :: struct {
     depth_image_info: Image_Info;
     sampler:          VK.Sampler;
 
-    pipeline_info:    Shadow_Pass_Pipeline_Info;
+    pipeline_info: Shadow_Pass_Pipeline_Info;
 
     buffer_infos: [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     pointers:     [FRAMES_IN_FLIGHT_COUNT]*Shadow_Pass_Data;
