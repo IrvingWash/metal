@@ -88,6 +88,18 @@ SHADER_META_INFOS :: Shader_Meta_Info.[
         entry_point_name     = "main",
         kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
     },
+    {
+        relative_source_path = "modules/Renderer/shaders/shadow.vertex.glsl",
+        compiled_name        = "shadow.vertex.spv",
+        entry_point_name     = "main",
+        kind                 = Shaderc.Shader_Kind.VERTEX_SHADER,
+    },
+    {
+        relative_source_path = "modules/Renderer/shaders/shadow.fragment.glsl",
+        compiled_name        = "shadow.fragment.spv",
+        entry_point_name     = "main",
+        kind                 = Shaderc.Shader_Kind.FRAGMENT_SHADER,
+    },
 ];
 
 #import "Basic";

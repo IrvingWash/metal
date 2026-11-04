@@ -95,9 +95,9 @@ Directional_Light :: struct @Gpu {
 }
 
 Color_Target :: struct {
-    image_info:      Image_Info;
-    extent:          VK.Extent_2D;
-    should_recreate: bool;
+    image_info:       Image_Info;
+    requested_extent: VK.Extent_2D;
+    should_recreate:  bool;
 }
 
 init :: (
@@ -221,8 +221,8 @@ init :: (
     error, renderer.depth_image_info = create_depth_image(
         renderer.device,
         renderer.allocator,
-        renderer.color_target.extent.width,
-        renderer.color_target.extent.height,
+        renderer.color_target.image_info.extent.width,
+        renderer.color_target.image_info.extent.height,
     );
     if error {
         return
@@ -292,6 +292,8 @@ init :: (
     error, renderer.shadow_pass = create_shadow_pass(
         renderer.device,
         renderer.allocator,
+        get_compiled_shader,
+        renderer.materials_info.texture_descriptor_info.layout,
     );
     if error {
         return
@@ -308,9 +310,9 @@ deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
     destroy_shadow_pass(
+        *renderer.shadow_pass,
         renderer.device,
         renderer.allocator,
-        *renderer.shadow_pass,
     );
 
     destroy_model_pass(
@@ -393,8 +395,8 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         error, new_color_target := create_color_target(
             renderer.device,
             renderer.allocator,
-            renderer.color_target.extent.width,
-            renderer.color_target.extent.height,
+            renderer.color_target.requested_extent.width,
+            renderer.color_target.requested_extent.height,
         );
         if error {
             destroy_image_info(renderer.device, renderer.allocator, *new_color_target.image_info);
@@ -404,8 +406,8 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         error =, new_depth_image := create_depth_image(
             renderer.device,
             renderer.allocator,
-            renderer.color_target.extent.width,
-            renderer.color_target.extent.height,
+            new_color_target.image_info.extent.width,
+            new_color_target.image_info.extent.height,
         );
         if error {
             destroy_image_info(renderer.device, renderer.allocator, *new_color_target.image_info);
@@ -428,7 +430,8 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         camera.up,
         x_is_forward = false,
     );
-    aspect_ratio := cast(float, renderer.color_target.extent.width) / cast(float, renderer.color_target.extent.height);
+    aspect_ratio := cast(float, renderer.color_target.image_info.extent.width)
+        / cast(float, renderer.color_target.image_info.extent.height);
     renderer.transforms.projection = make_projection_matrix(
         camera.fov_vertical,
         aspect_ratio,
@@ -584,7 +587,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         rendering_info := VK.Rendering_Info.{
             render_area = {
                 offset = { x = 0, y = 0 },
-                extent = renderer.color_target.extent,
+                extent = renderer.color_target.image_info.extent,
             },
             layer_count = 1,
             color_attachment_count = 1,
@@ -598,9 +601,9 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     { // Set viewport and scissor
         viewport := VK.Viewport.{
             x      = 0,
-            y      = cast(float, renderer.color_target.extent.height),
-            width  = cast(float, renderer.color_target.extent.width),
-            height = -cast(float, renderer.color_target.extent.height),
+            y      = cast(float, renderer.color_target.image_info.extent.height),
+            width  = cast(float, renderer.color_target.image_info.extent.width),
+            height = -cast(float, renderer.color_target.image_info.extent.height),
             min_depth = 0,
             max_depth = 1,
         };
@@ -611,7 +614,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 x = 0,
                 y = 0,
             },
-            extent = renderer.color_target.extent,
+            extent = renderer.color_target.image_info.extent,
         };
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
@@ -713,7 +716,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
     { // Scaling and bliting
         left_x, left_y, right_x, right_y := scale_keeping_ratio_and_get_rect(
-            renderer.color_target.extent,
+            renderer.color_target.image_info.extent,
             renderer.swapchain_info.config.image_extent,
         );
 
@@ -725,8 +728,8 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             src_offsets     = .[
                 .{ 0, 0, 0 },
                 .{
-                    cast(s32, renderer.color_target.extent.width),
-                    cast(s32, renderer.color_target.extent.height),
+                    cast(s32, renderer.color_target.image_info.extent.width),
+                    cast(s32, renderer.color_target.image_info.extent.height),
                     1,
                 },
             ],
@@ -847,15 +850,15 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
 set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
     if (
-        width == renderer.color_target.extent.width
-        && height == renderer.color_target.extent.height
+        width == renderer.color_target.image_info.extent.width
+        && height == renderer.color_target.image_info.extent.height
     )
     {
         return;
     }
 
-    renderer.color_target.should_recreate = true;
-    renderer.color_target.extent = { width, height };
+    renderer.color_target.should_recreate  = true;
+    renderer.color_target.requested_extent = { width, height };
 }
 
 set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
@@ -1088,6 +1091,7 @@ Image_Info :: struct {
     image_view: VK.Image_View;
     allocation: VMA.Allocation;
     format:     VK.Format;
+    extent:     VK.Extent_2D;
 }
 
 // @Todo: give this a better name
@@ -1160,6 +1164,8 @@ create_image_info :: (
     mip_level_count:  u32 = 1,
 ) -> error: string, Image_Info {
     image_info: Image_Info;
+
+    image_info.extent = { width, height };
 
     image_create_info := VK.Image_Create_Info.{
         image_type = ._2D,
@@ -1392,8 +1398,6 @@ create_color_target :: (
             tprint("Failed to create color target: %", error),
             color_target;
     }
-
-    color_target.extent = { width, height };
 
     return
         "",
