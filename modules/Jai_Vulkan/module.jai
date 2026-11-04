@@ -5184,6 +5184,13 @@ cmd_set_cull_mode :: (
     cull_mode: Cull_Mode_Flags,
 ) -> void #foreign libvulkan "vkCmdSetCullMode";
 
+cmd_set_depth_bias :: (
+    command_buffer:  Command_Buffer,
+    constant_factor: float,
+    clamp:           float,
+    slope_factor:    float,
+) -> void #foreign libvulkan "vkCmdSetDepthBias";
+
 
 
 #scope_file

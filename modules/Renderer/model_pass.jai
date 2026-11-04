@@ -1,7 +1,7 @@
 #scope_module
 
 Model_Pass :: struct {
-    pbr_pipeline_info: Pbr_Pipeline_Info;
+    pipeline_info: Pbr_Pipeline_Info;
 
     draw_buckets: Model_Draw_Buckets;
     draw_passes:  [6]Model_Draw_Pass;
@@ -24,7 +24,7 @@ create_model_pass :: (
 ) -> error: string, Model_Pass {
     model_pass: Model_Pass;
 
-    error:, model_pass.pbr_pipeline_info = create_pbr_pipeline(
+    error:, model_pass.pipeline_info = create_pbr_pipeline(
         device,
         get_compiled_shader,
         .[color_target_image_format],
@@ -125,7 +125,7 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
 
     destroy_model_draw_buckets(*model_pass.draw_buckets);
 
-    destroy_pbr_pipeline(device, *model_pass.pbr_pipeline_info);
+    destroy_pbr_pipeline(device, *model_pass.pipeline_info);
 
     model_pass.* = {};
 }
@@ -160,7 +160,7 @@ write_model_draw_passes :: (
     frame_index: u64,
     allocator:   VMA.Allocator,
 ) {
-    model_pass.draw_passes = into_draw_passes(*model_pass.draw_buckets, model_pass.pbr_pipeline_info);
+    model_pass.draw_passes = into_draw_passes(*model_pass.draw_buckets, model_pass.pipeline_info);
     { // Check
         count: int;
         for draw_pass: model_pass.draw_passes {
@@ -205,22 +205,24 @@ draw_model_passes :: (
     scene_info:     Scene_Info,
     transforms:     Transforms,
 ) {
-    push_constants: Push_Constants = {
-        vertex_buffer_address   = geometry_info.vertex_buffer_info.device_address,
-        material_buffer_address = materials_info.material_buffer_info.device_address,
-        instance_buffer_address = model_pass.instance_buffer_infos[frame_index].device_address,
+    { // Push constants
+        push_constants: Push_Constants = {
+            vertex_buffer_address   = geometry_info.vertex_buffer_info.device_address,
+            material_buffer_address = materials_info.material_buffer_info.device_address,
+            instance_buffer_address = model_pass.instance_buffer_infos[frame_index].device_address,
 
-        view_projection_transform = transforms.view_projection,
-    };
+            view_projection_transform = transforms.view_projection,
+        };
 
-    VK.cmd_push_constants(
-        command_buffer,
-        model_pass.pbr_pipeline_info.layout,
-        stage_flags = .VERTEX | .FRAGMENT,
-        offset = 0,
-        size_of(Push_Constants),
-        *push_constants,
-    );
+        VK.cmd_push_constants(
+            command_buffer,
+            model_pass.pipeline_info.layout,
+            stage_flags = .VERTEX | .FRAGMENT,
+            offset = 0,
+            size_of(Push_Constants),
+            *push_constants,
+        );
+    }
 
     VK.cmd_bind_index_buffer(
         command_buffer,
@@ -232,7 +234,7 @@ draw_model_passes :: (
     VK.cmd_bind_descriptor_sets(
         command_buffer,
         pipeline_bind_point = .GRAPHICS,
-        model_pass.pbr_pipeline_info.layout,
+        model_pass.pipeline_info.layout,
         first_set = 0,
         .[
             materials_info.texture_descriptor_info.set,
@@ -243,8 +245,10 @@ draw_model_passes :: (
 
     { // Draw
         offset: int;
-        bound_pipeline:  VK.Pipeline;
+        bound_pipeline: VK.Pipeline;
         for draw_pass: model_pass.draw_passes {
+            defer offset += draw_pass.bucket.count;
+
             if draw_pass.bucket.count == 0 {
                 continue;
             }
@@ -263,8 +267,6 @@ draw_model_passes :: (
                 draw_count = cast(u32, draw_pass.bucket.count),
                 stride     = size_of(VK.Draw_Indexed_Indirect_Command),
             );
-
-            offset += draw_pass.bucket.count;
         }
     }
 }
@@ -314,9 +316,10 @@ Model_Draw_Bucket_Entry :: struct {
 }
 
 Model_Draw_Pass :: struct {
-    bucket:    []Model_Draw_Bucket_Entry;
-    pipeline:  VK.Pipeline;
-    cull_mode: VK.Cull_Mode_Flags;
+    bucket:     []Model_Draw_Bucket_Entry;
+    pipeline:   VK.Pipeline;
+    cull_mode:  VK.Cull_Mode_Flags;
+    alpha_mode: Alpha_Mode;
 }
 
 init_model_draw_buckets :: () -> Model_Draw_Buckets {
@@ -421,39 +424,45 @@ destroy_model_draw_buckets :: (draw_buckets: *Model_Draw_Buckets) {
 
 #scope_file
 
-into_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pbr_pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Pass {
+into_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Pass {
     #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
 
     return .[
         {
-            bucket    = draw_buckets.single_opaque,
-            pipeline  = pbr_pipeline_info.opaque_pipeline,
-            cull_mode = .BACK,
+            bucket     = draw_buckets.single_opaque,
+            pipeline   = pipeline_info.opaque_pipeline,
+            cull_mode  = .BACK,
+            alpha_mode = .OPAQUE,
         },
         {
-            bucket    = draw_buckets.double_opaque,
-            pipeline  = pbr_pipeline_info.opaque_pipeline,
-            cull_mode = .NONE,
+            bucket     = draw_buckets.double_opaque,
+            pipeline   = pipeline_info.opaque_pipeline,
+            cull_mode  = .NONE,
+            alpha_mode = .OPAQUE,
         },
         {
-            bucket    = draw_buckets.single_mask,
-            pipeline  = pbr_pipeline_info.mask_pipeline,
-            cull_mode = .BACK,
+            bucket     = draw_buckets.single_mask,
+            pipeline   = pipeline_info.mask_pipeline,
+            cull_mode  = .BACK,
+            alpha_mode = .MASK,
         },
         {
-            bucket    = draw_buckets.double_mask,
-            pipeline  = pbr_pipeline_info.mask_pipeline,
-            cull_mode = .NONE,
+            bucket     = draw_buckets.double_mask,
+            pipeline   = pipeline_info.mask_pipeline,
+            cull_mode  = .NONE,
+            alpha_mode = .MASK,
         },
         {
-            bucket    = draw_buckets.single_blend,
-            pipeline  = pbr_pipeline_info.blend_pipeline,
-            cull_mode = .BACK,
+            bucket     = draw_buckets.single_blend,
+            pipeline   = pipeline_info.blend_pipeline,
+            cull_mode  = .BACK,
+            alpha_mode = .BLEND,
         },
         {
-            bucket    = draw_buckets.double_blend,
-            pipeline  = pbr_pipeline_info.blend_pipeline,
-            cull_mode = .NONE,
+            bucket     = draw_buckets.double_blend,
+            pipeline   = pipeline_info.blend_pipeline,
+            cull_mode  = .NONE,
+            alpha_mode = .BLEND,
         },
     ];
 }

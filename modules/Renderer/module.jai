@@ -540,7 +540,15 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     light_source: Light_Source;
     light_source.kind = .DIRECTIONAL;
     light_source.directional.direction = renderer.scene_info.scene_data.directional_light.direction;
-    do_shadow_pass(*renderer.shadow_pass, light_source);
+    light_view_projection_transform := do_shadow_pass(
+        *renderer.shadow_pass,
+        light_source,
+        frame_resources.command_buffer,
+        renderer.geometry_info,
+        renderer.materials_info,
+        renderer.model_pass,
+        frame_resources_index,
+    );
 
     // =========================================================================
     // Color target start
@@ -586,55 +594,57 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *render_dependency_info);
     }
 
-    // Specify the color and depth attachments for passes which use the color target
-    color_rendering_attachment_info := VK.Rendering_Attachment_Info.{
-        image_view                 = renderer.color_target.image_info.image_view,
-        image_layout               = .COLOR_ATTACHMENT_OPTIMAL,
-        load_op                    = .CLEAR,
-        store_op                   = .STORE,
-        clear_value.color._float32 = renderer.normalized_clear_color.component,
-    };
+    { // Specify the color and depth attachments for passes which use the color target and start rendering
+        color_rendering_attachment_info := VK.Rendering_Attachment_Info.{
+            image_view                 = renderer.color_target.image_info.image_view,
+            image_layout               = .COLOR_ATTACHMENT_OPTIMAL,
+            load_op                    = .CLEAR,
+            store_op                   = .STORE,
+            clear_value.color._float32 = renderer.normalized_clear_color.component,
+        };
 
-    depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
-        image_view                      = renderer.depth_image_info.image_view,
-        image_layout                    = .DEPTH_ATTACHMENT_OPTIMAL,
-        load_op                         = .CLEAR,
-        store_op                        = .DONT_CARE,
-        clear_value.depth_stencil.depth = 1,
-    };
+        depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
+            image_view                      = renderer.depth_image_info.image_view,
+            image_layout                    = .DEPTH_ATTACHMENT_OPTIMAL,
+            load_op                         = .CLEAR,
+            store_op                        = .DONT_CARE,
+            clear_value.depth_stencil.depth = 1,
+        };
 
-    rendering_info := VK.Rendering_Info.{
-        render_area = {
-            offset = { x = 0, y = 0 },
+        rendering_info := VK.Rendering_Info.{
+            render_area = {
+                offset = { x = 0, y = 0 },
+                extent = renderer.color_target.image_info.extent,
+            },
+            layer_count = 1,
+            color_attachment_count = 1,
+            p_color_attachments = *color_rendering_attachment_info,
+            p_depth_attachment = *depth_rendering_attachment_info,
+        };
+
+        VK.cmd_begin_rendering(frame_resources.command_buffer, *rendering_info);
+    }
+
+    { // Set viewport and scissor
+        viewport := VK.Viewport.{
+            x      = 0,
+            y      = cast(float, renderer.color_target.image_info.extent.height),
+            width  = cast(float, renderer.color_target.image_info.extent.width),
+            height = -cast(float, renderer.color_target.image_info.extent.height),
+            min_depth = 0,
+            max_depth = 1,
+        };
+        VK.cmd_set_viewport(frame_resources.command_buffer, VK.Viewport.[viewport]);
+
+        scissor := VK.Rect_2D.{
+            offset = {
+                x = 0,
+                y = 0,
+            },
             extent = renderer.color_target.image_info.extent,
-        },
-        layer_count = 1,
-        color_attachment_count = 1,
-        p_color_attachments = *color_rendering_attachment_info,
-        p_depth_attachment = *depth_rendering_attachment_info,
-    };
-
-    VK.cmd_begin_rendering(frame_resources.command_buffer, *rendering_info);
-
-    // Set viewport and scissor
-    viewport := VK.Viewport.{
-        x      = 0,
-        y      = cast(float, renderer.color_target.image_info.extent.height),
-        width  = cast(float, renderer.color_target.image_info.extent.width),
-        height = -cast(float, renderer.color_target.image_info.extent.height),
-        min_depth = 0,
-        max_depth = 1,
-    };
-    VK.cmd_set_viewport(frame_resources.command_buffer, VK.Viewport.[viewport]);
-
-    scissor := VK.Rect_2D.{
-        offset = {
-            x = 0,
-            y = 0,
-        },
-        extent = renderer.color_target.image_info.extent,
-    };
-    VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
+        };
+        VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
+    }
 
     draw_model_passes(
         *renderer.model_pass,

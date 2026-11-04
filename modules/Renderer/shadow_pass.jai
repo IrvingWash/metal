@@ -78,10 +78,189 @@ destroy_shadow_pass :: (
     shadow_pass.* = {};
 }
 
-do_shadow_pass :: (shadow_pass: *Shadow_Pass, light_source: Light_Source) {
+do_shadow_pass :: (
+    shadow_pass:    *Shadow_Pass,
+    light_source:   Light_Source,
+    command_buffer: VK.Command_Buffer,
+    geometry_info:  Geometry_Info,
+    materials_info: Materials_Info,
+    model_pass:     Model_Pass,
+    frame_index:    u64,
+) -> Matrix4 {
     view_projection_transform := create_view_projection_transform_for_light_source(light_source);
 
-    // @Todo: incomplete
+    { // Transition to depth attachment
+        image_memory_barrier := VK.Image_Memory_Barrier_2.{
+            src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS | .FRAGMENT_SHADER,
+            src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
+            dst_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
+            dst_access_mask = .DEPTH_STENCIL_ATTACHMENT_READ | .DEPTH_STENCIL_ATTACHMENT_WRITE,
+            old_layout      = .UNDEFINED,
+            new_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
+            image           = shadow_pass.depth_image_info.image,
+            subresource_range = {
+                aspect_mask      = .DEPTH,
+                level_count      = 1,
+                layer_count      = 1,
+            },
+        };
+
+        dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers    = *image_memory_barrier,
+        };
+
+        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
+    }
+
+    { // Begin rendering
+        depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
+            image_view                      = shadow_pass.depth_image_info.image_view,
+            image_layout                    = .DEPTH_ATTACHMENT_OPTIMAL,
+            load_op                         = .CLEAR,
+            store_op                        = .STORE,
+            clear_value.depth_stencil.depth = 1,
+        };
+
+        rendering_info := VK.Rendering_Info.{
+            render_area = {
+                offset = { x = 0, y = 0 },
+                extent = shadow_pass.depth_image_info.extent,
+            },
+            layer_count = 1,
+            p_depth_attachment = *depth_rendering_attachment_info,
+        };
+
+        VK.cmd_begin_rendering(command_buffer, *rendering_info);
+    }
+
+    { // Viewport and scissor
+        viewport := VK.Viewport.{
+            x      = 0,
+            y      = cast(float, shadow_pass.depth_image_info.extent.height),
+            width  = cast(float, shadow_pass.depth_image_info.extent.width),
+            height = -cast(float, shadow_pass.depth_image_info.extent.height),
+            min_depth = 0,
+            max_depth = 1,
+        };
+        VK.cmd_set_viewport(command_buffer, VK.Viewport.[viewport]);
+
+        scissor := VK.Rect_2D.{
+            offset = {
+                x = 0,
+                y = 0,
+            },
+            extent = shadow_pass.depth_image_info.extent,
+        };
+        VK.cmd_set_scissor(command_buffer, VK.Rect_2D.[scissor]);
+    }
+
+    { // Push constants
+        push_constants: Push_Constants = {
+            vertex_buffer_address   = geometry_info.vertex_buffer_info.device_address,
+            material_buffer_address = materials_info.material_buffer_info.device_address,
+            instance_buffer_address = model_pass.instance_buffer_infos[frame_index].device_address,
+
+            view_projection_transform = view_projection_transform,
+        };
+
+        VK.cmd_push_constants(
+            command_buffer,
+            shadow_pass.pipeline_info.layout,
+            stage_flags = .VERTEX | .FRAGMENT,
+            offset = 0,
+            size_of(Push_Constants),
+            *push_constants,
+        );
+    }
+
+    VK.cmd_bind_index_buffer(
+        command_buffer,
+        geometry_info.index_buffer_info.buffer,
+        offset = 0,
+        index_type = .UINT32,
+    );
+
+    VK.cmd_bind_descriptor_sets(
+        command_buffer,
+        pipeline_bind_point = .GRAPHICS,
+        shadow_pass.pipeline_info.layout,
+        first_set = 0,
+        .[
+            materials_info.texture_descriptor_info.set,
+        ],
+        .[],
+    );
+
+    VK.cmd_set_depth_bias(
+        command_buffer,
+        constant_factor = 1.25,
+        clamp = 0,
+        slope_factor = 1.75,
+    );
+
+    { // Draw
+        offset: int;
+        bound_pipeline: VK.Pipeline;
+        for model_draw_pass: model_pass.draw_passes {
+            defer offset += model_draw_pass.bucket.count;
+
+            if model_draw_pass.bucket.count == 0 {
+                continue;
+            }
+
+            if #complete model_draw_pass.alpha_mode == {
+                case .BLEND;
+                    continue;
+                case .OPAQUE;
+                    if bound_pipeline != shadow_pass.pipeline_info.opaque_pipeline {
+                        VK.cmd_bind_pipeline(command_buffer, .GRAPHICS, shadow_pass.pipeline_info.opaque_pipeline);
+                        bound_pipeline = shadow_pass.pipeline_info.opaque_pipeline;
+                    }
+                case .MASK;
+                    if bound_pipeline != shadow_pass.pipeline_info.mask_pipeline {
+                        VK.cmd_bind_pipeline(command_buffer, .GRAPHICS, shadow_pass.pipeline_info.mask_pipeline);
+                        bound_pipeline = shadow_pass.pipeline_info.mask_pipeline;
+                    }
+            }
+
+            VK.cmd_set_cull_mode(command_buffer, model_draw_pass.cull_mode);
+
+            VK.cmd_draw_indexed_indirect(
+                command_buffer,
+                model_pass.indirect_draw_buffer_infos[frame_index].buffer,
+                offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
+                draw_count = cast(u32, model_draw_pass.bucket.count),
+                stride     = size_of(VK.Draw_Indexed_Indirect_Command),
+            );
+        }
+    }
+
+    VK.cmd_end_rendering(command_buffer);
+
+    { // Transition for sampling
+        barrier := VK.Image_Memory_Barrier_2.{
+            src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
+            src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
+            dst_stage_mask  = .FRAGMENT_SHADER,
+            dst_access_mask = .SHADER_SAMPLED_READ,
+            old_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
+            new_layout      = .SHADER_READ_ONLY_OPTIMAL,
+            image           = shadow_pass.depth_image_info.image,
+            subresource_range = {
+                aspect_mask = .DEPTH,
+                level_count = 1,
+                layer_count = 1,
+            },
+        };
+        dependency_info := VK.Dependency_Info.{
+            image_memory_barrier_count = 1,
+            p_image_memory_barriers    = *barrier,
+        };
+        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
+    }
+
+    return view_projection_transform;
 }
 
 
