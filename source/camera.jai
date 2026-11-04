@@ -16,6 +16,8 @@ Camera :: struct {
     z_near:       float = 0.1;
     z_far:        float = 1000;
     fov_vertical: float = #run deg_to_rad(60);
+
+    exposure: float = 1;
 }
 
 Camera_Mode :: enum {

@@ -1,39 +1,13 @@
 #version 460
 
+#include "types.glsl"
+
 #extension GL_EXT_nonuniform_qualifier                   : require
 #extension GL_EXT_scalar_block_layout                    : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_buffer_reference                       : require
 
 const float PI = 3.14159265359;
-
-struct Directional_Light {
-    vec3 direction;
-    float intensity;
-    vec3 color;
-};
-
-struct Material {
-    vec4 base_color_factor;
-    uint base_color_texture_index;
-
-    float metallic_factor;
-    float roughness_factor;
-    uint metallic_roughness_texture_index;
-
-    float normal_scale;
-    uint  normal_texture_index;
-
-    float occlusion_strength;
-    uint occlusion_texture_index;
-
-    vec3 emissive_factor;
-    uint emissive_texture_index;
-
-    float alpha_cutoff;
-    uint alpha_mode;
-    uint double_sided; // 0 or 1
-};
 
 float calculate_shadow(
     sampler2DShadow shadow_map,
@@ -56,7 +30,7 @@ float calculate_shadow(
     vec4 light_space_position = light_view_projection_transform * vec4(offset_position, 1);
     vec3 ndc_position = light_space_position.xyz / light_space_position.w;
 
-    if (ndc_position.z > 1.0) {
+    if (ndc_position.z < 0 || ndc_position.z > 1) {
         return 0; // Beyond far plane
     }
 
@@ -64,16 +38,16 @@ float calculate_shadow(
     vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);
 
     // PCF
-    vec2 texel = 1.0 / shadow_map_size;
-    float lit = 0.0;
+    vec2 texel = 1 / shadow_map_size;
+    float lit = 0;
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
             lit += texture(shadow_map, vec3(uv + vec2(x, y) * texel, ndc_position.z));
         }
     }
-    lit /= 9.0;
+    lit /= 9;
 
-    return 1.0 - lit;
+    return 1 - lit;
 }
 
 // Normal distribution function (Trowbridge-Reitz) - D
@@ -134,10 +108,6 @@ vec3 get_normal_from_texel(vec3 world_space_vertex_normal, vec4 vertex_tangent, 
     return N;
 }
 
-const uint ALPHA_MODE_OPAQUE = 0;
-const uint ALPHA_MODE_MASK   = 1;
-const uint ALPHA_MODE_BLEND  = 2;
-
 layout(constant_id = 0) const uint ALPHA_MODE = 0;
 
 layout(push_constant, scalar) uniform Constants {
@@ -148,22 +118,12 @@ layout(buffer_reference, scalar) readonly buffer Material_Buffer {
     Material materials[];
 };
 
-layout(location = 0) in Vertex_Input {
-         vec4 color;
-         vec3 world_space_normal;
-         vec4 world_space_tangent;
-         vec2 uv;
-         vec3 fragment_world_position;
-    flat uint material_index;
-} vertex_input;
-
 layout(set = 0, binding = 0) uniform sampler2D textures[];
 
 layout(scalar, set = 1, binding = 0) uniform Scene_Data {
     Directional_Light directional_light;
     vec3 camera_world_position;
     vec3 ambient_color;
-    float exposure;
 } scene_data;
 
 layout(set = 2, binding = 0) uniform sampler2DShadow shadow_map;
@@ -172,6 +132,16 @@ layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
     mat4x4 light_view_projection_transform;
     float  radius;
 } shadow_pass_data;
+
+
+layout(location = 0) in Vertex_Input {
+         vec4 color;
+         vec3 world_space_normal;
+         vec4 world_space_tangent;
+         vec2 uv;
+         vec3 fragment_world_position;
+    flat uint material_index;
+} vertex_input;
 
 layout(location = 0) out vec4 fragment_color;
 
@@ -235,7 +205,7 @@ void main() {
         vec3 specular = specular_brdf(D, G, F, N, V, L);
 
         vec3  kS = F; // "Energy consevration"
-        vec3  kD = (vec3(1.0) - kS) * (1.0 - metallic); // Diffuse contribution coeff (nothing for metalls)
+        vec3  kD = (vec3(1) - kS) * (1 - metallic); // Diffuse contribution coeff (nothing for metalls)
 
         Lo += (1 - shadow) * (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0);
     }
@@ -244,9 +214,8 @@ void main() {
 
     vec3 final_color = ambient + Lo + emissive;
 
-    // Tonemapping
-    // @Todo: maybe use https://github.com/KhronosGroup/ToneMapping/blob/main/PBR_Neutral/pbrNeutral.glsl
-    vec3 tone_mapped = vec3(1.0) - exp(-final_color * scene_data.exposure);
-
-    fragment_color = vec4(tone_mapped, ALPHA_MODE == ALPHA_MODE_BLEND ? albedo.a : 1.0);
+    fragment_color = vec4(
+        final_color,
+        ALPHA_MODE == ALPHA_MODE_BLEND ? albedo.a : 1
+    );
 }

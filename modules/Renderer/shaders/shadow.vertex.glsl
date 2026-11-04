@@ -1,5 +1,7 @@
 #version 460
 
+#include "types.glsl"
+
 #extension GL_EXT_buffer_reference                       : require
 #extension GL_EXT_scalar_block_layout                    : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
@@ -12,22 +14,8 @@ layout(push_constant, scalar, row_major) uniform Constants {
     mat4x4   view_projection_transform;
 } constants;
 
-struct Vertex {
-    vec3 position;
-    vec4 color;
-    vec3 normal;
-    vec2 uv;
-    vec4 tangent;
-};
-
 layout(buffer_reference, scalar) readonly buffer Vertex_Buffer {
     Vertex vertices[];
-};
-
-struct Instance {
-    mat4x4 world_transform;
-    mat3x3 inverse_transpose_world_transform;
-    uint   material_index;
 };
 
 layout(buffer_reference, scalar, row_major) readonly buffer Instance_Buffer {
@@ -36,9 +24,9 @@ layout(buffer_reference, scalar, row_major) readonly buffer Instance_Buffer {
 
 layout(location = 0) out Vertex_Output {
          vec2 uv;
+         vec4 color;
     flat uint material_index;
 } vertex_output;
-
 
 void main() {
     Vertex_Buffer   vertex_buffer   = Vertex_Buffer(constants.vertex_buffer_address);
@@ -51,4 +39,5 @@ void main() {
 
     vertex_output.uv             = vertex.uv;
     vertex_output.material_index = instance.material_index;
+    vertex_output.color          = vertex.color;
 }
