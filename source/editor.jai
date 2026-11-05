@@ -1,4 +1,6 @@
-init_editor :: () {
+init_editor :: (state: *State) {
+    editor.state = state;
+
     editor.ctx = IM.create_context();
     editor.io = IM.get_io();
 
@@ -67,13 +69,13 @@ draw_editor :: (draw_editing_stuff: bool) {
 }
 
 deinit_editor :: () {
-    VK.device_wait_idle(state.renderer.device);
+    VK.device_wait_idle(editor.state.renderer.device);
 
-    Input.set_raw_event_callback(*state.input_state, process_editor_events);
-    Renderer.set_overlay_callback(*state.renderer, null, null);
+    Input.set_raw_event_callback(*editor.state.input_state, process_editor_events);
+    Renderer.set_overlay_callback(*editor.state.renderer, null, null);
 
     IM.impl_vulkan_shutdown();
-    VK.destroy_descriptor_pool(state.renderer.device, editor.descriptor_pool);
+    VK.destroy_descriptor_pool(editor.state.renderer.device, editor.descriptor_pool);
     IM.impl_sdl3_shutdown();
 
     IM.destroy_context(editor.ctx);
@@ -104,7 +106,7 @@ draw_camera_section :: () {
 
     IM.drag_float3(
         "Position",
-        *state.camera.position.component,
+        *editor.state.camera.position.component,
         v_speed = 0.1,
         v_min = 0,
         v_max = 0,
@@ -115,7 +117,7 @@ draw_camera_section :: () {
         MIN   :: 1;
         MAX   :: 120;
 
-        current_fov_in_degrees := rad_to_deg(state.camera.fov_vertical);
+        current_fov_in_degrees := rad_to_deg(editor.state.camera.fov_vertical);
 
         if IM.drag_float(
             "FOV vertical",
@@ -124,13 +126,13 @@ draw_camera_section :: () {
             v_min = MIN,
             v_max = MAX,
         ) {
-            state.camera.fov_vertical = deg_to_rad(current_fov_in_degrees);
+            editor.state.camera.fov_vertical = deg_to_rad(current_fov_in_degrees);
         }
     }
 
     IM.drag_float(
         "Exposure",
-        *state.camera.exposure,
+        *editor.state.camera.exposure,
         v_speed = 0.1,
         v_min = 0,
         v_max = 0,
@@ -169,6 +171,8 @@ draw_overlay : Renderer.Overlay_Callback : (command_buffer: VK.Command_Buffer, u
 }
 
 Editor :: struct {
+    state: *State;
+
     ctx: *IM.Context;
     io:  *IM.IO;
 
@@ -177,5 +181,7 @@ Editor :: struct {
 
 editor: Editor;
 
-IM  :: #import "Dear_ImGui";
-VK  :: #import "Jai_Vulkan";
+IM    :: #import "Dear_ImGui";
+VK    :: #import "Jai_Vulkan";
+Input :: #import "Input";
+Renderer      :: #import "Renderer";

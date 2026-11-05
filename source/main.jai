@@ -1,31 +1,5 @@
 #placeholder DEBUG;
 
-#import "Basic"()(
-    MEMORY_DEBUGGER                 = DEBUG,
-    TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG,
-);
-
-#if DEBUG {
-    #import "Print_Vars";
-}
-
-Windowing     :: #import "Windowing";
-Input         :: #import "Input";
-Renderer      :: #import "Renderer"()(
-    Window_Type      = *Windowing.Window,
-    APPLICATION_NAME = "metal",
-    DEBUG            = DEBUG,
-);
-#import "More_Math";
-
-#load "asset_manager.jai";
-#load "camera.jai";
-#load "camera_controllers.jai";
-
-#if DEBUG {
-    #load "editor.jai";
-}
-
 State :: struct {
     window:        *Windowing.Window;
     input_state:   Input.Input_State;
@@ -44,8 +18,6 @@ State :: struct {
 
     last_frame_time: float64;
 }
-
-state: State;
 
 main :: () {
     #if DEBUG {
@@ -69,7 +41,7 @@ main :: () {
     state.renderer.normalized_clear_color = { 142.0 / 255.0, 204.0 / 255.0, 254.0 / 255.0, 1 };
 
     add_model :: (path: string, translation: Vector3 = {}, scale: Vector3 = {1, 1, 1}) {
-        model := asset_manager_upload_model(*state.asset_manager, path);
+        model := asset_manager_upload_model(*state.asset_manager, path, *state.renderer);
 
         transform := make_translation_matrix4(translation) * make_scale_matrix4(scale);
 
@@ -96,6 +68,32 @@ main :: () {
         reset_temporary_storage();
     }
 }
+
+#scope_file
+
+#import "Basic"()(
+    MEMORY_DEBUGGER                 = DEBUG,
+    TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG,
+);
+
+Windowing     :: #import "Windowing";
+Input         :: #import "Input";
+Renderer      :: #import "Renderer"()(
+    Window_Type      = *Windowing.Window,
+    APPLICATION_NAME = "metal",
+    DEBUG            = DEBUG,
+);
+#import "More_Math";
+
+#load "asset_manager.jai";
+#load "camera.jai";
+#load "camera_controllers.jai";
+
+#if DEBUG {
+    #load "editor.jai";
+}
+
+state: State;
 
 process_input :: () {
     Input.update(*state.input_state);
@@ -125,7 +123,7 @@ update :: (dt: float) {
 
     if #complete state.camera_controller_kind == {
         case .FLY;
-            fly_camera(*state.camera, dt);
+            fly_camera(*state.camera, dt, get_fly_camera_input());
     }
 }
 
@@ -167,7 +165,7 @@ init :: () {
     assert(error == "", "Failed to initialize Renderer: %", error);
 
     #if DEBUG {
-        init_editor();
+        init_editor(*state);
     }
 }
 
@@ -194,6 +192,26 @@ calculate_delta_time :: () -> float {
     state.last_frame_time = now;
 
     return cast(float, dt);
+}
+
+get_fly_camera_input :: () -> Fly_Camera_Input {
+    key :: (code: Input.Scan_Code) -> float {
+        if state.input_state.keys[code] & .DOWN  return 1;
+        return 0;
+    }
+
+    move: Vector3;
+
+    move.x = key(.D) - key(.A);
+    move.y = key(.E) - key(.Q);
+    move.z = key(.W) - key(.S);
+
+    return {
+        look_delta = state.input_state.cursor.delta,
+        zoom_delta = state.input_state.wheel.delta.y,
+        sprint     = state.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
+        move       = move,
+    };
 }
 
 get_compiled_shader :: (name: string) -> error: string, shader: string {

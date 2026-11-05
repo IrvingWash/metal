@@ -2,16 +2,23 @@ Camera_Controller_Kind :: enum {
     FLY;
 }
 
-fly_camera :: (camera: *Camera, dt: float) {
-    fly_look(camera);
-    fly_move(camera, dt);
+Fly_Camera_Input :: struct {
+    look_delta: Vector2;
+    zoom_delta: float;
+    move:       Vector3; // -1 .. 1
+    sprint:     bool;
+}
+
+fly_camera :: (camera: *Camera, dt: float, input: Fly_Camera_Input) {
+    fly_look(camera, input);
+    fly_move(camera, dt, input);
 }
 
 
 
 #scope_file
 
-fly_look :: (camera: *Camera) {
+fly_look :: (camera: *Camera, input: Fly_Camera_Input) {
     { // Rotate
         MAX_PITCH   :: #run deg_to_rad(89);
         SENSITIVITY :: 0.01;
@@ -20,8 +27,8 @@ fly_look :: (camera: *Camera) {
 
         scale := SENSITIVITY * camera.fov_vertical;
 
-        yaw   += state.input_state.cursor.delta.x * scale;
-        pitch += state.input_state.cursor.delta.y * scale;
+        yaw   += input.look_delta.x * scale;
+        pitch += input.look_delta.y * scale;
         pitch = clamp(pitch, -MAX_PITCH, MAX_PITCH);
 
         camera.front = calculate_direction_from_yaw_and_pitch(yaw, pitch);
@@ -32,39 +39,35 @@ fly_look :: (camera: *Camera) {
         MAX_FOV_VERTICAL :: #run deg_to_rad(120);
         MIN_FOV_VERTICAL :: #run deg_to_rad(1);
 
-        camera.fov_vertical -= deg_to_rad(state.input_state.wheel.delta.y) * ZOOM_STRENGTH;
+        camera.fov_vertical -= deg_to_rad(input.zoom_delta) * ZOOM_STRENGTH;
         camera.fov_vertical = clamp(camera.fov_vertical, MIN_FOV_VERTICAL, MAX_FOV_VERTICAL);
     }
 }
 
-fly_move :: (camera: *Camera, dt: float) {
-    speed := 5.0;
+fly_move :: (camera: *Camera, dt: float, input: Fly_Camera_Input) {
+    SPEED             :: 5.0;
+    SPRINT_MULTIPLIER :: 2.0;
 
     basis := calculate_camera_basis(camera);
 
-    move: Vector3;
-    if state.input_state.keys[Input.Scan_Code.W] & .DOWN
-        move += basis.front;
-    if state.input_state.keys[Input.Scan_Code.S] & .DOWN
-        move -= basis.front;
-    if state.input_state.keys[Input.Scan_Code.A] & .DOWN
-        move -= basis.right;
-    if state.input_state.keys[Input.Scan_Code.D] & .DOWN
-        move += basis.right;
-    if state.input_state.keys[Input.Scan_Code.E] & .DOWN
-        move += basis.up;
-    if state.input_state.keys[Input.Scan_Code.Q] & .DOWN
-        move -= basis.up;
-
-    if state.input_state.keys[Input.Scan_Code.LSHIFT] & .DOWN
-        speed *= 2;
+    move := basis.right * input.move.x
+        + basis.up    * input.move.y
+        + basis.front * input.move.z;
 
     move_length := length(move);
     if move_length == 0 {
         return;
     }
+    if move_length > 1 {
+        move /= move_length;
+    }
 
-    camera.position += move * (speed * dt / move_length);
+    speed := SPEED;
+    if input.sprint {
+        speed *= SPRINT_MULTIPLIER;
+    }
+
+    camera.position += move * speed * dt;
 }
 
 calculate_yaw_and_pitch_from_direction :: (direction: Vector3) -> yaw: float, pitch: float {

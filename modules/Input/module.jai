@@ -31,7 +31,6 @@ Window_Event_Kind :: enum {
 
 Scan_Code :: SDL.Scancode;
 
-// @Todo: enum_flags
 Key_State :: enum_flags {
     DOWN;
     PRESSED;

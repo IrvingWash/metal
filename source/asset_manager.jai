@@ -38,7 +38,11 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
 
 // @Todo: In the future, this will just upload our own binaries.
 // The convertation would be run via a script, like shader compilation
-asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> Renderer.Model {
+asset_manager_upload_model :: (
+    asset_manager: *Asset_Manager,
+    path: string,
+    renderer: *Renderer.Renderer,
+) -> Renderer.Model {
     log("Asset Manager: Uploading model at %", path);
 
     renderer_model: Renderer.Model;
@@ -92,6 +96,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
                 pbr.base_color_texture.some.tex_coord,
             );
             material.base_color_texture_index = get_or_upload_texture(
+                renderer,
                 *texture_cache,
                 *model_dto,
                 pbr.base_color_texture.some,
@@ -105,6 +110,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
                 pbr.metallic_roughness_texture.some.tex_coord,
             );
             material.metallic_roughness_texture_index = get_or_upload_texture(
+                renderer,
                 *texture_cache,
                 *model_dto,
                 pbr.metallic_roughness_texture.some,
@@ -120,6 +126,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
             normal_texture_dto := material_dto.normal_texture.some;
             material.normal_scale = normal_texture_dto.scale;
             material.normal_texture_index = get_or_upload_texture(
+                renderer,
                 *texture_cache,
                 *model_dto,
                 normal_texture_dto.texture,
@@ -135,6 +142,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
             occlusion_texture_dto := material_dto.occlusion_texture.some;
             material.occlusion_strength = occlusion_texture_dto.strength;
             material.occlusion_texture_index = get_or_upload_texture(
+                renderer,
                 *texture_cache,
                 *model_dto,
                 occlusion_texture_dto.texture,
@@ -148,6 +156,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
                 material_dto.emissive_texture.some.tex_coord,
             );
             material.emissive_texture_index = get_or_upload_texture(
+                renderer,
                 *texture_cache,
                 *model_dto,
                 material_dto.emissive_texture.some,
@@ -156,7 +165,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
         }
 
         error=, material_ids := Renderer.upload_materials(
-            *state.renderer,
+            renderer,
             .[material],,
             temp,
         );
@@ -176,7 +185,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
 
         if mesh_dto.indices.count > 0 {
             error, start, count := Renderer.upload_indices(
-                *state.renderer,
+                renderer,
                 mesh_dto.indices,
             );
             assert(!error, error);
@@ -200,7 +209,7 @@ asset_manager_upload_model :: (asset_manager: *Asset_Manager, path: string) -> R
             }
 
             error, start, count := Renderer.upload_vertices(
-                *state.renderer,
+                renderer,
                 converted_vertices,
             );
             assert(!error, error);
@@ -253,7 +262,7 @@ convert_alpha_mode_dto :: (dto_alpha_mode: Alpha_Mode_Dto) -> Renderer.Alpha_Mod
     }
 }
 
-create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> sampler_id: u32 {
+create_sampler_from_texture_dto :: (texture_dto: Texture_Dto, renderer: *Renderer.Renderer) -> sampler_id: u32 {
     params: Renderer.Create_Sampler_Params;
 
     if #complete texture_dto.mag_filter == {
@@ -315,7 +324,7 @@ create_sampler_from_texture_dto :: (texture_dto: Texture_Dto) -> sampler_id: u32
     }
 
     error, sampler_index := Renderer.upload_sampler(
-        *state.renderer,
+        renderer,
         params,
     );
     assert(!error, error);
@@ -336,6 +345,7 @@ Texture_Cache :: struct {
 }
 
 get_or_upload_texture :: (
+    renderer: *Renderer.Renderer,
     cache:        *Texture_Cache,
     model_dto:    *Model_Dto,
     texture_dto:  Texture_Dto,
@@ -353,7 +363,7 @@ get_or_upload_texture :: (
 
         found:, sampler_id = table_find(*cache.sampler_id_by_key, sampler_key);
         if !found {
-            sampler_id = create_sampler_from_texture_dto(texture_dto);
+            sampler_id = create_sampler_from_texture_dto(texture_dto, renderer);
             table_set(*cache.sampler_id_by_key, sampler_key, sampler_id);
         }
     }
@@ -367,7 +377,7 @@ get_or_upload_texture :: (
         if !found {
             image_dto := model_dto.images[texture_dto.image_index];
             error, image_ids := Renderer.upload_texture_images(
-                *state.renderer,
+                renderer,
                 .[{
                     width           = image_dto.width,
                     height          = image_dto.height,
@@ -390,7 +400,7 @@ get_or_upload_texture :: (
         found:, texture_id = table_find(*cache.texture_id_by_key, texture_key);
         if !found {
             error, texture_ids := Renderer.upload_textures(
-                *state.renderer,
+                renderer,
                 .[{ image_index = image_id, sampler_index = sampler_id }],,
                 temp
             );
@@ -410,6 +420,8 @@ get_or_upload_texture :: (
 #import "File";
 #import "Option";
 #import "Hash_Table";
+
+Renderer :: #import "Renderer";
 
 #load "convertation/model_dto.jai";
 #load "convertation/gltf_converter.jai";
