@@ -89,9 +89,8 @@ Image_Params :: struct {
 
 Camera :: struct {
     position: Vector3;
-    target: Vector3;
 
-    up: Vector3;
+    front: Vector3;
 
     z_near: float;
     z_far:  float;
@@ -489,8 +488,8 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
 
     renderer.transforms.view = make_look_at_matrix(
         camera.position,
-        camera.target,
-        camera.up,
+        look_at = camera.position + camera.front,
+        calculate_camera_up(camera.front),
         x_is_forward = false,
     );
     aspect_ratio := cast(float, renderer.color_hdr_target.image_info.extent.width)
@@ -3228,6 +3227,16 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
     left_y := (cast(s32, dst.height) - height) / 2;
 
     return left_x, left_y, left_x + width, left_y + height;
+}
+
+calculate_camera_up :: (front: Vector3) -> Vector3 {
+    WORLD_UP :: Vector3.{ 0, 1, 0 };
+
+    normalized_front := normalize(front);
+    right := normalize(cross(normalized_front, WORLD_UP));
+    up    := cross(right, normalized_front);
+
+    return up;
 }
 
 #import "Basic";

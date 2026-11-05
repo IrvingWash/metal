@@ -52,12 +52,16 @@ init_editor :: () {
     Input.set_raw_event_callback(*state.input_state, process_editor_events);
 }
 
-draw_editor :: () {
+draw_editor :: (draw_editing_stuff: bool) {
     IM.impl_vulkan_new_frame();
     IM.impl_sdl3_new_frame();
     IM.new_frame();
 
-    draw_whole_editor();
+    draw_fps_stat();
+
+    if draw_editing_stuff {
+        draw_whole_editor();
+    }
 
     IM.render();
 }
@@ -77,21 +81,11 @@ deinit_editor :: () {
     editor = {};
 }
 
-toggle_editor :: () {
-    editor.enabled = !editor.enabled;
-}
-
 
 
 #scope_file
 
 draw_whole_editor :: () {
-    draw_fps_stat();
-
-    if !editor.enabled {
-        return;
-    }
-
     IM.show_demo_window();
 
     IM.begin(
@@ -107,25 +101,6 @@ draw_camera_section :: () {
     }
 
     IM.push_item_width(200);
-    { // Mode
-        current := cast(s32, state.camera.mode);
-
-        ITEMS :: #run enum_names(Camera_Mode);
-
-        if IM.combo(
-            "Mode",
-            *current,
-            getter = (user_data: *void, idx: s32) -> *u8 #c_call {
-                items := cast(type_of(ITEMS), user_data);
-
-                return items[idx].data;
-            },
-            user_data = *ITEMS,
-            ITEMS.count,
-        ) {
-            state.camera.mode = cast(Camera_Mode, current);
-        }
-    }
 
     IM.drag_float3(
         "Position",
@@ -135,26 +110,13 @@ draw_camera_section :: () {
         v_max = 0,
     );
 
-    IM.drag_float(
-        "Yaw",
-        *state.camera.yaw,
-        v_speed = 0.1,
-        v_min = 0,
-        v_max = 0,
-    );
-    IM.drag_float(
-        "Pitch",
-        *state.camera.pitch,
-        v_speed = 0.1,
-        v_min = 0,
-        v_max = 0,
-    );
-
     { // FOV
         SPEED :: 1;
         MIN   :: 1;
         MAX   :: 120;
+
         current_fov_in_degrees := rad_to_deg(state.camera.fov_vertical);
+
         if IM.drag_float(
             "FOV vertical",
             *current_fov_in_degrees,
@@ -211,7 +173,6 @@ Editor :: struct {
     io:  *IM.IO;
 
     descriptor_pool: VK.Descriptor_Pool;
-    enabled: bool;
 }
 
 editor: Editor;

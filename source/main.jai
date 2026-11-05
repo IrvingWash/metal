@@ -20,6 +20,7 @@ Renderer      :: #import "Renderer"()(
 
 #load "asset_manager.jai";
 #load "camera.jai";
+#load "camera_controllers.jai";
 
 #if DEBUG {
     #load "editor.jai";
@@ -31,13 +32,17 @@ State :: struct {
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
 
-    camera:        Camera;
+    camera: Camera;
+
+    camera_controller_kind: Camera_Controller_Kind = .FLY;
 
     models: [..]Renderer.Model;
 
+    is_in_editor_mode: bool = false;
+
     should_quit: bool;
 
-    last_frame_time: float;
+    last_frame_time: float64;
 }
 
 state: State;
@@ -106,23 +111,27 @@ process_input :: () {
 
     #if DEBUG {
         if state.input_state.keys[Input.Scan_Code.F1] & .PRESSED {
-            current := Windowing.get_window_relative_cursor_mode(state.window);
-            Windowing.set_window_relative_cursor_mode(state.window, !current);
+            state.is_in_editor_mode = !state.is_in_editor_mode;
 
-            state.camera.controlled = !state.camera.controlled;
-
-            toggle_editor();
+            Windowing.set_window_relative_cursor_mode(state.window, !state.is_in_editor_mode);
         }
     }
 }
 
 update :: (dt: float) {
-    update_camera(*state.camera, dt);
+    if state.is_in_editor_mode {
+        return;
+    }
+
+    if #complete state.camera_controller_kind == {
+        case .FLY;
+            fly_camera(*state.camera, dt);
+    }
 }
 
 render :: () {
     #if DEBUG {
-        draw_editor();
+        draw_editor(state.is_in_editor_mode);
     }
 
     error := Renderer.start_drawing(*state.renderer, state.camera);
@@ -178,13 +187,13 @@ deinit :: () {
 }
 
 calculate_delta_time :: () -> float {
-    now := cast(float, seconds_since_init());
+    now := seconds_since_init();
 
     dt  := now - state.last_frame_time;
 
     state.last_frame_time = now;
 
-    return dt;
+    return cast(float, dt);
 }
 
 get_compiled_shader :: (name: string) -> error: string, shader: string {
