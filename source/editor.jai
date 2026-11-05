@@ -48,9 +48,7 @@ draw_editor :: () {
     IM.ImplSDL3_NewFrame();
     IM.NewFrame();
 
-    if editor.enabled {
-        IM.ShowDemoWindow();
-    }
+    draw_whole_editor();
 
     IM.Render();
 }
@@ -77,6 +75,33 @@ toggle_editor :: () {
 
 
 #scope_file
+
+draw_whole_editor :: () {
+    draw_fps_stat();
+
+    if editor.enabled {
+        return;
+    }
+}
+
+draw_fps_stat :: () {
+    WIDTH :: 80;
+
+    viewport := IM.GetMainViewport();
+
+    IM.SetNextWindowBgAlpha(0.5);
+    IM.SetNextWindowPos({ viewport.WorkPos.x + viewport.WorkSize.x - WIDTH, 0 });
+    IM.SetNextWindowSize({ WIDTH, 0 });
+
+    IM.Begin(
+        "FPS",
+        flags = .NoTitleBar | .NoResize | .NoCollapse | .NoDecoration | .NoNavFocus,
+    );
+
+    IM.Text(tprint("FPS: %", cast(int, editor.io.Framerate)));
+
+    IM.End();
+}
 
 process_editor_events :: (event: *Input.Raw_Event_Type) {
     IM.ImplSDL3_ProcessEvent(cast(*void, event));
