@@ -10,13 +10,23 @@ Game :: struct {
 
     camera_controller_kind: Camera_Controller_Kind = .FLY;
 
-    models: [..]Renderer.Model;
+    entities: [..]Entity;
 
     is_in_editor_mode: bool = false;
 
     should_quit: bool;
 
     last_frame_time: float64;
+}
+
+Entity :: struct {
+    name: string;
+
+    position: Vector3;
+    rotation: Quaternion;
+    scale:    Vector3 = { 1, 1, 1 };
+
+    model: Renderer.Model;
 }
 
 main :: () {
@@ -40,21 +50,21 @@ main :: () {
     );
     game.renderer.normalized_clear_color = { 142.0 / 255.0, 204.0 / 255.0, 254.0 / 255.0, 1 };
 
-    add_model :: (path: string, translation: Vector3 = {}, scale: Vector3 = {1, 1, 1}) {
-        model := asset_manager_upload_model(*game.asset_manager, path, *game.renderer);
-
-        transform := make_translation_matrix4(translation) * make_scale_matrix4(scale);
-
-        model.transform = transform;
-        array_add(*game.models, model);
-    }
-
-    add_model("../../Models/damaged_helmet/scene.glb", translation = { -1, -4.5 ,0 });
-    add_model("../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf", translation = {1, -4.5, 0 });
-    // add_model("assets/models/snowy_mountain/snowy_mountain.glb", scale = { 100, 100, 100 });
-    add_model("../../Models/death_valley.glb", scale = { 100, 100, 100 });
-    // add_model("../../Models/AlphaBlendModeTest/glTF-Binary/AlphaBlendModeTest.glb");
-    // add_model("../../Models/Sponza/Sponza.gltf");
+    add_entity(
+        name       = "Damaged Helmet",
+        model_path = "../../Models/damaged_helmet/scene.glb",
+        position   = { -1, -4.5 ,0 },
+    );
+    add_entity(
+        name       = "SciFiHelmet",
+        model_path = "../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf",
+        position   = {1, -4.5, 0 },
+    );
+    add_entity(
+        name       = "Mountains",
+        model_path = "../../Models/death_valley.glb",
+        scale      = { 100, 100, 100 },
+    );
 
     while !game.should_quit {
         dt := calculate_delta_time();
@@ -134,8 +144,8 @@ render :: () {
 
     error := Renderer.start_drawing(*game.renderer, game.camera);
     assert(!error, error);
-    for model: game.models {
-        Renderer.draw_model(*game.renderer, model);
+    for entity: game.entities {
+        Renderer.draw_model(*game.renderer, entity.model, make_world_transform(entity));
     }
     error = Renderer.finish_drawing(*game.renderer);
     assert(!error, error);
@@ -184,6 +194,27 @@ deinit :: () {
     Windowing.deinit();
 }
 
+add_entity :: (
+    name: string,
+    position: Vector3 = {},
+    rotation: Quaternion = {},
+    scale:    Vector3 = { 1, 1, 1 },
+    model_path: string,
+) {
+    model := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
+
+    entity: Entity = {
+        name = name,
+        position = position,
+        rotation = rotation,
+        scale = scale,
+        model = model,
+    };
+
+    array_add(*game.entities, entity);
+}
+
+
 calculate_delta_time :: () -> float {
     now := seconds_since_init();
 
@@ -216,6 +247,14 @@ get_fly_camera_input :: () -> Fly_Camera_Input {
         sprint         = game.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
         move_direction = move_direction,
     };
+}
+
+make_world_transform :: (entity: Entity) -> Matrix4 {
+    translation := make_translation_matrix4(entity.position);
+    scale       := make_scale_matrix4(entity.scale);
+    rotation    := rotation_matrix(Matrix4, entity.rotation);
+
+    return translation * rotation * scale;
 }
 
 get_compiled_shader :: (name: string) -> error: string, shader: string {

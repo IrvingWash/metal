@@ -506,11 +506,12 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     return "";
 }
 
-draw_model :: (renderer: *Renderer, model: Model) {
+draw_model :: (renderer: *Renderer, model: Model, world_transform: Matrix4) {
     add_model_to_model_pass(
         *renderer.model_pass,
         model,
         renderer.materials_info,
+        world_transform,
     );
 }
 

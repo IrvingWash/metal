@@ -138,9 +138,10 @@ reset_model_pass :: (model_pass: *Model_Pass) {
 }
 
 add_model_to_model_pass :: (
-    model_pass:     *Model_Pass,
-    model:          Model,
-    materials_info: Materials_Info,
+    model_pass:      *Model_Pass,
+    model:           Model,
+    materials_info:  Materials_Info,
+    world_transform: Matrix4,
 ) {
     for node: model.nodes {
         if node.parent_index.kind != .NONE {
@@ -152,7 +153,7 @@ add_model_to_model_pass :: (
             *model_pass.draw_buckets,
             node,
             model.nodes,
-            model.transform,
+            world_transform,
         );
     }
 }
