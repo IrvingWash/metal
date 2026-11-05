@@ -3,10 +3,19 @@ Camera_Controller_Kind :: enum {
 }
 
 Fly_Camera_Input :: struct {
-    look_delta: Vector2;
-    zoom_delta: float;
-    move:       Vector3; // -1 .. 1
-    sprint:     bool;
+    look_delta:     Vector2;
+    zoom_delta:     float;
+    move_direction: Move_Direction;
+    sprint:         bool;
+}
+
+Move_Direction :: enum_flags {
+    UP;
+    DOWN;
+    LEFT;
+    RIGHT;
+    FORWARD;
+    BACKWARD;
 }
 
 fly_camera :: (camera: *Camera, dt: float, input: Fly_Camera_Input) {
@@ -50,16 +59,17 @@ fly_move :: (camera: *Camera, dt: float, input: Fly_Camera_Input) {
 
     basis := calculate_camera_basis(camera);
 
-    move := basis.right * input.move.x
-        + basis.up    * input.move.y
-        + basis.front * input.move.z;
+    direction: Vector3;
+    if input.move_direction & .FORWARD direction += basis.front;
+    if input.move_direction & .BACKWARD direction -= basis.front;
+    if input.move_direction & .UP direction += basis.up;
+    if input.move_direction & .DOWN direction -= basis.up;
+    if input.move_direction & .LEFT direction -= basis.right;
+    if input.move_direction & .RIGHT direction += basis.right;
 
-    move_length := length(move);
-    if move_length == 0 {
+    direction_length := length(direction);
+    if direction_length == 0 {
         return;
-    }
-    if move_length > 1 {
-        move /= move_length;
     }
 
     speed := SPEED;
@@ -67,7 +77,7 @@ fly_move :: (camera: *Camera, dt: float, input: Fly_Camera_Input) {
         speed *= SPRINT_MULTIPLIER;
     }
 
-    camera.position += move * speed * dt;
+    camera.position += direction * (speed * dt / direction_length);
 }
 
 calculate_yaw_and_pitch_from_direction :: (direction: Vector3) -> yaw: float, pitch: float {

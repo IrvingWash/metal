@@ -195,22 +195,26 @@ calculate_delta_time :: () -> float {
 }
 
 get_fly_camera_input :: () -> Fly_Camera_Input {
-    key :: (code: Input.Scan_Code) -> float {
-        if state.input_state.keys[code] & .DOWN  return 1;
-        return 0;
-    }
+    move_direction: Move_Direction;
 
-    move: Vector3;
-
-    move.x = key(.D) - key(.A);
-    move.y = key(.E) - key(.Q);
-    move.z = key(.W) - key(.S);
+    if state.input_state.keys[Input.Scan_Code.W] & .DOWN
+        move_direction |= .FORWARD;
+    if state.input_state.keys[Input.Scan_Code.S] & .DOWN
+        move_direction |= .BACKWARD;
+    if state.input_state.keys[Input.Scan_Code.A] & .DOWN
+        move_direction |= .LEFT;
+    if state.input_state.keys[Input.Scan_Code.D] & .DOWN
+        move_direction |= .RIGHT;
+    if state.input_state.keys[Input.Scan_Code.E] & .DOWN
+        move_direction |= .DOWN;
+    if state.input_state.keys[Input.Scan_Code.Q] & .DOWN
+        move_direction |= .UP;
 
     return {
-        look_delta = state.input_state.cursor.delta,
-        zoom_delta = state.input_state.wheel.delta.y,
-        sprint     = state.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
-        move       = move,
+        look_delta     = state.input_state.cursor.delta,
+        zoom_delta     = state.input_state.wheel.delta.y,
+        sprint         = state.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
+        move_direction = move_direction,
     };
 }
 
