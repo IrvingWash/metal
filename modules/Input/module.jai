@@ -5,7 +5,13 @@ Input_State :: struct {
     keys:                     [SCAN_CODE_COUNT]Key_State;
     cursor:                   Cursor_State;
     wheel:                    Wheel_State;
+
+    raw_event_callback: Raw_Event_Callback;
 }
+
+Raw_Event_Callback :: #type (event: *Raw_Event_Type);
+
+Raw_Event_Type :: #type SDL.Event;
 
 Window_Event :: union kind: Window_Event_Kind {
     .NONE,, none: void;
@@ -59,6 +65,10 @@ deinit :: (input_state: *Input_State) {
     input_state.* = {};
 }
 
+set_raw_event_callback :: (input_state: *Input_State, proc: Raw_Event_Callback) {
+    input_state.raw_event_callback = proc;
+}
+
 update :: (input_state: *Input_State) {
     array_reset_keeping_memory(*input_state.window_events_this_frame);
 
@@ -72,6 +82,10 @@ update :: (input_state: *Input_State) {
 
     sdl_event: SDL.Event;
     while SDL.poll_event(*sdl_event) {
+        if input_state.raw_event_callback {
+            input_state.raw_event_callback(*sdl_event);
+        }
+
         if sdl_event.type == {
             case .QUIT;
                 event: Window_Event;

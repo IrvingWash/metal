@@ -18,6 +18,8 @@ Camera :: struct {
     fov_vertical: float = #run deg_to_rad(60);
 
     exposure: float = 1;
+
+    controlled: bool = true;
 }
 
 Camera_Mode :: enum {
@@ -25,6 +27,10 @@ Camera_Mode :: enum {
 }
 
 update_camera :: (camera: *Camera, dt: float) {
+    if !camera.controlled {
+        return;
+    }
+
     if #complete camera.mode == {
         case .FLY;
             fly(camera, dt);

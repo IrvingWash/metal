@@ -38,19 +38,28 @@ init_editor :: () {
     );
 
     IM.ImplVulkan_Init(*vulkan_init_info);
+
+    Renderer.set_overlay_callback(*state.renderer, draw_overlay, null);
+    Input.set_raw_event_callback(*state.input_state, process_editor_events);
 }
 
 draw_editor :: () {
     IM.ImplVulkan_NewFrame();
     IM.ImplSDL3_NewFrame();
     IM.NewFrame();
-    IM.ShowDemoWindow();
+
+    if editor.enabled {
+        IM.ShowDemoWindow();
+    }
 
     IM.Render();
 }
 
 deinit_editor :: () {
     VK.device_wait_idle(state.renderer.device);
+
+    Input.set_raw_event_callback(*state.input_state, process_editor_events);
+    Renderer.set_overlay_callback(*state.renderer, null, null);
 
     IM.ImplVulkan_Shutdown();
     VK.destroy_descriptor_pool(state.renderer.device, editor.descriptor_pool);
@@ -61,18 +70,36 @@ deinit_editor :: () {
     editor = {};
 }
 
+toggle_editor :: () {
+    editor.enabled = !editor.enabled;
+}
+
 
 
 #scope_file
+
+process_editor_events :: (event: *Input.Raw_Event_Type) {
+    IM.ImplSDL3_ProcessEvent(cast(*void, event));
+}
+
+draw_overlay : Renderer.Overlay_Callback : (command_buffer: VK.Command_Buffer, user_data: *void) {
+    draw_data := IM.GetDrawData();
+
+    if draw_data {
+        IM.ImplVulkan_RenderDrawData(draw_data, cast(*void, command_buffer));
+    }
+}
 
 Editor :: struct {
     ctx: *IM.ImGuiContext;
     io:  *IM.IO;
 
     descriptor_pool: VK.Descriptor_Pool;
+    enabled: bool;
 }
 
 editor: Editor;
 
-IM :: #import "Dear_ImGui";
-VK :: #import "Jai_Vulkan";
+IM  :: #import "Dear_ImGui";
+VK  :: #import "Jai_Vulkan";
+SDL :: #import "SDL3";

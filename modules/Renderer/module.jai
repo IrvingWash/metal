@@ -41,6 +41,8 @@ Renderer :: struct {
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
 
+    overlay_callback_info: Overlay_Callback_Info;
+
     transforms: Transforms;
 
     #if DEBUG {
@@ -64,7 +66,14 @@ Create_Window_Surface :: #type (
 
 Get_Compiled_Shader :: #type (name: string) -> error: string, content: string;
 
+Overlay_Callback :: #type (command_buffer: VK.Command_Buffer, user_data: *void);
+
 Create_Sampler_Params :: VK.Sampler_Create_Info;
+
+Overlay_Callback_Info :: struct {
+    proc:      Overlay_Callback;
+    user_data: *void;
+}
 
 Image_Params :: struct {
     width:           u32;
@@ -841,28 +850,94 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_blit_image_2(frame_resources.command_buffer, *blit_info);
     }
 
-    { // Swapchain image to presentable
-        barrier := VK.Image_Memory_Barrier_2.{
-            src_stage_mask    = .BLIT,
-            src_access_mask   = .TRANSFER_WRITE,
-            dst_stage_mask    = .NONE,
-            dst_access_mask   = 0,
-            old_layout        = .TRANSFER_DST_OPTIMAL,
-            new_layout        = .PRESENT_SRC_KHR,
-            image             = renderer.swapchain_info.images[swapchain_image_index],
-            subresource_range = {
-                aspect_mask = .COLOR,
-                level_count = 1,
-                layer_count = 1,
-            },
-        };
+    if !renderer.overlay_callback_info.proc {
+        { // Swapchain image to presentable
+            barrier := VK.Image_Memory_Barrier_2.{
+                src_stage_mask    = .BLIT,
+                src_access_mask   = .TRANSFER_WRITE,
+                dst_stage_mask    = .NONE,
+                dst_access_mask   = 0,
+                old_layout        = .TRANSFER_DST_OPTIMAL,
+                new_layout        = .PRESENT_SRC_KHR,
+                image             = renderer.swapchain_info.images[swapchain_image_index],
+                subresource_range = {
+                    aspect_mask = .COLOR,
+                    level_count = 1,
+                    layer_count = 1,
+                },
+            };
 
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers = *barrier,
-        };
+            dependency_info := VK.Dependency_Info.{
+                image_memory_barrier_count = 1,
+                p_image_memory_barriers = *barrier,
+            };
 
-        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
+            VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
+        }
+    } else {
+        { // To color attachment for the callback
+            barrier := VK.Image_Memory_Barrier_2.{
+                src_stage_mask    = .BLIT,
+                src_access_mask   = .TRANSFER_WRITE,
+                dst_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
+                dst_access_mask   = .COLOR_ATTACHMENT_READ | .COLOR_ATTACHMENT_WRITE,
+                old_layout        = .TRANSFER_DST_OPTIMAL,
+                new_layout        = .COLOR_ATTACHMENT_OPTIMAL,
+                image             = renderer.swapchain_info.images[swapchain_image_index],
+                subresource_range = {
+                    aspect_mask = .COLOR,
+                    level_count = 1,
+                    layer_count = 1,
+                },
+            };
+            dependency_info := VK.Dependency_Info.{
+                image_memory_barrier_count = 1,
+                p_image_memory_barriers = *barrier,
+            };
+            VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
+        }
+
+        { // Call overlay proc
+            attachment := VK.Rendering_Attachment_Info.{
+                image_view   = renderer.swapchain_info.image_views[swapchain_image_index],
+                image_layout = .COLOR_ATTACHMENT_OPTIMAL,
+                load_op      = .LOAD,
+                store_op     = .STORE,
+            };
+            rendering_info := VK.Rendering_Info.{
+                render_area            = {
+                    extent = renderer.swapchain_info.config.image_extent,
+                },
+                layer_count            = 1,
+                color_attachment_count = 1,
+                p_color_attachments    = *attachment,
+            };
+            VK.cmd_begin_rendering(frame_resources.command_buffer, *rendering_info);
+            renderer.overlay_callback_info.proc(
+                frame_resources.command_buffer,
+                renderer.overlay_callback_info.user_data,
+            );
+            VK.cmd_end_rendering(frame_resources.command_buffer);
+        }
+
+        { // Swapchain image to presentable
+            barrier := VK.Image_Memory_Barrier_2.{
+                src_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
+                src_access_mask   = .COLOR_ATTACHMENT_WRITE,
+                dst_stage_mask    = .NONE,
+                dst_access_mask   = 0,
+                old_layout        = .COLOR_ATTACHMENT_OPTIMAL,
+                new_layout        = .PRESENT_SRC_KHR,
+                image             = renderer.swapchain_info.images[swapchain_image_index],
+                subresource_range = {
+                    aspect_mask = .COLOR,
+                    level_count = 1,
+                    layer_count = 1,
+                },
+            };
+            dependency_info := VK.Dependency_Info.{ image_memory_barrier_count = 1, p_image_memory_barriers = *barrier };
+            VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
+        }
     }
 
     result := VK.end_command_buffer(frame_resources.command_buffer);
@@ -1157,6 +1232,11 @@ upload_sampler :: (renderer: *Renderer, params: Create_Sampler_Params) -> error:
     );
 
     return "", cast(u32, renderer.materials_info.samplers.count - 1);
+}
+
+set_overlay_callback :: (renderer: *Renderer, proc: Overlay_Callback, user_data: *void) {
+    renderer.overlay_callback_info.proc      = proc;
+    renderer.overlay_callback_info.user_data = user_data;
 }
 
 

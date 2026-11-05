@@ -108,6 +108,10 @@ process_input :: () {
         if state.input_state.keys[Input.Scan_Code.F1] & .PRESSED {
             current := Windowing.get_window_relative_cursor_mode(state.window);
             Windowing.set_window_relative_cursor_mode(state.window, !current);
+
+            state.camera.controlled = !state.camera.controlled;
+
+            toggle_editor();
         }
     }
 }
@@ -117,6 +121,10 @@ update :: (dt: float) {
 }
 
 render :: () {
+    #if DEBUG {
+        draw_editor();
+    }
+
     error := Renderer.start_drawing(*state.renderer, state.camera);
     assert(!error, error);
     for model: state.models {
