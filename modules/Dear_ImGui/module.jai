@@ -634,6 +634,16 @@ drag_float3 :: (
     flags: Slider_Flags = .NONE,
 ) -> bool #foreign libimgui "_ZN5ImGui10DragFloat3EPKcPffffS1_i";
 
+drag_float4 :: (
+    label: *u8,
+    v: *[4] float,
+    v_speed: float = 1.0,
+    v_min: float = 0.0,
+    v_max: float = 0.0,
+    format: *u8 = "%.3f",
+    flags: Slider_Flags = .NONE,
+) -> bool #foreign libimgui "_ZN5ImGui10DragFloat4EPKcPffffS1_i";
+
 combo :: (
     label: *u8,
     current_item: *s32,

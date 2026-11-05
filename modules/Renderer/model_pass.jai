@@ -347,7 +347,9 @@ add_model_node_to_draw_bucket :: (
 
     if node.meshes.count > 0 {
         inversed_ok, inversed_world_matrix := inverse(world_transform);
-        assert(inversed_ok, "Got a false on inverse, interesting");
+        if !inversed_ok {
+            return;
+        }
         inverse_transpose_world_transform := transpose(inversed_world_matrix);
 
         for mesh: node.meshes {

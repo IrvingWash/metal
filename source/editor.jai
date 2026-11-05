@@ -94,11 +94,73 @@ draw_whole_editor :: () {
         "Editor",
     );
     draw_camera_section();
+    draw_entity_section();
     IM.end();
 }
 
+draw_entity_section :: () {
+    if !IM.collapsing_header("Entities") {
+        return;
+    }
+
+    IM.combo(
+        "Entity",
+        current_item = *editor.selected_entity_id,
+        getter = (user_data: *void, idx: s32) -> *u8 #c_call {
+            entities := cast(*[..]Entity, user_data);
+
+            push_context {
+                return temp_c_string(entities.*[idx].name);
+            }
+        },
+        user_data = *editor.game.entities,
+        items_count = xx editor.game.entities.count,
+    );
+
+    selected_entity := *editor.game.entities[editor.selected_entity_id];
+
+    IM.drag_float3(
+        "Position",
+        *selected_entity.position.component,
+        v_speed = 0.1,
+        v_min = 0,
+        v_max = 0,
+    );
+
+    IM.drag_float3(
+        "Scale",
+        *selected_entity.scale.component,
+        v_speed = 0.1,
+        v_min = 0,
+        v_max = 0,
+    );
+
+    euler := quaternion_to_euler(selected_entity.rotation);
+    euler_degrees: Vector3 = {
+        x = rad_to_deg(euler.x),
+        y = rad_to_deg(euler.y),
+        z = rad_to_deg(euler.z),
+    };
+
+    if IM.drag_float3(
+        "Rotation",
+        *euler_degrees.component,
+        v_speed = 0.5,
+        v_min = 0,
+        v_max = 0,
+    ) {
+        euler_radians := Vector3.{
+            x = deg_to_rad(euler_degrees.x),
+            y = deg_to_rad(euler_degrees.y),
+            z = deg_to_rad(euler_degrees.z),
+        };
+
+        selected_entity.rotation = euler_to_quaternion(euler_radians);
+    }
+}
+
 draw_camera_section :: () {
-    if !IM.collapsing_header("Camera", flags = .DEFAULT_OPEN) {
+    if !IM.collapsing_header("Camera") {
         return;
     }
 
@@ -195,6 +257,8 @@ Editor :: struct {
     ctx: *IM.Context;
     io:  *IM.IO;
 
+    selected_entity_id: s32;
+
     descriptor_pool: VK.Descriptor_Pool;
 }
 
@@ -202,5 +266,6 @@ editor: Editor;
 
 IM    :: #import "Dear_ImGui";
 VK    :: #import "Jai_Vulkan";
-Input :: #import "Input";
-Renderer      :: #import "Renderer";
+
+Input    :: #import "Input";
+Renderer :: #import "Renderer";
