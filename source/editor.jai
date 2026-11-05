@@ -105,8 +105,7 @@ draw_fps_stat :: () {
         flags = .NO_TITLE_BAR | .NO_RESIZE | .NO_COLLAPSE | .NO_DECORATION | .NO_NAV_FOCUS,
     );
 
-    // IM.text(tprint("FPS: %", cast(int, editor.io.framerate)));
-    IM.show_demo_window();
+    IM.text(tprint("FPS: %", cast(int, editor.io.framerate)));
 
     IM.end();
 }
