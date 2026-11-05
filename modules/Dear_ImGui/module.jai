@@ -623,7 +623,6 @@ drag_float :: (
     flags: Slider_Flags = .NONE,
 ) -> bool #foreign libimgui "_ZN5ImGui9DragFloatEPKcPffffS1_i";
 
-
 drag_float3 :: (
     label: *u8,
     v: *[3] float,
@@ -651,12 +650,14 @@ combo :: (
     items_count: s32,
     popup_max_height_in_items: s32 = -1,
 ) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiPKS1_ii";
+
 combo :: (
     label: *u8,
     current_item: *s32,
     items_separated_by_zeros: *u8,
     popup_max_height_in_items: s32 = -1,
 ) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiS1_i";
+
 combo :: (
     label: *u8,
     current_item: *s32,
@@ -666,6 +667,19 @@ combo :: (
     popup_max_height_in_items: s32 = -1,
 ) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiPFS1_PviES3_ii";
 
+separator_text :: (label: *u8) -> void #foreign libimgui "_ZN5ImGui13SeparatorTextEPKc";
+
+color_edit3 :: (
+    label: *u8,
+    col: *[3] float,
+    flags: Color_Edit_Flags = .NONE,
+) -> bool #foreign libimgui "_ZN5ImGui10ColorEdit3EPKcPfi";
+
+color_picker3 :: (
+    label: *u8,
+    col: *[3] float,
+    flags: Color_Edit_Flags = .NONE,
+) -> bool #foreign libimgui "_ZN5ImGui12ColorPicker3EPKcPfi";
 
 same_line :: (
     offset_from_start_x: float = 0.0,

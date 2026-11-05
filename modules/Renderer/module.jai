@@ -1022,6 +1022,10 @@ set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
     renderer.color_hdr_target.requested_extent = { width, height };
 }
 
+get_directional_light :: (renderer: Renderer) -> Directional_Light {
+    return renderer.scene_info.scene_data.directional_light;
+}
+
 set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
     renderer.scene_info.scene_data.directional_light = light;
 }

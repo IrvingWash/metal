@@ -94,14 +94,48 @@ deinit_editor :: () {
 #scope_file
 
 draw_whole_editor :: () {
-    IM.show_demo_window();
-
     IM.begin(
         "Editor",
     );
+    IM.show_demo_window();
     draw_camera_section();
     draw_entity_section();
+    draw_renderer_section();
     IM.end();
+}
+
+draw_renderer_section :: () {
+    if !IM.collapsing_header("Renderer") {
+        return;
+    }
+
+    IM.separator_text("Directional light##Renderer");
+    {
+        directional_light := Renderer.get_directional_light(editor.game.renderer);
+
+        IM.push_item_width(200);
+        is_changed := IM.color_picker3(
+            "Color##DirectionalLight",
+            *directional_light.color.component,
+        );
+        is_changed |= IM.drag_float(
+            "Intensity##DirectionalLight",
+            *directional_light.intensity,
+            v_speed = 0.1,
+        );
+        is_changed |= IM.drag_float3(
+            "Direction##DirectionalLight",
+            *directional_light.direction.component,
+            v_speed = 0.1,
+        );
+
+        if is_changed {
+            Renderer.set_directional_light(
+                *editor.game.renderer,
+                directional_light,
+            );
+        }
+    }
 }
 
 draw_entity_section :: () {
@@ -126,7 +160,7 @@ draw_entity_section :: () {
     selected_entity := *editor.game.entities[editor.selected_entity_id];
 
     IM.drag_float3(
-        "Position",
+        "Position##Entity",
         *selected_entity.position.component,
         v_speed = 0.1,
         v_min = 0,
@@ -134,7 +168,7 @@ draw_entity_section :: () {
     );
 
     IM.drag_float3(
-        "Scale",
+        "Scale##Entity",
         *selected_entity.scale.component,
         v_speed = 0.1,
         v_min = 0,
@@ -149,7 +183,7 @@ draw_entity_section :: () {
     };
 
     if IM.drag_float3(
-        "Rotation",
+        "Rotation##Entity",
         *euler_degrees.component,
         v_speed = 0.5,
         v_min = 0,
@@ -173,7 +207,7 @@ draw_camera_section :: () {
     IM.push_item_width(200);
 
     IM.drag_float3(
-        "Position",
+        "Position##Camera",
         *editor.game.camera.position.component,
         v_speed = 0.1,
         v_min = 0,
@@ -207,7 +241,7 @@ draw_camera_section :: () {
         current_fov_in_degrees := rad_to_deg(editor.game.camera.fov_vertical);
 
         if IM.drag_float(
-            "FOV vertical",
+            "FOV vertical##Camera",
             *current_fov_in_degrees,
             v_speed = SPEED,
             v_min = MIN,
@@ -218,7 +252,7 @@ draw_camera_section :: () {
     }
 
     IM.drag_float(
-        "Exposure",
+        "Exposure##Camera",
         *editor.game.camera.exposure,
         v_speed = 0.1,
         v_min = 0,
