@@ -12,7 +12,9 @@ Game :: struct {
 
     entities: [..]Entity;
 
-    is_in_editor_mode: bool = false;
+    #if DEBUG {
+        is_in_editor_mode: bool = false;
+    }
 
     should_quit: bool;
 
@@ -152,9 +154,11 @@ process_input :: () {
 }
 
 update :: (dt: float) {
-    if game.is_in_editor_mode {
-        update_editor(dt);
-        return;
+    #if DEBUG {
+        if game.is_in_editor_mode {
+            update_editor(dt);
+            return;
+        }
     }
 
     if #complete game.camera_controller_kind == {
