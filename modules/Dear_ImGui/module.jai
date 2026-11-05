@@ -681,6 +681,13 @@ color_picker3 :: (
     flags: Color_Edit_Flags = .NONE,
 ) -> bool #foreign libimgui "_ZN5ImGui12ColorPicker3EPKcPfi";
 
+color_picker4 :: (
+    label: *u8,
+    col: *[4] float,
+    flags: Color_Edit_Flags = .NONE,
+    ref_col: *float = null,
+) -> bool #foreign libimgui "_ZN5ImGui12ColorPicker4EPKcPfiPKf";
+
 same_line :: (
     offset_from_start_x: float = 0.0,
     spacing: float = -1.0,

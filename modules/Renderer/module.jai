@@ -1026,8 +1026,24 @@ get_directional_light :: (renderer: Renderer) -> Directional_Light {
     return renderer.scene_info.scene_data.directional_light;
 }
 
+get_clear_color :: (renderer: Renderer) -> Vector4 {
+    return renderer.normalized_clear_color;
+}
+
+set_clear_color :: (renderer: *Renderer, color: Vector4) {
+    renderer.normalized_clear_color = color;
+}
+
 set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
     renderer.scene_info.scene_data.directional_light = light;
+}
+
+get_ambient_color :: (renderer: Renderer) -> Vector3 {
+    return renderer.scene_info.scene_data.ambient_color;
+}
+
+set_ambient_color :: (renderer: *Renderer, color: Vector3) {
+    renderer.scene_info.scene_data.ambient_color = color;
 }
 
 upload_textures :: (renderer: *Renderer, textures: []Texture) -> error: string, texture_ids: [..]u32 {

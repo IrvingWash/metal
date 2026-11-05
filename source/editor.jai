@@ -136,6 +136,29 @@ draw_renderer_section :: () {
             );
         }
     }
+
+    { // Ambient
+        ambient := Renderer.get_ambient_color(editor.game.renderer);
+
+        IM.push_item_width(200);
+        if IM.color_picker3(
+            "Ambient color##Renderer",
+            *ambient.component,
+        ) {
+            Renderer.set_ambient_color(*editor.game.renderer, ambient);
+        }
+    }
+
+    { // Clear color
+        color := Renderer.get_clear_color(editor.game.renderer);
+        IM.push_item_width(200);
+        if IM.color_picker4(
+            "Clear color##Renderer",
+            *color.component,
+        ) {
+            Renderer.set_clear_color(*editor.game.renderer, color);
+        }
+    }
 }
 
 draw_entity_section :: () {
