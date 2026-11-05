@@ -54,6 +54,12 @@ init_editor :: (game: *Game) {
     Input.set_raw_event_callback(*game.input_state, process_editor_events);
 }
 
+update_editor :: (dt: float) {
+    if editor.game.input_state.mouse.right_button & .DOWN {
+        fly_camera(*editor.game.camera, dt, get_fly_camera_input());
+    }
+}
+
 draw_editor :: (draw_editing_stuff: bool) {
     IM.impl_vulkan_new_frame();
     IM.impl_sdl3_new_frame();

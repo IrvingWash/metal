@@ -42,6 +42,14 @@ Mouse_Button_Flags :: enum_flags u32 {
     Y      :: 1 << 4;
 }
 
+Mouse_Button_Index :: enum u8 {
+    LEFT   :: 1;
+    MIDDLE :: 2;
+    RIGHT  :: 3;
+    X1     :: 4;
+    X2     :: 5;
+}
+
 Pen_Axis :: enum u32 {
     PRESSURE            :: 0;
     XTILT               :: 1;
@@ -861,7 +869,7 @@ Mouse_Button_Event :: struct {
     timestamp: u64;
     windowID:  Window_Id;
     which:     Mouse_Id;
-    button:    u8;
+    button:    Mouse_Button_Index;
     down:      bool;
     clicks:    u8;
     padding:   u8;

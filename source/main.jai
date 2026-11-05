@@ -79,6 +79,31 @@ main :: () {
     }
 }
 
+get_fly_camera_input :: () -> Fly_Camera_Input {
+    move_direction: Move_Direction;
+
+    if game.input_state.keys[Input.Scan_Code.W] & .DOWN
+        move_direction |= .FORWARD;
+    if game.input_state.keys[Input.Scan_Code.S] & .DOWN
+        move_direction |= .BACKWARD;
+    if game.input_state.keys[Input.Scan_Code.A] & .DOWN
+        move_direction |= .LEFT;
+    if game.input_state.keys[Input.Scan_Code.D] & .DOWN
+        move_direction |= .RIGHT;
+    if game.input_state.keys[Input.Scan_Code.E] & .DOWN
+        move_direction |= .UP;
+    if game.input_state.keys[Input.Scan_Code.Q] & .DOWN
+        move_direction |= .DOWN;
+
+    return {
+        look_delta     = game.input_state.mouse.delta,
+        zoom_delta     = game.input_state.wheel.delta.y,
+        sprint         = game.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
+        move_direction = move_direction,
+    };
+}
+
+
 #scope_file
 
 #import "Basic"()(
@@ -128,6 +153,7 @@ process_input :: () {
 
 update :: (dt: float) {
     if game.is_in_editor_mode {
+        update_editor(dt);
         return;
     }
 
@@ -223,30 +249,6 @@ calculate_delta_time :: () -> float {
     game.last_frame_time = now;
 
     return cast(float, dt);
-}
-
-get_fly_camera_input :: () -> Fly_Camera_Input {
-    move_direction: Move_Direction;
-
-    if game.input_state.keys[Input.Scan_Code.W] & .DOWN
-        move_direction |= .FORWARD;
-    if game.input_state.keys[Input.Scan_Code.S] & .DOWN
-        move_direction |= .BACKWARD;
-    if game.input_state.keys[Input.Scan_Code.A] & .DOWN
-        move_direction |= .LEFT;
-    if game.input_state.keys[Input.Scan_Code.D] & .DOWN
-        move_direction |= .RIGHT;
-    if game.input_state.keys[Input.Scan_Code.E] & .DOWN
-        move_direction |= .UP;
-    if game.input_state.keys[Input.Scan_Code.Q] & .DOWN
-        move_direction |= .DOWN;
-
-    return {
-        look_delta     = game.input_state.cursor.delta,
-        zoom_delta     = game.input_state.wheel.delta.y,
-        sprint         = game.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
-        move_direction = move_direction,
-    };
 }
 
 make_world_transform :: (entity: Entity) -> Matrix4 {

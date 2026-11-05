@@ -3,7 +3,7 @@
 Input_State :: struct {
     window_events_this_frame: [..]Window_Event;
     keys:                     [SCAN_CODE_COUNT]Key_State;
-    cursor:                   Cursor_State;
+    mouse:                    Mouse_State;
     wheel:                    Wheel_State;
 
     raw_event_callback: Raw_Event_Callback;
@@ -37,9 +37,13 @@ Key_State :: enum_flags {
     RELEASED;
 }
 
-Cursor_State :: struct {
-    position:      Vector2;
-    delta:         Vector2;
+Mouse_State :: struct {
+    position: Vector2;
+    delta:    Vector2;
+
+    left_button:   Key_State;
+    middle_button: Key_State;
+    right_button:  Key_State;
 }
 
 Wheel_State :: struct {
@@ -52,7 +56,7 @@ init :: () -> Input_State {
     {
         x, y: float;
         SDL.get_mouse_state(*x, *y);
-        input_state.cursor.position = { x, y };
+        input_state.mouse.position = { x, y };
     }
 
     return input_state;
@@ -75,7 +79,11 @@ update :: (input_state: *Input_State) {
         key_state.* &= ~(.PRESSED | .RELEASED);
     }
 
-    input_state.cursor.delta = {};
+    input_state.mouse.left_button   &= ~(.PRESSED | .RELEASED);
+    input_state.mouse.middle_button &= ~(.PRESSED | .RELEASED);
+    input_state.mouse.right_button  &= ~(.PRESSED | .RELEASED);
+
+    input_state.mouse.delta = {};
 
     input_state.wheel.delta = {};
 
@@ -100,11 +108,11 @@ update :: (input_state: *Input_State) {
                 };
                 array_add(*input_state.window_events_this_frame, event);
             case .MOUSE_MOTION;
-                input_state.cursor.position = {
+                input_state.mouse.position = {
                     sdl_event.motion.x,
                     sdl_event.motion.y,
                 };
-                input_state.cursor.delta += {
+                input_state.mouse.delta += {
                     sdl_event.motion.xrel,
                     sdl_event.motion.yrel,
                 };
@@ -117,6 +125,33 @@ update :: (input_state: *Input_State) {
                 key := *input_state.keys[sdl_event.key.scancode];
                 key.* &= ~.DOWN;
                 key.* |= .RELEASED;
+            case .MOUSE_BUTTON_DOWN;
+                button: *Key_State;
+                if #complete sdl_event.button.button == {
+                    case .LEFT;
+                        button = *input_state.mouse.left_button;
+                    case .MIDDLE;
+                        button = *input_state.mouse.middle_button;
+                    case .RIGHT;
+                        button = *input_state.mouse.right_button;
+                    case .X1;
+                    case .X2;
+                }
+                button.* |= .DOWN | .PRESSED;
+            case .MOUSE_BUTTON_UP;
+                button: *Key_State;
+                if #complete sdl_event.button.button == {
+                    case .LEFT;
+                        button = *input_state.mouse.left_button;
+                    case .MIDDLE;
+                        button = *input_state.mouse.middle_button;
+                    case .RIGHT;
+                        button = *input_state.mouse.right_button;
+                    case .X1;
+                    case .X2;
+                }
+                button.* &= ~.DOWN;
+                button.* |= .RELEASED;
             case .MOUSE_WHEEL;
                 input_state.wheel.delta += {
                     sdl_event.wheel.x,
