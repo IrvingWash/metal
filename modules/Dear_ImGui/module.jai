@@ -500,6 +500,50 @@ Backend_Flags :: enum_flags u32 {
     RENDERER_HAS_TEXTURES   :: 0x10;
 }
 
+Tree_Node_Flags :: enum_flags u32 {
+    NONE                   :: 0x0;
+    SELECTED               :: 0x1;
+    FRAMED                 :: 0x2;
+    ALLOW_OVERLAP          :: 0x4;
+    NO_TREE_PUSH_ON_OPEN   :: 0x8;
+    NO_AUTO_OPEN_ON_LOG    :: 0x10;
+    DEFAULT_OPEN           :: 0x20;
+    OPEN_ON_DOUBLE_CLICK   :: 0x40;
+    OPEN_ON_ARROW          :: 0x80;
+    LEAF                   :: 0x100;
+    BULLET                 :: 0x200;
+    FRAME_PADDING          :: 0x400;
+    SPAN_AVAIL_WIDTH       :: 0x800;
+    SPAN_FULL_WIDTH        :: 0x1000;
+    SPAN_LABEL_WIDTH       :: 0x2000;
+    SPAN_ALL_COLUMNS       :: 0x4000;
+    LABEL_SPAN_ALL_COLUMNS :: 0x8000;
+
+    NAV_LEFT_JUMPS_TO_PARENT :: 0x20000;
+    COLLAPSING_HEADER        :: 0x1a;
+
+    DRAW_LINES_NONE     :: 0X40000;
+    DRAW_LINES_FULL     :: 0x80000;
+    DRAW_LINES_TO_NODES :: 0x100000;
+
+    NAV_LEFT_JUMPS_BACK_HERE :: 0X20000;
+}
+
+Slider_Flags :: enum_flags u32 {
+    NONE               :: 0x0;
+    LOGARITHMIC        :: 0x20;
+    NO_ROUND_TO_FORMAT :: 0x40;
+    NO_INPUT           :: 0x80;
+    WRAP_AROUND        :: 0x100;
+    CLAMP_ON_INPUT     :: 0x200;
+    CLAMP_ZERO_RANGE   :: 0x400;
+    NO_SPEED_TWEAKS    :: 0x800;
+    COLOR_MARKERS      :: 0x1000;
+    ALWAYS_CLAMP       :: 0x600;
+
+    INVALID_MASK       :: 0x7000000f;
+}
+
 create_context :: (shared_font_atlas: *Font_Atlas = null) -> *Context #foreign libimgui "_ZN5ImGui13CreateContextEP11ImFontAtlas";
 
 get_io :: () -> *IO #foreign libimgui "_ZN5ImGui5GetIOEv";
@@ -557,6 +601,68 @@ text :: (fmt: string, __args: ..Any) {
 text_c_format :: (fmt: *u8, __args: ..Any) -> void #foreign libimgui "_ZN5ImGui4TextEPKcz";
 
 get_draw_data :: () -> *Draw_Data #foreign libimgui "_ZN5ImGui11GetDrawDataEv";
+
+collapsing_header :: (
+    label: *u8,
+    flags: Tree_Node_Flags = .NONE,
+) -> bool #foreign libimgui "_ZN5ImGui16CollapsingHeaderEPKci";
+
+collapsing_header :: (
+    label: *u8,
+    p_visible: *bool,
+    flags: Tree_Node_Flags = .NONE,
+) -> bool #foreign libimgui "_ZN5ImGui16CollapsingHeaderEPKcPbi";
+
+drag_float :: (
+    label: *u8,
+    v: *float,
+    v_speed: float = 1.0,
+    v_min: float = 0.0,
+    v_max: float = 0.0,
+    format: *u8 = "%.3f",
+    flags: Slider_Flags = .NONE,
+) -> bool #foreign libimgui "_ZN5ImGui9DragFloatEPKcPffffS1_i";
+
+
+drag_float3 :: (
+    label: *u8,
+    v: *[3] float,
+    v_speed: float = 1.0,
+    v_min: float = 0.0,
+    v_max: float = 0.0,
+    format: *u8 = "%.3f",
+    flags: Slider_Flags = .NONE,
+) -> bool #foreign libimgui "_ZN5ImGui10DragFloat3EPKcPffffS1_i";
+
+combo :: (
+    label: *u8,
+    current_item: *s32,
+    items: **u8,
+    items_count: s32,
+    popup_max_height_in_items: s32 = -1,
+) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiPKS1_ii";
+combo :: (
+    label: *u8,
+    current_item: *s32,
+    items_separated_by_zeros: *u8,
+    popup_max_height_in_items: s32 = -1,
+) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiS1_i";
+combo :: (
+    label: *u8,
+    current_item: *s32,
+    getter: #type (user_data: *void, idx: s32) -> *u8 #c_call,
+    user_data: *void,
+    items_count: s32,
+    popup_max_height_in_items: s32 = -1,
+) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiPFS1_PviES3_ii";
+
+
+same_line :: (
+    offset_from_start_x: float = 0.0,
+    spacing: float = -1.0,
+) -> void #foreign libimgui "_ZN5ImGui8SameLineEff";
+
+push_item_width :: (item_width: float) -> void #foreign libimgui "_ZN5ImGui13PushItemWidthEf";
 
 show_demo_window :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui14ShowDemoWindowEPb";
 
