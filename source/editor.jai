@@ -2,6 +2,8 @@ init_editor :: () {
     editor.ctx = IM.create_context();
     editor.io = IM.get_io();
 
+    editor.io.log_filename = null;
+
     IM.impl_sdl3_init_for_vulkan(cast(*void, state.window));
 
     pool_sizes := VK.Descriptor_Pool_Size.[
@@ -86,9 +88,91 @@ toggle_editor :: () {
 draw_whole_editor :: () {
     draw_fps_stat();
 
-    if editor.enabled {
+    if !editor.enabled {
         return;
     }
+
+    IM.show_demo_window();
+
+    IM.begin(
+        "Editor",
+    );
+    draw_camera_section();
+    IM.end();
+}
+
+draw_camera_section :: () {
+    if !IM.collapsing_header("Camera", flags = .DEFAULT_OPEN) {
+        return;
+    }
+
+    IM.push_item_width(200);
+    { // Mode
+        current := cast(s32, state.camera.mode);
+
+        ITEMS :: #run enum_names(Camera_Mode);
+
+        if IM.combo(
+            "Mode",
+            *current,
+            getter = (user_data: *void, idx: s32) -> *u8 #c_call {
+                items := cast(type_of(ITEMS), user_data);
+
+                return items[idx].data;
+            },
+            user_data = *ITEMS,
+            ITEMS.count,
+        ) {
+            state.camera.mode = cast(Camera_Mode, current);
+        }
+    }
+
+    IM.drag_float3(
+        "Position",
+        *state.camera.position.component,
+        v_speed = 0.1,
+        v_min = 0,
+        v_max = 0,
+    );
+
+    IM.drag_float(
+        "Yaw",
+        *state.camera.yaw,
+        v_speed = 0.1,
+        v_min = 0,
+        v_max = 0,
+    );
+    IM.drag_float(
+        "Pitch",
+        *state.camera.pitch,
+        v_speed = 0.1,
+        v_min = 0,
+        v_max = 0,
+    );
+
+    { // FOV
+        SPEED :: 1;
+        MIN   :: 1;
+        MAX   :: 120;
+        current_fov_in_degrees := rad_to_deg(state.camera.fov_vertical);
+        if IM.drag_float(
+            "FOV vertical",
+            *current_fov_in_degrees,
+            v_speed = SPEED,
+            v_min = MIN,
+            v_max = MAX,
+        ) {
+            state.camera.fov_vertical = deg_to_rad(current_fov_in_degrees);
+        }
+    }
+
+    IM.drag_float(
+        "Exposure",
+        *state.camera.exposure,
+        v_speed = 0.1,
+        v_min = 0,
+        v_max = 0,
+    );
 }
 
 draw_fps_stat :: () {

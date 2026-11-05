@@ -27,10 +27,6 @@ Camera_Mode :: enum {
 }
 
 update_camera :: (camera: *Camera, dt: float) {
-    if !camera.controlled {
-        return;
-    }
-
     if #complete camera.mode == {
         case .FLY;
             fly(camera, dt);
@@ -46,6 +42,10 @@ update_camera :: (camera: *Camera, dt: float) {
 MAX_PITCH   :: #run deg_to_rad(89);
 
 fly :: (camera: *Camera, dt: float) {
+    if !camera.controlled {
+        return;
+    }
+
     { // Rotate
         SENSITIVITY :: 0.01;
         WORLD_UP    :: Vector3.{ 0, 1, 0 };
