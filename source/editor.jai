@@ -1,12 +1,12 @@
-init_editor :: (state: *State) {
-    editor.state = state;
+init_editor :: (game: *Game) {
+    editor.game = game;
 
     editor.ctx = IM.create_context();
     editor.io = IM.get_io();
 
     editor.io.log_filename = null;
 
-    IM.impl_sdl3_init_for_vulkan(cast(*void, state.window));
+    IM.impl_sdl3_init_for_vulkan(cast(*void, game.window));
 
     pool_sizes := VK.Descriptor_Pool_Size.[
         {
@@ -24,23 +24,23 @@ init_editor :: (state: *State) {
         pool_size_count = pool_sizes.count,
         p_pool_sizes    = pool_sizes.data,
     };
-    result:, editor.descriptor_pool = VK.create_descriptor_pool(state.renderer.device, *pool_info);
+    result:, editor.descriptor_pool = VK.create_descriptor_pool(game.renderer.device, *pool_info);
     assert(result == .SUCCESS, "%", result);
 
     vulkan_init_info := IM.Impl_Vulkan_Init_Info.{
         api_version           = VK.make_version(1, 4, 0),
-        instance              = state.renderer.instance,
-        physical_device       = state.renderer.physical_device,
-        device                = state.renderer.device,
-        queue_family          = state.renderer.graphics_queue_info.family_index,
-        queue                 = state.renderer.graphics_queue_info.queue,
+        instance              = game.renderer.instance,
+        physical_device       = game.renderer.physical_device,
+        device                = game.renderer.device,
+        queue_family          = game.renderer.graphics_queue_info.family_index,
+        queue                 = game.renderer.graphics_queue_info.queue,
         descriptor_pool       = editor.descriptor_pool,
-        min_image_count       = state.renderer.swapchain_info.config.min_image_count,
-        image_count           = xx state.renderer.swapchain_info.images.count,
+        min_image_count       = game.renderer.swapchain_info.config.min_image_count,
+        image_count           = xx game.renderer.swapchain_info.images.count,
         use_dynamic_rendering = true,
         pipeline_info_main.pipeline_rendering_create_info = {
             color_attachment_count     = 1,
-            p_color_attachment_formats = *state.
+            p_color_attachment_formats = *game.
                 renderer.
                 swapchain_info
                 .config.
@@ -50,8 +50,8 @@ init_editor :: (state: *State) {
 
     IM.impl_vulkan_init(*vulkan_init_info);
 
-    Renderer.set_overlay_callback(*state.renderer, draw_overlay, null);
-    Input.set_raw_event_callback(*state.input_state, process_editor_events);
+    Renderer.set_overlay_callback(*game.renderer, draw_overlay, null);
+    Input.set_raw_event_callback(*game.input_state, process_editor_events);
 }
 
 draw_editor :: (draw_editing_stuff: bool) {
@@ -69,13 +69,13 @@ draw_editor :: (draw_editing_stuff: bool) {
 }
 
 deinit_editor :: () {
-    VK.device_wait_idle(editor.state.renderer.device);
+    VK.device_wait_idle(editor.game.renderer.device);
 
-    Input.set_raw_event_callback(*editor.state.input_state, process_editor_events);
-    Renderer.set_overlay_callback(*editor.state.renderer, null, null);
+    Input.set_raw_event_callback(*editor.game.input_state, process_editor_events);
+    Renderer.set_overlay_callback(*editor.game.renderer, null, null);
 
     IM.impl_vulkan_shutdown();
-    VK.destroy_descriptor_pool(editor.state.renderer.device, editor.descriptor_pool);
+    VK.destroy_descriptor_pool(editor.game.renderer.device, editor.descriptor_pool);
     IM.impl_sdl3_shutdown();
 
     IM.destroy_context(editor.ctx);
@@ -106,18 +106,37 @@ draw_camera_section :: () {
 
     IM.drag_float3(
         "Position",
-        *editor.state.camera.position.component,
+        *editor.game.camera.position.component,
         v_speed = 0.1,
         v_min = 0,
         v_max = 0,
     );
+
+    { // Rotation
+        MAX_PITCH :: 89;
+
+        yaw, pitch    := calculate_yaw_and_pitch_from_direction(editor.game.camera.front);
+        yaw_degrees   := rad_to_deg(yaw);
+        pitch_degrees := rad_to_deg(pitch);
+
+        is_yaw_changed := IM.drag_float("Yaw", *yaw_degrees);
+        is_pitch_changed := IM.drag_float("Pitch", *pitch_degrees);
+
+        if is_yaw_changed || is_pitch_changed {
+            direction := calculate_direction_from_yaw_and_pitch(
+                deg_to_rad(yaw_degrees),
+                deg_to_rad(clamp(pitch_degrees, -MAX_PITCH, MAX_PITCH)),
+            );
+            editor.game.camera.front = direction;
+        }
+    }
 
     { // FOV
         SPEED :: 1;
         MIN   :: 1;
         MAX   :: 120;
 
-        current_fov_in_degrees := rad_to_deg(editor.state.camera.fov_vertical);
+        current_fov_in_degrees := rad_to_deg(editor.game.camera.fov_vertical);
 
         if IM.drag_float(
             "FOV vertical",
@@ -126,13 +145,13 @@ draw_camera_section :: () {
             v_min = MIN,
             v_max = MAX,
         ) {
-            editor.state.camera.fov_vertical = deg_to_rad(current_fov_in_degrees);
+            editor.game.camera.fov_vertical = deg_to_rad(current_fov_in_degrees);
         }
     }
 
     IM.drag_float(
         "Exposure",
-        *editor.state.camera.exposure,
+        *editor.game.camera.exposure,
         v_speed = 0.1,
         v_min = 0,
         v_max = 0,
@@ -171,7 +190,7 @@ draw_overlay : Renderer.Overlay_Callback : (command_buffer: VK.Command_Buffer, u
 }
 
 Editor :: struct {
-    state: *State;
+    game: *Game;
 
     ctx: *IM.Context;
     io:  *IM.IO;

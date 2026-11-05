@@ -28,6 +28,24 @@ calculate_camera_basis :: (camera: Camera) -> Camera_Basis {
     };
 }
 
+calculate_yaw_and_pitch_from_direction :: (direction: Vector3) -> yaw: float, pitch: float {
+    normalized_direction := normalize(direction);
+
+    return
+        atan2(normalized_direction.z, normalized_direction.x),
+        -asin(clamp(normalized_direction.y, -1, 1));
+}
+
+calculate_direction_from_yaw_and_pitch :: (yaw: float, pitch: float) -> Vector3 {
+    cos_pitch := cos(pitch);
+
+    return .{
+        cos(yaw) * cos_pitch,
+        -sin(pitch),
+        sin(yaw) * cos_pitch,
+    };
+}
+
 
 
 #scope_file

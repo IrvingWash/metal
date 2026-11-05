@@ -1,6 +1,6 @@
 #placeholder DEBUG;
 
-State :: struct {
+Game :: struct {
     window:        *Windowing.Window;
     input_state:   Input.Input_State;
     asset_manager: Asset_Manager;
@@ -34,19 +34,19 @@ main :: () {
     error, display_info := Windowing.get_display_info(display_ids[0]);
     assert(!error, error);
     Renderer.set_render_resolution(
-        *state.renderer,
+        *game.renderer,
         cast(u32, display_info.width * display_info.dpi),
         cast(u32, display_info.height * display_info.dpi),
     );
-    state.renderer.normalized_clear_color = { 142.0 / 255.0, 204.0 / 255.0, 254.0 / 255.0, 1 };
+    game.renderer.normalized_clear_color = { 142.0 / 255.0, 204.0 / 255.0, 254.0 / 255.0, 1 };
 
     add_model :: (path: string, translation: Vector3 = {}, scale: Vector3 = {1, 1, 1}) {
-        model := asset_manager_upload_model(*state.asset_manager, path, *state.renderer);
+        model := asset_manager_upload_model(*game.asset_manager, path, *game.renderer);
 
         transform := make_translation_matrix4(translation) * make_scale_matrix4(scale);
 
         model.transform = transform;
-        array_add(*state.models, model);
+        array_add(*game.models, model);
     }
 
     add_model("../../Models/damaged_helmet/scene.glb", translation = { -1, -4.5 ,0 });
@@ -56,7 +56,7 @@ main :: () {
     // add_model("../../Models/AlphaBlendModeTest/glTF-Binary/AlphaBlendModeTest.glb");
     // add_model("../../Models/Sponza/Sponza.gltf");
 
-    while !state.should_quit {
+    while !game.should_quit {
         dt := calculate_delta_time();
 
         process_input();
@@ -93,70 +93,70 @@ Renderer      :: #import "Renderer"()(
     #load "editor.jai";
 }
 
-state: State;
+game: Game;
 
 process_input :: () {
-    Input.update(*state.input_state);
+    Input.update(*game.input_state);
 
-    for event: state.input_state.window_events_this_frame {
+    for event: game.input_state.window_events_this_frame {
         if event.kind == {
             case .QUIT;
-                state.should_quit = true;
+                game.should_quit = true;
             case .WINDOW_PIXEL_SIZE_CHANGED;
-                state.renderer.swapchain_info.should_recreate = true;
+                game.renderer.swapchain_info.should_recreate = true;
         }
     }
 
     #if DEBUG {
-        if state.input_state.keys[Input.Scan_Code.F1] & .PRESSED {
-            state.is_in_editor_mode = !state.is_in_editor_mode;
+        if game.input_state.keys[Input.Scan_Code.F1] & .PRESSED {
+            game.is_in_editor_mode = !game.is_in_editor_mode;
 
-            Windowing.set_window_relative_cursor_mode(state.window, !state.is_in_editor_mode);
+            Windowing.set_window_relative_cursor_mode(game.window, !game.is_in_editor_mode);
         }
     }
 }
 
 update :: (dt: float) {
-    if state.is_in_editor_mode {
+    if game.is_in_editor_mode {
         return;
     }
 
-    if #complete state.camera_controller_kind == {
+    if #complete game.camera_controller_kind == {
         case .FLY;
-            fly_camera(*state.camera, dt, get_fly_camera_input());
+            fly_camera(*game.camera, dt, get_fly_camera_input());
     }
 }
 
 render :: () {
     #if DEBUG {
-        draw_editor(state.is_in_editor_mode);
+        draw_editor(game.is_in_editor_mode);
     }
 
-    error := Renderer.start_drawing(*state.renderer, state.camera);
+    error := Renderer.start_drawing(*game.renderer, game.camera);
     assert(!error, error);
-    for model: state.models {
-        Renderer.draw_model(*state.renderer, model);
+    for model: game.models {
+        Renderer.draw_model(*game.renderer, model);
     }
-    error = Renderer.finish_drawing(*state.renderer);
+    error = Renderer.finish_drawing(*game.renderer);
     assert(!error, error);
 }
 
 init :: () {
     ok := Windowing.init();
     assert(ok, "Failed to create window");
-    state.window = Windowing.create_window("metal", 800, 600, .RESIZABLE | .VULKAN);
-    assert(state.window != null, "Failed to create window");
-    error := Windowing.set_window_relative_cursor_mode(state.window, enabled = true);
+    game.window = Windowing.create_window("metal", 800, 600, .RESIZABLE | .VULKAN);
+    assert(game.window != null, "Failed to create window");
+    error := Windowing.set_window_relative_cursor_mode(game.window, enabled = true);
     if error {
         log("Failed to enable window relative cursor mode: %", error, flags = .WARNING);
     }
 
-    state.input_state = Input.init();
+    game.input_state = Input.init();
 
-    state.asset_manager = init_asset_manager();
+    game.asset_manager = init_asset_manager();
 
-    error, state.renderer = Renderer.init(
-        state.window,
+    error, game.renderer = Renderer.init(
+        game.window,
         Windowing.get_vulkan_instance_extensions,
         Windowing.get_renderable_size,
         Windowing.create_vulkan_surface,
@@ -165,7 +165,7 @@ init :: () {
     assert(error == "", "Failed to initialize Renderer: %", error);
 
     #if DEBUG {
-        init_editor(*state);
+        init_editor(*game);
     }
 }
 
@@ -174,22 +174,22 @@ deinit :: () {
         deinit_editor();
     }
 
-    Renderer.deinit(*state.renderer);
+    Renderer.deinit(*game.renderer);
 
-    deinit_asset_manager(*state.asset_manager);
+    deinit_asset_manager(*game.asset_manager);
 
-    Input.deinit(*state.input_state);
+    Input.deinit(*game.input_state);
 
-    Windowing.destroy_window(state.window);
+    Windowing.destroy_window(game.window);
     Windowing.deinit();
 }
 
 calculate_delta_time :: () -> float {
     now := seconds_since_init();
 
-    dt  := now - state.last_frame_time;
+    dt  := now - game.last_frame_time;
 
-    state.last_frame_time = now;
+    game.last_frame_time = now;
 
     return cast(float, dt);
 }
@@ -197,29 +197,29 @@ calculate_delta_time :: () -> float {
 get_fly_camera_input :: () -> Fly_Camera_Input {
     move_direction: Move_Direction;
 
-    if state.input_state.keys[Input.Scan_Code.W] & .DOWN
+    if game.input_state.keys[Input.Scan_Code.W] & .DOWN
         move_direction |= .FORWARD;
-    if state.input_state.keys[Input.Scan_Code.S] & .DOWN
+    if game.input_state.keys[Input.Scan_Code.S] & .DOWN
         move_direction |= .BACKWARD;
-    if state.input_state.keys[Input.Scan_Code.A] & .DOWN
+    if game.input_state.keys[Input.Scan_Code.A] & .DOWN
         move_direction |= .LEFT;
-    if state.input_state.keys[Input.Scan_Code.D] & .DOWN
+    if game.input_state.keys[Input.Scan_Code.D] & .DOWN
         move_direction |= .RIGHT;
-    if state.input_state.keys[Input.Scan_Code.E] & .DOWN
-        move_direction |= .DOWN;
-    if state.input_state.keys[Input.Scan_Code.Q] & .DOWN
+    if game.input_state.keys[Input.Scan_Code.E] & .DOWN
         move_direction |= .UP;
+    if game.input_state.keys[Input.Scan_Code.Q] & .DOWN
+        move_direction |= .DOWN;
 
     return {
-        look_delta     = state.input_state.cursor.delta,
-        zoom_delta     = state.input_state.wheel.delta.y,
-        sprint         = state.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
+        look_delta     = game.input_state.cursor.delta,
+        zoom_delta     = game.input_state.wheel.delta.y,
+        sprint         = game.input_state.keys[Input.Scan_Code.LSHIFT] == .DOWN,
         move_direction = move_direction,
     };
 }
 
 get_compiled_shader :: (name: string) -> error: string, shader: string {
-    error, shader := asset_manager_get_compiled_shader(state.asset_manager, name);
+    error, shader := asset_manager_get_compiled_shader(game.asset_manager, name);
     return error, shader;
 }
 
