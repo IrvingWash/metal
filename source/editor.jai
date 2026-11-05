@@ -117,6 +117,7 @@ draw_renderer_section :: () {
         is_changed := IM.color_picker3(
             "Color##DirectionalLight",
             *directional_light.color.component,
+            flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
         );
         is_changed |= IM.drag_float(
             "Intensity##DirectionalLight",
@@ -137,24 +138,28 @@ draw_renderer_section :: () {
         }
     }
 
+    IM.separator_text("Ambient color##Renderer");
     { // Ambient
         ambient := Renderer.get_ambient_color(editor.game.renderer);
 
         IM.push_item_width(200);
         if IM.color_picker3(
-            "Ambient color##Renderer",
+            "##AmbientColor##Renderer",
             *ambient.component,
+            flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
         ) {
             Renderer.set_ambient_color(*editor.game.renderer, ambient);
         }
     }
 
+    IM.separator_text("Clear color##Renderer");
     { // Clear color
         color := Renderer.get_clear_color(editor.game.renderer);
         IM.push_item_width(200);
         if IM.color_picker4(
-            "Clear color##Renderer",
+            "##ClearColor##Renderer",
             *color.component,
+            flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
         ) {
             Renderer.set_clear_color(*editor.game.renderer, color);
         }

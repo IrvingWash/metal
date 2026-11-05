@@ -469,8 +469,8 @@ Color_Edit_Flags :: enum_flags u32 {
 
     ALPHA_BAR        :: 0x40000;
     HDR              :: 0x80000;
-    DISPLAY_R_G_B    :: 0x100000;
-    DISPLAY_H_S_V    :: 0x200000;
+    DISPLAY_RGB      :: 0x100000;
+    DISPLAY_HSV      :: 0x200000;
     DISPLAY_HEX      :: 0x400000;
     UINT8            :: 0x800000;
     FLOAT            :: 0x1000000;
