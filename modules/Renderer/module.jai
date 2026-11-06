@@ -30,13 +30,14 @@ Renderer :: struct {
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;
 
-    scene_info: Scene_Info;
-    materials_info: Materials_Info;
-    geometry_info: Geometry_Info;
+    scene_info:         Scene_Info;
+    materials_info:     Materials_Info;
+    mesh_geometry_info: Mesh_Geometry_Info;
 
-    model_pass:   Model_Pass;
-    shadow_pass:  Shadow_Pass;
-    tonemap_pass: Tonemap_Pass;
+    model_pass:     Model_Pass;
+    primitive_pass: Primitive_Pass;
+    shadow_pass:    Shadow_Pass;
+    tonemap_pass:   Tonemap_Pass;
 
     normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
@@ -284,7 +285,7 @@ init :: (
             renderer;
     }
 
-    error, renderer.geometry_info = create_geometry_info(renderer.device, renderer.allocator);
+    error, renderer.mesh_geometry_info = create_mesh_geometry_info(renderer.device, renderer.allocator);
     if error {
         return
             error,
@@ -326,6 +327,13 @@ init :: (
             renderer;
     }
 
+    error, renderer.primitive_pass = create_primitive_pass();
+    if error {
+        return
+            error,
+            renderer;
+    }
+
     error, renderer.tonemap_pass = create_tonemap_pass(
         renderer.device,
         get_compiled_shader,
@@ -348,6 +356,8 @@ deinit :: (renderer: *Renderer) {
 
     destroy_tonemap_pass(*renderer.tonemap_pass, renderer.device);
 
+    destroy_primitive_pass(*renderer.primitive_pass);
+
     destroy_shadow_pass(
         *renderer.shadow_pass,
         renderer.device,
@@ -360,7 +370,7 @@ deinit :: (renderer: *Renderer) {
         renderer.allocator,
     );
 
-    destroy_geometry_info(renderer.allocator, *renderer.geometry_info);
+    destroy_mesh_geometry_info(renderer.allocator, *renderer.mesh_geometry_info);
     destroy_materials_info(renderer.device, renderer.allocator, *renderer.materials_info);
 
     for *frame_resources: renderer.frame_resources_list {
@@ -612,7 +622,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             *renderer.shadow_pass,
             light_source,
             frame_resources.command_buffer,
-            renderer.geometry_info,
+            renderer.mesh_geometry_info,
             renderer.materials_info,
             renderer.model_pass,
             frame_resources_index,
@@ -706,7 +716,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
 
     do_model_pass(
         *renderer.model_pass,
-        renderer.geometry_info,
+        renderer.mesh_geometry_info,
         renderer.materials_info,
         frame_resources_index,
         frame_resources.command_buffer,
@@ -1070,10 +1080,10 @@ upload_materials :: (renderer: *Renderer, materials: []Material) -> error: strin
 }
 
 upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, start: u32, count: u32 {
-    start := renderer.geometry_info.vertices_offset;
+    start := renderer.mesh_geometry_info.vertices_offset;
     count := cast(u32, vertices.count);
 
-    if (start + count) * size_of(Vertex) > Geometry_Info.VERTEX_BUFFER_BYTE_SIZE {
+    if (start + count) * size_of(Vertex) > Mesh_Geometry_Info.VERTEX_BUFFER_BYTE_SIZE {
         return "Vertex buffer is full", start, count;
     }
 
@@ -1087,23 +1097,23 @@ upload_vertices :: (renderer: *Renderer, vertices: []Vertex) -> error: string, s
         renderer.transient_command_pool,
         bytes_to_upload,
         dst_offset = start * size_of(Vertex),
-        renderer.geometry_info.vertex_buffer_info.buffer,
+        renderer.mesh_geometry_info.vertex_buffer_info.buffer,
         renderer.graphics_queue_info.queue,
     );
     if error {
         return error, start, count;
     }
 
-    renderer.geometry_info.vertices_offset += count;
+    renderer.mesh_geometry_info.vertices_offset += count;
 
     return "", start, count;
 }
 
 upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start: u32, count: u32 {
-    start := renderer.geometry_info.indices_offset;
+    start := renderer.mesh_geometry_info.indices_offset;
     count := cast(u32, indices.count);
 
-    if (start + count) * size_of(u32) > Geometry_Info.INDEX_BUFFER_BYTE_SIZE {
+    if (start + count) * size_of(u32) > Mesh_Geometry_Info.INDEX_BUFFER_BYTE_SIZE {
         return "Index buffer is full", start, count;
     }
 
@@ -1117,14 +1127,14 @@ upload_indices :: (renderer: *Renderer, indices: []u32) -> error: string, start:
         renderer.transient_command_pool,
         bytes_to_upload,
         dst_offset = start * size_of(u32),
-        renderer.geometry_info.index_buffer_info.buffer,
+        renderer.mesh_geometry_info.index_buffer_info.buffer,
         renderer.graphics_queue_info.queue,
     );
     if error {
         return error, start, count;
     }
 
-    renderer.geometry_info.indices_offset += count;
+    renderer.mesh_geometry_info.indices_offset += count;
 
     return "", start, count;
 }
@@ -1264,7 +1274,7 @@ Transforms :: struct {
     view_projection: Matrix4;
 }
 
-Geometry_Info :: struct {
+Mesh_Geometry_Info :: struct {
     index_buffer_info: Buffer_Info;
     indices_offset: u32;
 
@@ -1680,37 +1690,37 @@ upload_to_buffer :: (
     return "";
 }
 
-create_geometry_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Geometry_Info {
-    geometry_info: Geometry_Info;
+create_mesh_geometry_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Mesh_Geometry_Info {
+    mesh_geometry_info: Mesh_Geometry_Info;
 
-    error:, geometry_info.index_buffer_info = create_buffer(
+    error:, mesh_geometry_info.index_buffer_info = create_buffer(
         device,
         allocator,
         usage = .TRANSFER_DST | .INDEX_BUFFER,
-        Geometry_Info.INDEX_BUFFER_BYTE_SIZE,
+        Mesh_Geometry_Info.INDEX_BUFFER_BYTE_SIZE,
         memory_usage = .AUTO,
         mappable = false,
     );
     if error {
         return
             error,
-            geometry_info;
+            mesh_geometry_info;
     }
-    error, geometry_info.vertex_buffer_info = create_buffer(
+    error, mesh_geometry_info.vertex_buffer_info = create_buffer(
         device,
         allocator,
         usage = .TRANSFER_DST | .SHADER_DEVICE_ADDRESS,
-        Geometry_Info.VERTEX_BUFFER_BYTE_SIZE,
+        Mesh_Geometry_Info.VERTEX_BUFFER_BYTE_SIZE,
         memory_usage = .AUTO,
         mappable = false,
     );
     if error {
         return
             error,
-            geometry_info;
+            mesh_geometry_info;
     }
 
-    return "", geometry_info;
+    return "", mesh_geometry_info;
 }
 
 create_materials_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: string, Materials_Info {
@@ -1776,19 +1786,19 @@ destroy_materials_info :: (device: VK.Device, allocator: VMA.Allocator, material
     materials_info.* = {};
 }
 
-destroy_geometry_info :: (allocator: VMA.Allocator, geometry_info: *Geometry_Info) {
+destroy_mesh_geometry_info :: (allocator: VMA.Allocator, mesh_geometry_info: *Mesh_Geometry_Info) {
     VMA.destroy_buffer(
         allocator,
-        geometry_info.index_buffer_info.buffer,
-        geometry_info.index_buffer_info.allocation,
+        mesh_geometry_info.index_buffer_info.buffer,
+        mesh_geometry_info.index_buffer_info.allocation,
     );
     VMA.destroy_buffer(
         allocator,
-        geometry_info.vertex_buffer_info.buffer,
-        geometry_info.vertex_buffer_info.allocation,
+        mesh_geometry_info.vertex_buffer_info.buffer,
+        mesh_geometry_info.vertex_buffer_info.allocation,
     );
 
-    geometry_info.* = {};
+    mesh_geometry_info.* = {};
 }
 
 create_fallbacks :: (renderer: *Renderer) -> error: string {
@@ -3259,3 +3269,4 @@ calculate_camera_up :: (front: Vector3) -> Vector3 {
 #load "model_pass.jai";
 #load "shadow_pass.jai";
 #load "tonemap_pass.jai";
+#load "primitive_pass.jai";

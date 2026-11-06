@@ -200,14 +200,14 @@ destroy_shadow_pass :: (
 }
 
 do_shadow_pass :: (
-    shadow_pass:    *Shadow_Pass,
-    light_source:   Light_Source,
-    command_buffer: VK.Command_Buffer,
-    geometry_info:  Geometry_Info,
-    materials_info: Materials_Info,
-    model_pass:     Model_Pass,
-    frame_index:    u64,
-    allocator:      VMA.Allocator,
+    shadow_pass:        *Shadow_Pass,
+    light_source:       Light_Source,
+    command_buffer:     VK.Command_Buffer,
+    mesh_geometry_info: Mesh_Geometry_Info,
+    materials_info:     Materials_Info,
+    model_pass:         Model_Pass,
+    frame_index:        u64,
+    allocator:          VMA.Allocator,
 ) {
     view_projection_transform := create_view_projection_transform_for_light_source(light_source);
 
@@ -285,7 +285,7 @@ do_shadow_pass :: (
 
     { // Push constants
         push_constants: Push_Constants = {
-            vertex_buffer_address   = geometry_info.vertex_buffer_info.device_address,
+            vertex_buffer_address   = mesh_geometry_info.vertex_buffer_info.device_address,
             material_buffer_address = materials_info.material_buffer_info.device_address,
             instance_buffer_address = model_pass.instance_buffer_infos[frame_index].device_address,
 
@@ -304,7 +304,7 @@ do_shadow_pass :: (
 
     VK.cmd_bind_index_buffer(
         command_buffer,
-        geometry_info.index_buffer_info.buffer,
+        mesh_geometry_info.index_buffer_info.buffer,
         offset = 0,
         index_type = .UINT32,
     );

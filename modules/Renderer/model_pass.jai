@@ -1,6 +1,6 @@
 #scope_module
 
-// A quirk! We put BLEND-CULL.NONE and BLEND-CULL.BACK into one bucket for sorting. This is handled in the shader (enforced by specialization info.
+// A quirk! We put BLEND-CULL.NONE and BLEND-CULL.BACK into one bucket for sorting. This is handled in the shader (enforced by specialization info).
 
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
@@ -226,7 +226,7 @@ prepare_model_pass :: (
 
 do_model_pass :: (
     model_pass:                 *Model_Pass,
-    geometry_info:              Geometry_Info,
+    mesh_geometry_info:         Mesh_Geometry_Info,
     materials_info:             Materials_Info,
     frame_index:                u64,
     command_buffer:             VK.Command_Buffer,
@@ -236,7 +236,7 @@ do_model_pass :: (
 ) {
     { // Push constants
         push_constants: Push_Constants = {
-            vertex_buffer_address   = geometry_info.vertex_buffer_info.device_address,
+            vertex_buffer_address   = mesh_geometry_info.vertex_buffer_info.device_address,
             material_buffer_address = materials_info.material_buffer_info.device_address,
             instance_buffer_address = model_pass.instance_buffer_infos[frame_index].device_address,
 
@@ -255,7 +255,7 @@ do_model_pass :: (
 
     VK.cmd_bind_index_buffer(
         command_buffer,
-        geometry_info.index_buffer_info.buffer,
+        mesh_geometry_info.index_buffer_info.buffer,
         offset = 0,
         index_type = .UINT32,
     );
