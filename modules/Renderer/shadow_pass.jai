@@ -213,6 +213,7 @@ do_shadow_pass :: (
 
     shadow_pass.pointers[frame_index].* = Shadow_Pass_Data.{
         view_projection_transform = view_projection_transform,
+        radius                    = DIRECTIONAL_LIGHT_RADIUS,
     };
     VMA.flush_allocation(
         allocator,
@@ -221,8 +222,10 @@ do_shadow_pass :: (
         VK.WHOLE_SIZE,
     );
 
-    { // Transition to depth attachment
-        image_memory_barrier := VK.Image_Memory_Barrier_2.{
+    // Transition to depth attachment
+    transition_images_layouts(
+        command_buffer,
+        {
             src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS | .FRAGMENT_SHADER,
             src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
             dst_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
@@ -235,15 +238,8 @@ do_shadow_pass :: (
                 level_count      = 1,
                 layer_count      = 1,
             },
-        };
-
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *image_memory_barrier,
-        };
-
-        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
-    }
+        }
+    );
 
     { // Begin rendering
         depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
@@ -334,14 +330,14 @@ do_shadow_pass :: (
     { // Draw
         offset: int;
         bound_pipeline: VK.Pipeline;
-        for model_draw_pass: model_pass.draw_passes {
-            defer offset += model_draw_pass.bucket.count;
-
-            if model_draw_pass.bucket.count == 0 {
+        for model_draw_bucket: model_pass.ordered_draw_buckets {
+            if model_draw_bucket.entries.count == 0 {
                 continue;
             }
 
-            if #complete model_draw_pass.alpha_mode == {
+            defer offset += model_draw_bucket.entries.count;
+
+            if #complete model_draw_bucket.alpha_mode == {
                 case .BLEND;
                     continue;
                 case .OPAQUE;
@@ -356,13 +352,13 @@ do_shadow_pass :: (
                     }
             }
 
-            VK.cmd_set_cull_mode(command_buffer, model_draw_pass.cull_mode);
+            VK.cmd_set_cull_mode(command_buffer, model_draw_bucket.cull_mode);
 
             VK.cmd_draw_indexed_indirect(
                 command_buffer,
                 model_pass.indirect_draw_buffer_infos[frame_index].buffer,
                 offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
-                draw_count = cast(u32, model_draw_pass.bucket.count),
+                draw_count = cast(u32, model_draw_bucket.entries.count),
                 stride     = size_of(VK.Draw_Indexed_Indirect_Command),
             );
         }
@@ -370,8 +366,10 @@ do_shadow_pass :: (
 
     VK.cmd_end_rendering(command_buffer);
 
-    { // Transition for sampling
-        barrier := VK.Image_Memory_Barrier_2.{
+    // Transition for sampling
+    transition_images_layouts(
+        command_buffer,
+        {
             src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
             src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
             dst_stage_mask  = .FRAGMENT_SHADER,
@@ -384,13 +382,8 @@ do_shadow_pass :: (
                 level_count = 1,
                 layer_count = 1,
             },
-        };
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *barrier,
-        };
-        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
-    }
+        },
+    );
 }
 
 
@@ -406,7 +399,7 @@ DEFAULT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
 
 Shadow_Pass_Data :: struct @Gpu {
     view_projection_transform: Matrix4;
-    radius:                    float = 50;
+    radius:                    float = DIRECTIONAL_LIGHT_RADIUS;
 }
 
 Shadow_Pass_Pipeline_Info :: struct {

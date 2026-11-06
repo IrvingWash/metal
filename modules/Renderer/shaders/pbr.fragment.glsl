@@ -1,13 +1,17 @@
 #version 460
 
-#include "types.glsl"
-
 #extension GL_EXT_nonuniform_qualifier                   : require
 #extension GL_EXT_scalar_block_layout                    : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_buffer_reference                       : require
 
+#include "types.glsl"
+
 const float PI = 3.14159265359;
+
+const uint ALPHA_MODE_OPAQUE = 0;
+const uint ALPHA_MODE_MASK   = 1;
+const uint ALPHA_MODE_BLEND  = 2;
 
 float calculate_shadow(
     sampler2DShadow shadow_map,
@@ -108,7 +112,8 @@ vec3 get_normal_from_texel(vec3 world_space_vertex_normal, vec4 vertex_tangent, 
     return N;
 }
 
-layout(constant_id = 0) const uint ALPHA_MODE = 0;
+layout(constant_id = 0) const uint ALPHA_MODE                            = 0;
+layout(constant_id = 1) const uint DISCARD_BLEND_SINGLE_SIDED_BACK_FACES = 0; // 0 or 1
 
 layout(push_constant, scalar) uniform Constants {
     layout(offset = 8) uint64_t material_buffer_address;
@@ -148,6 +153,10 @@ layout(location = 0) out vec4 fragment_color;
 void main() {
     Material_Buffer material_buffer = Material_Buffer(constants.material_buffer_address);
     Material material = material_buffer.materials[vertex_input.material_index];
+
+    if (DISCARD_BLEND_SINGLE_SIDED_BACK_FACES == 1 && material.double_sided == 0 && !gl_FrontFacing) {
+        discard;
+    }
 
     vec4 base_color_texel         = texture(textures[material.base_color_texture_index], vertex_input.uv);
     vec4 normal_texel             = texture(textures[material.normal_texture_index], vertex_input.uv);

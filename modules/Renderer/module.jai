@@ -405,7 +405,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     renderer.scene_info.scene_data.camera_world_position = camera.position;
     renderer.tonemap_pass.exposure = camera.exposure;
 
-    reset_model_pass(*renderer.model_pass);
+    reset_model_pass(*renderer.model_pass, camera.position);
 
     if renderer.swapchain_info.should_recreate {
         VK.device_wait_idle(renderer.device);
@@ -591,7 +591,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // =============================================================================
     // Writing model passes
     // =============================================================================
-    write_model_draw_passes(
+    prepare_model_pass(
         *renderer.model_pass,
         frame_resources_index,
         renderer.allocator,
@@ -619,46 +619,34 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // =========================================================================
     // Color target start
     // =========================================================================
-    { // Transition the color target image into a renderable layout, so we can draw on it.
-        render_layout_barriers := VK.Image_Memory_Barrier_2.[
-            {
-                src_stage_mask    = .FRAGMENT_SHADER, // For synchronization
-                src_access_mask   = .SHADER_SAMPLED_READ,
-                dst_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
-                dst_access_mask   = .COLOR_ATTACHMENT_WRITE,
-                old_layout        = .UNDEFINED,
-                new_layout        = .COLOR_ATTACHMENT_OPTIMAL,
-                image             = renderer.color_hdr_target.image_info.image,
-                subresource_range = {
-                    aspect_mask      = .COLOR,
-                    level_count      = 1,
-                    layer_count      = 1,
-                },
+    // Hdr target to optimal attachment
+    // Depth image to optimal attachment
+    transition_images_layouts(
+        frame_resources.command_buffer,
+        {
+            src_stage_mask  = .FRAGMENT_SHADER,
+            src_access_mask = .SHADER_SAMPLED_READ,
+            dst_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
+            dst_access_mask = .COLOR_ATTACHMENT_WRITE,
+            old_layout      = .UNDEFINED,
+            new_layout      = .COLOR_ATTACHMENT_OPTIMAL,
+            image           = renderer.color_hdr_target.image_info.image,
+        },
+        {
+            src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
+            src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
+            dst_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
+            dst_access_mask = .DEPTH_STENCIL_ATTACHMENT_READ | .DEPTH_STENCIL_ATTACHMENT_WRITE,
+            old_layout      = .UNDEFINED,
+            new_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
+            image           = renderer.depth_image_info.image,
+            subresource_range = {
+                aspect_mask      = .DEPTH,
+                level_count      = 1,
+                layer_count      = 1,
             },
-            // Also transition the depth image
-            {
-                src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
-                src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
-                dst_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
-                dst_access_mask = .DEPTH_STENCIL_ATTACHMENT_READ | .DEPTH_STENCIL_ATTACHMENT_WRITE,
-                old_layout      = .UNDEFINED,
-                new_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
-                image           = renderer.depth_image_info.image,
-                subresource_range = {
-                    aspect_mask      = .DEPTH,
-                    level_count      = 1,
-                    layer_count      = 1,
-                },
-            }
-        ];
-
-        render_dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = render_layout_barriers.count,
-            p_image_memory_barriers    = render_layout_barriers.data,
-        };
-
-        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *render_dependency_info);
-    }
+        }
+    );
 
     { // Specify the color and depth attachments for passes which use the color target and start rendering
         color_rendering_attachment_info := VK.Rendering_Attachment_Info.{
@@ -712,7 +700,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
 
-    draw_model_passes(
+    do_model_pass(
         *renderer.model_pass,
         renderer.geometry_info,
         renderer.materials_info,
@@ -732,45 +720,28 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         frame_resources.command_buffer,
     );
 
-    { // Color LDR target to src, swapchain image to dst
-        barriers := VK.Image_Memory_Barrier_2.[
-            {
-                src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
-                src_access_mask = .COLOR_ATTACHMENT_WRITE,
-                dst_stage_mask  = .BLIT,
-                dst_access_mask = .TRANSFER_READ,
-                old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
-                new_layout      = .TRANSFER_SRC_OPTIMAL,
-                image           = renderer.color_ldr_target.image,
-                subresource_range = {
-                    aspect_mask = .COLOR,
-                    level_count = 1,
-                    layer_count = 1,
-                },
-            },
-            {
-                src_stage_mask    = .ALL_TRANSFER,
-                src_access_mask   = 0,
-                dst_stage_mask    = .ALL_TRANSFER,
-                dst_access_mask   = .TRANSFER_WRITE,
-                old_layout        = .UNDEFINED,
-                new_layout        = .TRANSFER_DST_OPTIMAL,
-                image             = renderer.swapchain_info.images[swapchain_image_index],
-                subresource_range = {
-                    aspect_mask = .COLOR,
-                    level_count = 1,
-                    layer_count = 1,
-                },
-            },
-        ];
-
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = barriers.count,
-            p_image_memory_barriers    = barriers.data,
-        };
-
-        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
-    }
+    // Color LDR target to src, swapchain image to dst
+    transition_images_layouts(
+        frame_resources.command_buffer,
+        {
+            src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
+            src_access_mask = .COLOR_ATTACHMENT_WRITE,
+            dst_stage_mask  = .BLIT,
+            dst_access_mask = .TRANSFER_READ,
+            old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
+            new_layout      = .TRANSFER_SRC_OPTIMAL,
+            image           = renderer.color_ldr_target.image,
+        },
+        {
+            src_stage_mask  = .ALL_TRANSFER,
+            src_access_mask = 0,
+            dst_stage_mask  = .ALL_TRANSFER,
+            dst_access_mask = .TRANSFER_WRITE,
+            old_layout      = .UNDEFINED,
+            new_layout      = .TRANSFER_DST_OPTIMAL,
+            image           = renderer.swapchain_info.images[swapchain_image_index],
+        },
+    );
 
     { // Clear for letterboxing
         clear_color: VK.Clear_Color_Value;
@@ -787,26 +758,18 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             }],
         );
 
-        barrier := VK.Image_Memory_Barrier_2.{
-            src_stage_mask    = .CLEAR,
-            src_access_mask   = .TRANSFER_WRITE,
-            dst_stage_mask    = .BLIT,
-            dst_access_mask   = .TRANSFER_WRITE,
-            old_layout        = .TRANSFER_DST_OPTIMAL,
-            new_layout        = .TRANSFER_DST_OPTIMAL,
-            image             = renderer.swapchain_info.images[swapchain_image_index],
-            subresource_range = {
-                aspect_mask = .COLOR,
-                level_count = 1,
-                layer_count = 1,
-            },
-        };
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *barrier,
-        };
-
-        VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
+        transition_images_layouts(
+            frame_resources.command_buffer,
+            {
+                src_stage_mask  = .CLEAR,
+                src_access_mask = .TRANSFER_WRITE,
+                dst_stage_mask  = .BLIT,
+                dst_access_mask = .TRANSFER_WRITE,
+                old_layout      = .TRANSFER_DST_OPTIMAL,
+                new_layout      = .TRANSFER_DST_OPTIMAL,
+                image           = renderer.swapchain_info.images[swapchain_image_index],
+            }
+        );
     }
 
     { // Scaling and bliting
@@ -851,32 +814,24 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     }
 
     if !renderer.overlay_callback_info.proc {
-        { // Swapchain image to presentable
-            barrier := VK.Image_Memory_Barrier_2.{
-                src_stage_mask    = .BLIT,
-                src_access_mask   = .TRANSFER_WRITE,
-                dst_stage_mask    = .NONE,
-                dst_access_mask   = 0,
-                old_layout        = .TRANSFER_DST_OPTIMAL,
-                new_layout        = .PRESENT_SRC_KHR,
-                image             = renderer.swapchain_info.images[swapchain_image_index],
-                subresource_range = {
-                    aspect_mask = .COLOR,
-                    level_count = 1,
-                    layer_count = 1,
-                },
-            };
-
-            dependency_info := VK.Dependency_Info.{
-                image_memory_barrier_count = 1,
-                p_image_memory_barriers = *barrier,
-            };
-
-            VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
-        }
+        // Swapchain image to presentable
+        transition_images_layouts(
+            frame_resources.command_buffer,
+            {
+                src_stage_mask  = .BLIT,
+                src_access_mask = .TRANSFER_WRITE,
+                dst_stage_mask  = .NONE,
+                dst_access_mask = 0,
+                old_layout      = .TRANSFER_DST_OPTIMAL,
+                new_layout      = .PRESENT_SRC_KHR,
+                image           = renderer.swapchain_info.images[swapchain_image_index],
+            }
+        );
     } else {
-        { // To color attachment for the callback
-            barrier := VK.Image_Memory_Barrier_2.{
+        // To color attachment for the callback
+        transition_images_layouts(
+            frame_resources.command_buffer,
+            {
                 src_stage_mask    = .BLIT,
                 src_access_mask   = .TRANSFER_WRITE,
                 dst_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
@@ -884,18 +839,8 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 old_layout        = .TRANSFER_DST_OPTIMAL,
                 new_layout        = .COLOR_ATTACHMENT_OPTIMAL,
                 image             = renderer.swapchain_info.images[swapchain_image_index],
-                subresource_range = {
-                    aspect_mask = .COLOR,
-                    level_count = 1,
-                    layer_count = 1,
-                },
-            };
-            dependency_info := VK.Dependency_Info.{
-                image_memory_barrier_count = 1,
-                p_image_memory_barriers = *barrier,
-            };
-            VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
-        }
+            },
+        );
 
         { // Call overlay proc
             attachment := VK.Rendering_Attachment_Info.{
@@ -920,8 +865,10 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             VK.cmd_end_rendering(frame_resources.command_buffer);
         }
 
-        { // Swapchain image to presentable
-            barrier := VK.Image_Memory_Barrier_2.{
+        // Swapchain image to presentable
+        transition_images_layouts(
+            frame_resources.command_buffer,
+            {
                 src_stage_mask    = .COLOR_ATTACHMENT_OUTPUT,
                 src_access_mask   = .COLOR_ATTACHMENT_WRITE,
                 dst_stage_mask    = .NONE,
@@ -929,15 +876,8 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
                 old_layout        = .COLOR_ATTACHMENT_OPTIMAL,
                 new_layout        = .PRESENT_SRC_KHR,
                 image             = renderer.swapchain_info.images[swapchain_image_index],
-                subresource_range = {
-                    aspect_mask = .COLOR,
-                    level_count = 1,
-                    layer_count = 1,
-                },
-            };
-            dependency_info := VK.Dependency_Info.{ image_memory_barrier_count = 1, p_image_memory_barriers = *barrier };
-            VK.cmd_pipeline_barrier_2(frame_resources.command_buffer, *dependency_info);
-        }
+            },
+        );
     }
 
     result := VK.end_command_buffer(frame_resources.command_buffer);
@@ -1272,6 +1212,21 @@ MAX_MATERIAL_COUNT       :: 256;
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
+Transition_Image_Layout_Params :: struct {
+    src_stage_mask:  VK.Pipeline_Stage_Flags_2;
+    src_access_mask: VK.Access_Flags_2;
+    dst_stage_mask:  VK.Pipeline_Stage_Flags_2;
+    dst_access_mask: VK.Access_Flags_2;
+    old_layout:      VK.Image_Layout;
+    new_layout:      VK.Image_Layout;
+    image:           VK.Image;
+    subresource_range: VK.Image_Subresource_Range = {
+        aspect_mask      = .COLOR,
+        level_count      = 1,
+        layer_count      = 1,
+    };
+}
+
 Image_Info :: struct {
     image:      VK.Image;
     image_view: VK.Image_View;
@@ -1326,6 +1281,36 @@ Materials_Info :: struct {
     texture_descriptor_pool: VK.Descriptor_Pool;
     texture_descriptor_set_layout: VK.Descriptor_Set_Layout;
     texture_descriptor_set: VK.Descriptor_Set;
+}
+
+transition_images_layouts :: (
+    command_buffer: VK.Command_Buffer,
+    transitions: ..Transition_Image_Layout_Params,
+) {
+    barriers: [..]VK.Image_Memory_Barrier_2;
+    barriers.allocator = temp;
+    for transition: transitions {
+        array_add(
+            *barriers,
+            {
+                src_stage_mask    = transition.src_stage_mask, 
+                src_access_mask   = transition.src_access_mask,
+                dst_stage_mask    = transition.dst_stage_mask,
+                dst_access_mask   = transition.dst_access_mask,
+                old_layout        = transition.old_layout,
+                new_layout        = transition.new_layout,
+                image             = transition.image,
+                subresource_range = transition.subresource_range,
+            },
+        );
+    }
+
+    dependency_info := VK.Dependency_Info.{
+        image_memory_barrier_count = cast(u32, barriers.count),
+        p_image_memory_barriers    = barriers.data,
+    };
+
+    VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
 }
 
 destroy_image_info :: (
@@ -1995,8 +1980,10 @@ create_texture_image_and_record_transition :: (
             .{};
     }
 
-    { // Transfer to TRANSFER_DST_OPTIMAL
-        transfer_barrier := VK.Image_Memory_Barrier_2.{
+    // Transfer to TRANSFER_DST_OPTIMAL
+    transition_images_layouts(
+        command_buffer,
+        {
             src_stage_mask  = .NONE,
             src_access_mask = .NONE,
             dst_stage_mask  = .COPY | .BLIT,
@@ -2009,15 +1996,8 @@ create_texture_image_and_record_transition :: (
                 level_count = mip_level_count,
                 layer_count = 1,
             },
-        };
-
-        transfer_dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *transfer_barrier,
-        };
-
-        VK.cmd_pipeline_barrier_2(command_buffer, *transfer_dependency_info);
-    }
+        },
+    );
 
     error =, staging_buffer_info := create_buffer(
         device,
@@ -2080,21 +2060,18 @@ create_texture_image_and_record_transition :: (
             command_buffer,
         );
     } else {
-        barrier := VK.Image_Memory_Barrier_2.{
-            src_stage_mask  = .COPY,
-            src_access_mask = .TRANSFER_WRITE,
-            dst_stage_mask  = .FRAGMENT_SHADER,
-            dst_access_mask = .SHADER_SAMPLED_READ,
-            old_layout      = .TRANSFER_DST_OPTIMAL,
-            new_layout      = .SHADER_READ_ONLY_OPTIMAL,
-            image           = image_info.image,
-            subresource_range = { aspect_mask = .COLOR, level_count = 1, layer_count = 1 },
-        };
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *barrier,
-        };
-        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
+        transition_images_layouts(
+            command_buffer,
+            {
+                src_stage_mask  = .COPY,
+                src_access_mask = .TRANSFER_WRITE,
+                dst_stage_mask  = .FRAGMENT_SHADER,
+                dst_access_mask = .SHADER_SAMPLED_READ,
+                old_layout      = .TRANSFER_DST_OPTIMAL,
+                new_layout      = .SHADER_READ_ONLY_OPTIMAL,
+                image           = image_info.image,
+            }
+        );
     }
 
     return
@@ -3180,6 +3157,43 @@ create_image_view :: (
     return "", image_view;
 }
 
+scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
+    left_x: s32,
+    left_y: s32,
+    right_x: s32,
+    right_y: s32
+) {
+    scale := min(
+        cast(float, dst.width)  / cast(float, src.width),
+        cast(float, dst.height) / cast(float, src.height),
+    );
+
+    width  := cast(s32, cast(float, src.width)  * scale);
+    height := cast(s32, cast(float, src.height) * scale);
+
+    left_x := (cast(s32, dst.width)  - width)  / 2;
+    left_y := (cast(s32, dst.height) - height) / 2;
+
+    return left_x, left_y, left_x + width, left_y + height;
+}
+
+calculate_camera_up :: (front: Vector3) -> Vector3 {
+    EPSILON  :: 0.001;
+
+    world_up := Vector3.{ 0, 1, 0 };
+
+    normalized_front := normalize(front);
+
+    if abs(dot(normalized_front, world_up)) > 1 - EPSILON {
+        world_up = { 1, 0, 0 };
+    }
+
+    right := normalize(cross(normalized_front, world_up));
+    up    := cross(right, normalized_front);
+
+    return up;
+}
+
 #if DEBUG {
     create_debug_utils_messenger :: (instance: VK.Instance) -> VK.Debug_Utils_Messenger_Ext {
         create_debug_utils_messenger_ext: VK.Pfn_Create_Debug_Utils_Messenger_Ext = VK.get_instance_proc_addr(
@@ -3228,43 +3242,6 @@ create_image_view :: (
 
         return VK.FALSE;
     }
-}
-
-scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
-    left_x: s32,
-    left_y: s32,
-    right_x: s32,
-    right_y: s32
-) {
-    scale := min(
-        cast(float, dst.width)  / cast(float, src.width),
-        cast(float, dst.height) / cast(float, src.height),
-    );
-
-    width  := cast(s32, cast(float, src.width)  * scale);
-    height := cast(s32, cast(float, src.height) * scale);
-
-    left_x := (cast(s32, dst.width)  - width)  / 2;
-    left_y := (cast(s32, dst.height) - height) / 2;
-
-    return left_x, left_y, left_x + width, left_y + height;
-}
-
-calculate_camera_up :: (front: Vector3) -> Vector3 {
-    EPSILON  :: 0.001;
-
-    world_up := Vector3.{ 0, 1, 0 };
-
-    normalized_front := normalize(front);
-
-    if abs(dot(normalized_front, world_up)) > 1 - EPSILON {
-        world_up = { 1, 0, 0 };
-    }
-
-    right := normalize(cross(normalized_front, world_up));
-    up    := cross(right, normalized_front);
-
-    return up;
 }
 
 #import "Basic";
