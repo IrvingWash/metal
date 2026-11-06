@@ -42,9 +42,10 @@ install_vendored :: () -> error: string {
 
 
 
-#scope_file
+#scope_module
 
-#load "dependencies";
+MODULES_PATH  :: #run path_join(#filepath, "..", "modules",, temp);
+VENDORED_PATH :: #run path_join(MODULES_PATH, "vendored",, temp);
 
 Dependency :: struct {
     name:        string;
@@ -58,8 +59,12 @@ Module_To_Generate :: struct {
     relative_path: string;
 }
 
-MODULES_PATH  :: #run path_join(#filepath, "..", "modules",, temp);
-VENDORED_PATH :: #run path_join(MODULES_PATH, "vendored",, temp);
+
+
+#scope_file
+
+#load "dependencies.jai";
+#load "modules_to_generate.jai";
 
 generate_modules :: () -> error: string {
 
@@ -102,18 +107,6 @@ clone_dependency :: (dep: Dependency) -> error: string {
     }
 
     return "";
-}
-
-shaderc_on_complete :: () -> ok: bool {
-    shaderc_path := path_join(VENDORED_PATH, "shaderc",, temp);
-
-    result := run_command(
-        "python3",
-        path_join(shaderc_path, "utils", "git-sync-deps",, temp),
-        working_directory = shaderc_path,
-    );
-
-    return result.exit_code != 0;
 }
 
 #import "Basic";

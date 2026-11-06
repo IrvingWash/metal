@@ -36,3 +36,15 @@ DEPENDENCIES :: Dependency.[
         on_complete = shaderc_on_complete,
     }
 ];
+
+shaderc_on_complete :: () -> ok: bool {
+    shaderc_path := path_join(VENDORED_PATH, "shaderc",, temp);
+
+    result := run_command(
+        "python3",
+        path_join(shaderc_path, "utils", "git-sync-deps",, temp),
+        working_directory = shaderc_path,
+    );
+
+    return result.exit_code != 0;
+}
