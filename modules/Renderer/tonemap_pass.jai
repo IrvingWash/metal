@@ -1,3 +1,5 @@
+#scope_module
+
 Tonemap_Pass :: struct {
     descriptor_pool:       VK.Descriptor_Pool;
     descriptor_set_layout: VK.Descriptor_Set_Layout;

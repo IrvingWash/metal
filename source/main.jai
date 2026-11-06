@@ -182,6 +182,16 @@ render :: () {
             make_world_transform(entity),
         );
     }
+
+    Renderer.draw_line(
+        *game.renderer,
+        {
+            game.entities[0].position,
+            game.entities[1].position,
+            { 0, 1, 0, 1 },
+        },
+    );
+
     error = Renderer.finish_drawing(*game.renderer);
     assert(!error, error);
 }

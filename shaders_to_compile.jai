@@ -35,6 +35,18 @@ SHADERS_TO_COMPILE :: Glsl_Compiler.Shader_Meta_Info.[
         entry_point_name     = "main",
         kind                 = Glsl_Compiler.Shader_Kind.FRAGMENT_SHADER,
     },
+    {
+        absolute_source_path = #run path_join(#filepath, "modules/Renderer/shaders/line.vertex.glsl"),
+        compiled_name        = "line.vertex.spv",
+        entry_point_name     = "main",
+        kind                 = Glsl_Compiler.Shader_Kind.VERTEX_SHADER,
+    },
+    {
+        absolute_source_path = #run path_join(#filepath, "modules/Renderer/shaders/line.fragment.glsl"),
+        compiled_name        = "line.fragment.spv",
+        entry_point_name     = "main",
+        kind                 = Glsl_Compiler.Shader_Kind.FRAGMENT_SHADER,
+    },
 ];
 
 #import "String";
