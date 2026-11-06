@@ -1,16 +1,16 @@
-Model :: struct {
+Model_Accessor :: struct {
     nodes:     [..]Node;
 }
 
 Node :: struct {
     local_transform: Matrix4 = Matrix4_Identity;
 
-    meshes:       [..]Mesh;
+    meshes:       [..]Mesh_Accessor;
     parent_index: Option(u32);
     children_ids: [..]u32;
 }
 
-Mesh :: struct {
+Mesh_Accessor :: struct {
     vertex_start: u32;
     vertex_count: u32;
     index_start:  u32;
@@ -23,7 +23,7 @@ Mesh :: struct {
     material_index: u32;
 }
 
-Texture :: struct {
+Texture_Accessor :: struct {
     image_index:   u32;
     sampler_index: u32;
 }
@@ -62,6 +62,17 @@ Alpha_Mode :: enum u32 #specified {
     OPAQUE :: 0;
     MASK   :: 1;
     BLEND  :: 2;
+}
+
+destroy_model_accessor :: (model_accessor: *Model_Accessor) {
+    for node: model_accessor.nodes {
+        array_free(node.meshes);
+        array_free(node.children_ids);
+    }
+
+    array_free(model_accessor.nodes);
+
+    model_accessor.* = {};
 }
 
 

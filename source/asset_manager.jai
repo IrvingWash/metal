@@ -2,8 +2,8 @@ Asset_Manager :: struct {
     root_path:    string;
     shaders_path: string;
 
-    model_handles_by_path: Table(string, Model_Handle);
-    models:                [..]Renderer.Model;
+    model_accessor_handles_by_path: Table(string, Model_Handle);
+    model_accessors:                [..]Renderer.Model_Accessor;
 }
 
 Model_Handle :: #type,distinct int;
@@ -22,12 +22,15 @@ init_asset_manager :: () -> Asset_Manager {
 }
 
 deinit_asset_manager :: (asset_manager: *Asset_Manager) {
-    for value, key: asset_manager.model_handles_by_path {
+    for value, key: asset_manager.model_accessor_handles_by_path {
         free(key);
     }
-    deinit(*asset_manager.model_handles_by_path);
+    deinit(*asset_manager.model_accessor_handles_by_path);
 
-    array_free(asset_manager.models);
+    for *model_accessor: asset_manager.model_accessors {
+        Renderer.destroy_model_accessor(model_accessor);
+    }
+    array_free(asset_manager.model_accessors);
 
     free(asset_manager.root_path);
     free(asset_manager.shaders_path);
@@ -48,8 +51,8 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
     return "", content;
 }
 
-asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Handle) -> Renderer.Model {
-    return asset_manager.models[handle];
+asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Handle) -> Renderer.Model_Accessor {
+    return asset_manager.model_accessors[handle];
 }
 
 // @Todo: In the future, this will just upload our own binaries.
@@ -62,7 +65,7 @@ asset_manager_upload_model :: (
     normalized_path := get_absolute_path(path,, temp);
 
     { // Check cache
-        found, handle := table_find(*asset_manager.model_handles_by_path, normalized_path);
+        found, handle := table_find(*asset_manager.model_accessor_handles_by_path, normalized_path);
         if found {
             return handle;
         }
@@ -72,7 +75,7 @@ asset_manager_upload_model :: (
 
     log("Asset Manager: Uploading model at %", normalized_path);
 
-    renderer_model: Renderer.Model;
+    model_accessor: Renderer.Model_Accessor;
 
     maybe_model_dto: Option(Model_Dto);
 
@@ -204,18 +207,18 @@ asset_manager_upload_model :: (
         array_add(*uploaded_renderer_material_ids, ..material_ids);
     }
 
-    renderer_meshes: [..]Renderer.Mesh;
-    renderer_meshes.allocator = temp;
+    mesh_accessors: [..]Renderer.Mesh_Accessor;
+    mesh_accessors.allocator = temp;
     for mesh_dto: model_dto.meshes {
-        renderer_mesh: Renderer.Mesh;
-        defer array_add(*renderer_meshes, renderer_mesh);
+        mesh_accessor: Renderer.Mesh_Accessor;
+        defer array_add(*mesh_accessors, mesh_accessor);
 
-        renderer_mesh.min    = mesh_dto.min;
-        renderer_mesh.max    = mesh_dto.max;
-        renderer_mesh.center = (renderer_mesh.min + renderer_mesh.max) / 2;
+        mesh_accessor.min    = mesh_dto.min;
+        mesh_accessor.max    = mesh_dto.max;
+        mesh_accessor.center = (mesh_accessor.min + mesh_accessor.max) / 2;
 
         if mesh_dto.material_index.kind == .SOME {
-            renderer_mesh.material_index = uploaded_renderer_material_ids[mesh_dto.material_index.some];
+            mesh_accessor.material_index = uploaded_renderer_material_ids[mesh_dto.material_index.some];
         }
 
         if mesh_dto.indices.count > 0 {
@@ -225,8 +228,8 @@ asset_manager_upload_model :: (
             );
             assert(!error, error);
 
-            renderer_mesh.index_start = start;
-            renderer_mesh.index_count = count;
+            mesh_accessor.index_start = start;
+            mesh_accessor.index_count = count;
         }
 
         if mesh_dto.vertices.count > 0 {
@@ -249,8 +252,8 @@ asset_manager_upload_model :: (
             );
             assert(!error, error);
 
-            renderer_mesh.vertex_start = start;
-            renderer_mesh.vertex_count = count;
+            mesh_accessor.vertex_start = start;
+            mesh_accessor.vertex_count = count;
         }
     }
 
@@ -262,7 +265,7 @@ asset_manager_upload_model :: (
         if node_dto.first_mesh_index.kind == .SOME && node_dto.mesh_count > 0 {
             first := node_dto.first_mesh_index.some;
             for first .. first + node_dto.mesh_count - 1 {
-                array_add(*renderer_node.meshes, renderer_meshes[it]);
+                array_add(*renderer_node.meshes, mesh_accessors[it]);
             }
         }
 
@@ -274,16 +277,16 @@ asset_manager_upload_model :: (
         );
 
         array_add(
-            *renderer_model.nodes,
+            *model_accessor.nodes,
             renderer_node,
         );
     }
 
-    array_add(*asset_manager.models, renderer_model);
+    array_add(*asset_manager.model_accessors, model_accessor);
 
-    handle := cast(Model_Handle, asset_manager.models.count - 1);
+    handle := cast(Model_Handle, asset_manager.model_accessors.count - 1);
 
-    table_add(*asset_manager.model_handles_by_path, normalized_path, handle);
+    table_add(*asset_manager.model_accessor_handles_by_path, normalized_path, handle);
 
     return handle;
 }
@@ -442,7 +445,10 @@ get_or_upload_texture :: (
         if !found {
             error, texture_ids := Renderer.upload_textures(
                 renderer,
-                .[{ image_index = image_id, sampler_index = sampler_id }],,
+                .[{
+                    image_index = image_id,
+                    sampler_index = sampler_id,
+                }],,
                 temp
             );
             assert(!error, error);

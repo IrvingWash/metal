@@ -143,11 +143,11 @@ reset_model_pass :: (model_pass: *Model_Pass, camera_world_position: Vector3) {
 
 add_model_to_model_pass :: (
     model_pass:      *Model_Pass,
-    model:           Model,
+    model_accessor:  Model_Accessor,
     materials_info:  Materials_Info,
     world_transform: Matrix4,
 ) {
-    for node: model.nodes {
+    for node: model_accessor.nodes {
         if node.parent_index.kind != .NONE {
             continue;
         }
@@ -156,7 +156,7 @@ add_model_to_model_pass :: (
             materials_info,
             model_pass.ordered_draw_buckets,
             node,
-            model.nodes,
+            model_accessor.nodes,
             world_transform,
             model_pass.camera_world_position,
         );

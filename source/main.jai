@@ -215,6 +215,8 @@ init :: () {
 }
 
 deinit :: () {
+    array_free(game.entities);
+
     #if DEVELOPER {
         deinit_editor();
     }
