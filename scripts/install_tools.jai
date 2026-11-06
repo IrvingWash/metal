@@ -1,3 +1,13 @@
+#module_parameters()(AT_COMPILE_TIME := true);
+
+install_tools :: () {
+    install_git_hooks();
+}
+
+
+
+#scope_file
+
 #import "Basic";
 #import "Compiler";
 #import "File_Utilities";
@@ -16,8 +26,6 @@ HOOKS_DESTINATION_ABSOLUTE_PATH :: #run path_join(#filepath, "..", ".git/hooks",
     });
 
     install_git_hooks();
-
-    reset_temporary_storage();
 }
 
 install_git_hooks :: () {
