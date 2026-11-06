@@ -179,8 +179,9 @@ asset_manager_upload_model :: (
         renderer_mesh: Renderer.Mesh;
         defer array_add(*renderer_meshes, renderer_mesh);
 
-        renderer_mesh.min = mesh_dto.min;
-        renderer_mesh.max = mesh_dto.max;
+        renderer_mesh.min    = mesh_dto.min;
+        renderer_mesh.max    = mesh_dto.max;
+        renderer_mesh.center = (renderer_mesh.min + renderer_mesh.max) / 2;
 
         if mesh_dto.material_index.kind == .SOME {
             renderer_mesh.material_index = uploaded_renderer_material_ids[mesh_dto.material_index.some];
