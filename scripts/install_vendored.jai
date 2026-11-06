@@ -86,6 +86,15 @@ generate_modules :: () -> error: string {
 }
 
 clone_dependency :: (dep: Dependency) -> error: string {
+    resulting_path := path_join(VENDORED_PATH, dep.name,, temp);
+
+    file, ok := file_open(resulting_path);
+    defer file_close(*file);
+    if is_valid(file) && ok {
+        log("% already exists, skipping", resulting_path);
+        return "";
+    }
+
     result := run_command(
         "git",
         "clone",
@@ -93,7 +102,7 @@ clone_dependency :: (dep: Dependency) -> error: string {
         "--depth", "1",
         "--branch", dep.pin,
         dep.git_url,
-        path_join(VENDORED_PATH, dep.name,, temp),
+        resulting_path,
     );
     if result.exit_code != 0 {
         return tprint("Failed to clone %", dep.name);
@@ -113,3 +122,4 @@ clone_dependency :: (dep: Dependency) -> error: string {
 #import "Process";
 #import "Compiler";
 #import "String";
+#import "File";

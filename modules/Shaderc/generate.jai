@@ -82,10 +82,6 @@ build :: () -> error: string {
    } else {
        #assert false, "Unsupported OS";
    }
-    ok := delete_directory(CMAKE_ARTEFACTS_PATH);
-    if !ok {
-        return tprint("Failed to delete artefacts directory at '%'", CMAKE_ARTEFACTS_PATH);
-    }
 
     return "";
 }

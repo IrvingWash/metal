@@ -111,9 +111,5 @@ build :: () -> error: string {
         }
     }
 
-    delete_directory(tprint("%/include", absolute_install_path));
-    delete_directory(tprint("%/lib/cmake", absolute_install_path));
-    delete_directory(tprint("%/lib/pkgconfig", absolute_install_path));
-
     return "";
 }
