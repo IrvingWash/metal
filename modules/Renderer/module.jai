@@ -404,6 +404,7 @@ deinit :: (renderer: *Renderer) {
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     renderer.scene_info.scene_data.camera_world_position = camera.position;
     renderer.tonemap_pass.exposure = camera.exposure;
+    renderer.model_pass.camera_world_position = camera.position;
 
     reset_model_pass(*renderer.model_pass);
 
@@ -591,7 +592,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // =============================================================================
     // Writing model passes
     // =============================================================================
-    write_model_draw_passes(
+    prepare_model_draw_pass(
         *renderer.model_pass,
         frame_resources_index,
         renderer.allocator,
@@ -712,7 +713,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         VK.cmd_set_scissor(frame_resources.command_buffer, VK.Rect_2D.[scissor]);
     }
 
-    draw_model_passes(
+    do_model_pass(
         *renderer.model_pass,
         renderer.geometry_info,
         renderer.materials_info,

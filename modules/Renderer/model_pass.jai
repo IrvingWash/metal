@@ -3,14 +3,16 @@
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
 
-    draw_buckets: Model_Draw_Buckets;
-    draw_passes:  [6]Model_Draw_Pass;
+    draw_buckets:        Model_Draw_Buckets;
+    ordered_draw_passes: [6]Model_Draw_Pass;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     instance_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*Instance;
 
     indirect_draw_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     indirect_draw_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*VK.Draw_Indexed_Indirect_Command;
+
+    camera_world_position: Vector3;
 }
 
 create_model_pass :: (
@@ -133,7 +135,7 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
 }
 
 reset_model_pass :: (model_pass: *Model_Pass) {
-    model_pass.draw_passes = .[{}, {}, {}, {}, {}, {}];
+    model_pass.ordered_draw_passes = .[{}, {}, {}, {}, {}, {}];
     reset_model_draw_buckets(*model_pass.draw_buckets);
 }
 
@@ -154,26 +156,27 @@ add_model_to_model_pass :: (
             node,
             model.nodes,
             world_transform,
+            model_pass.camera_world_position,
         );
     }
 }
 
-write_model_draw_passes :: (
+prepare_model_draw_pass :: (
     model_pass:  *Model_Pass,
     frame_index: u64,
     allocator:   VMA.Allocator,
 ) {
-    model_pass.draw_passes = into_draw_passes(*model_pass.draw_buckets, model_pass.pipeline_info);
+    model_pass.ordered_draw_passes = buckets_into_ordered_draw_passes(*model_pass.draw_buckets, model_pass.pipeline_info);
     { // Check
         count: int;
-        for draw_pass: model_pass.draw_passes {
+        for draw_pass: model_pass.ordered_draw_passes {
             count += draw_pass.bucket.count;
         }
         assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
     }
 
     cursor: u32;
-    for pass: model_pass.draw_passes {
+    for pass: model_pass.ordered_draw_passes {
         for entry: pass.bucket {
             command := entry.command;
             command.first_instance = cursor;
@@ -199,7 +202,7 @@ write_model_draw_passes :: (
     );
 }
 
-draw_model_passes :: (
+do_model_pass :: (
     model_pass:                 *Model_Pass,
     geometry_info:              Geometry_Info,
     materials_info:             Materials_Info,
@@ -251,7 +254,7 @@ draw_model_passes :: (
     { // Draw
         offset: int;
         bound_pipeline: VK.Pipeline;
-        for draw_pass: model_pass.draw_passes {
+        for draw_pass: model_pass.ordered_draw_passes {
             defer offset += draw_pass.bucket.count;
 
             if draw_pass.bucket.count == 0 {
@@ -316,8 +319,9 @@ Model_Draw_Buckets :: struct {
 }
 
 Model_Draw_Bucket_Entry :: struct {
-    command:  VK.Draw_Indexed_Indirect_Command;
-    instance: Instance;
+    command:                   VK.Draw_Indexed_Indirect_Command;
+    instance:                  Instance;
+    sorting_key_within_bucket: float;
 }
 
 Model_Draw_Pass :: struct {
@@ -329,7 +333,7 @@ Model_Draw_Pass :: struct {
 
 init_model_draw_buckets :: () -> Model_Draw_Buckets {
     draw_buckets: Model_Draw_Buckets;
-    for bucket: into_array(*draw_buckets) {
+    for bucket: buckets_into_array(*draw_buckets) {
         array_reserve(bucket, MAX_DRAW_COUNT);
     }
 
@@ -337,11 +341,12 @@ init_model_draw_buckets :: () -> Model_Draw_Buckets {
 }
 
 add_model_node_to_draw_bucket :: (
-    materials_info: Materials_Info,
-    draw_buckets: *Model_Draw_Buckets,
-    node: Node,
-    nodes: []Node,
-    parent_transform: Matrix4,
+    materials_info:        Materials_Info,
+    draw_buckets:          *Model_Draw_Buckets,
+    node:                  Node,
+    nodes:                 []Node,
+    parent_transform:      Matrix4,
+    camera_world_position: Vector3,
 ) {
     world_transform := parent_transform * node.local_transform;
 
@@ -355,22 +360,26 @@ add_model_node_to_draw_bucket :: (
 
                 bucket := get_model_draw_bucket_by_material(draw_buckets, material);
 
-                array_add(
-                    bucket,
-                    {
-                        command = {
-                            index_count    = mesh.index_count,
-                            instance_count = 1, // @Todo
-                            first_index    = mesh.index_start,
-                            vertex_offset  = cast(s32, mesh.vertex_start),
-                        },
-                        instance = {
-                            world_transform                   = world_transform,
-                            inverse_transpose_world_transform = make_matrix3(inverse_transpose_world_transform),
-                            material_index                    = mesh.material_index,
-                        },
+                entry := Model_Draw_Bucket_Entry.{
+                    command = {
+                        index_count    = mesh.index_count,
+                        instance_count = 1, // @Todo
+                        first_index    = mesh.index_start,
+                        vertex_offset  = cast(s32, mesh.vertex_start),
                     },
-                );
+                    instance = {
+                        world_transform                   = world_transform,
+                        inverse_transpose_world_transform = make_matrix3(inverse_transpose_world_transform),
+                        material_index                    = mesh.material_index,
+                    },
+                };
+                if material.alpha_mode == .BLEND {
+                    center_in_world_space := (world_transform * make_vector4(mesh.center, 1)).xyz;
+
+                    entry.sorting_key_within_bucket = length_squared(center_in_world_space - camera_world_position);
+                }
+
+                array_add(bucket, entry);
             }
         }
     }
@@ -384,6 +393,7 @@ add_model_node_to_draw_bucket :: (
             child_node,
             nodes,
             world_transform,
+            camera_world_position,
         );
     }
 }
@@ -413,24 +423,20 @@ get_model_draw_bucket_by_material :: (draw_buckets: *Model_Draw_Buckets, materia
 }
 
 reset_model_draw_buckets :: (draw_buckets: *Model_Draw_Buckets) {
-    for bucket: into_array(draw_buckets) {
+    for bucket: buckets_into_array(draw_buckets) {
         array_reset_keeping_memory(bucket);
     }
 }
 
 destroy_model_draw_buckets :: (draw_buckets: *Model_Draw_Buckets) {
-    for bucket: into_array(draw_buckets) {
+    for bucket: buckets_into_array(draw_buckets) {
         array_free(bucket.*);
     }
 
     draw_buckets.* = {};
 }
 
-
-
-#scope_file
-
-into_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Pass {
+buckets_into_ordered_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Pass {
     #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
 
     return .[
@@ -473,7 +479,7 @@ into_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pipeline_info: Pbr_Pipel
     ];
 }
 
-into_array :: (draw_buckets: *Model_Draw_Buckets) -> [6]*[..]Model_Draw_Bucket_Entry {
+buckets_into_array :: (draw_buckets: *Model_Draw_Buckets) -> [6]*[..]Model_Draw_Bucket_Entry {
     #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
 
     return .[

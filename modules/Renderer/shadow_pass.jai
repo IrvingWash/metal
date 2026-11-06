@@ -334,12 +334,12 @@ do_shadow_pass :: (
     { // Draw
         offset: int;
         bound_pipeline: VK.Pipeline;
-        for model_draw_pass: model_pass.draw_passes {
-            defer offset += model_draw_pass.bucket.count;
-
+        for model_draw_pass: model_pass.ordered_draw_passes {
             if model_draw_pass.bucket.count == 0 {
                 continue;
             }
+
+            defer offset += model_draw_pass.bucket.count;
 
             if #complete model_draw_pass.alpha_mode == {
                 case .BLEND;
