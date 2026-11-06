@@ -327,7 +327,13 @@ init :: (
             renderer;
     }
 
-    error, renderer.primitive_pass = create_primitive_pass();
+    error, renderer.primitive_pass = create_primitive_pass(
+        renderer.device,
+        renderer.allocator,
+        get_compiled_shader,
+        color_attachment_format = renderer.color_hdr_target.image_info.format,
+        depth_attachment_format = renderer.depth_image_info.format,
+    );
     if error {
         return
             error,
@@ -356,7 +362,11 @@ deinit :: (renderer: *Renderer) {
 
     destroy_tonemap_pass(*renderer.tonemap_pass, renderer.device);
 
-    destroy_primitive_pass(*renderer.primitive_pass);
+    destroy_primitive_pass(
+        *renderer.primitive_pass,
+        renderer.device,
+        renderer.allocator,
+    );
 
     destroy_shadow_pass(
         *renderer.shadow_pass,
@@ -416,6 +426,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     renderer.tonemap_pass.exposure = camera.exposure;
 
     reset_model_pass(*renderer.model_pass, camera.position);
+    reset_primitive_pass(*renderer.primitive_pass);
 
     if renderer.swapchain_info.should_recreate {
         VK.device_wait_idle(renderer.device);
@@ -527,6 +538,10 @@ draw_model :: (
         renderer.materials_info,
         world_transform,
     );
+}
+
+draw_line :: (renderer: *Renderer, line: Line_Primitive) {
+    add_line_to_primitive_pass(*renderer.primitive_pass, line);
 }
 
 finish_drawing :: (renderer: *Renderer) -> error: string {
@@ -723,6 +738,14 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         renderer.scene_info.descriptor_sets[frame_resources_index],
         renderer.shadow_pass.descriptor_sets[frame_resources_index],
         renderer.transforms,
+    );
+
+    do_primitive_pass(
+        *renderer.primitive_pass,
+        frame_resources_index,
+        renderer.transforms,
+        frame_resources.command_buffer,
+        renderer.allocator,
     );
 
     VK.cmd_end_rendering(frame_resources.command_buffer);
@@ -1502,9 +1525,9 @@ DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
 ];
 
-HAVE_MORE_DEBUG :: DEBUG && true;
-
 #if DEBUG {
+    HAVE_MORE_DEBUG :: true;
+
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
         VK.Extension_Names.DEBUG_UTILS,
         VK.Extension_Names.LAYER_SETTINGS,

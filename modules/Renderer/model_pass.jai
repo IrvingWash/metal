@@ -13,7 +13,7 @@ Model_Pass :: struct {
     indirect_draw_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     indirect_draw_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*VK.Draw_Indexed_Indirect_Command;
 
-    camera_world_position: Vector3;
+    camera_world_position: Vector3; // For sorting
 }
 
 create_model_pass :: (
@@ -53,7 +53,7 @@ create_model_pass :: (
             device,
             allocator,
             usage = .INDIRECT_BUFFER,
-            MAX_INDIRECT_BUFFER_SIZE,
+            MAX_INDIRECT_BUFFER_BYTE_SIZE,
             memory_usage = .AUTO,
             mappable = true,
         );
@@ -79,13 +79,13 @@ create_model_pass :: (
             device,
             allocator,
             usage = .STORAGE_BUFFER | .SHADER_DEVICE_ADDRESS,
-            MAX_INSTANCE_BUFFER_SIZE,
+            MAX_INSTANCE_BUFFER_BYTE_SIZE,
             memory_usage = .AUTO,
             mappable = true,
         );
         if error {
             return
-                tprint("Failed to create instance buffer for frame resources: %", error),
+                tprint("Failed to create instance buffer for model pass: %", error),
                 model_pass;
         }
 
@@ -305,9 +305,9 @@ do_model_pass :: (
 
 #scope_file
 
-MAX_DRAW_COUNT           :: 4096;
-MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
-MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
+MAX_DRAW_COUNT                :: 4096;
+MAX_INDIRECT_BUFFER_BYTE_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
+MAX_INSTANCE_BUFFER_BYTE_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
 Model_Pass_Specialization_Info :: struct @Gpu {
     alpha_mode:                            Alpha_Mode;
