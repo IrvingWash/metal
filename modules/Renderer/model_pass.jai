@@ -1,9 +1,11 @@
 #scope_module
 
+// A quirk! We put BLEND-CULL.NONE and BLEND-CULL.BACK into one bucket for sorting. This is handled in the shader (enforced by specialization info.
+
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
 
-    ordered_draw_buckets: [6]Model_Draw_Bucket;
+    ordered_draw_buckets: [5]Model_Draw_Bucket;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     instance_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*Instance;
@@ -126,7 +128,7 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
         );
     }
 
-    destroy_model_draw_buckets(*model_pass.ordered_draw_buckets);
+    destroy_draw_buckets(model_pass.ordered_draw_buckets);
 
     destroy_pbr_pipeline(device, *model_pass.pipeline_info);
 
@@ -136,7 +138,7 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
 reset_model_pass :: (model_pass: *Model_Pass, camera_world_position: Vector3) {
     model_pass.camera_world_position = camera_world_position;
 
-    reset_draw_buckets_entries_keeping_order(*model_pass.ordered_draw_buckets);
+    reset_draw_buckets_entries_keeping_order(model_pass.ordered_draw_buckets);
 }
 
 add_model_to_model_pass :: (
@@ -152,7 +154,7 @@ add_model_to_model_pass :: (
 
         add_model_node_to_draw_bucket(
             materials_info,
-            *model_pass.ordered_draw_buckets,
+            model_pass.ordered_draw_buckets,
             node,
             model.nodes,
             world_transform,
@@ -161,7 +163,7 @@ add_model_to_model_pass :: (
     }
 }
 
-prepare_model_draw_pass :: (
+prepare_model_pass :: (
     model_pass:  *Model_Pass,
     frame_index: u64,
     allocator:   VMA.Allocator,
@@ -172,6 +174,27 @@ prepare_model_draw_pass :: (
             count += draw_bucket.entries.count;
         }
         assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
+    }
+
+    { // Sort entries in the blend bucket
+        blend_bucket := get_draw_bucket_by_material(
+            model_pass.ordered_draw_buckets,
+            { alpha_mode = .BLEND },
+        );
+        blend_bucket.entries.data = quick_sort(
+            blend_bucket.entries,
+            (a: Model_Draw_Bucket_Entry, b: Model_Draw_Bucket_Entry) -> int {
+                if b.sorting_key_within_bucket > a.sorting_key_within_bucket {
+                    return 1;
+                }
+
+                if a.sorting_key_within_bucket > b.sorting_key_within_bucket {
+                    return -1;
+                }
+
+                return 0;
+            }
+        ).data;
     }
 
     cursor: u32;
@@ -286,6 +309,11 @@ MAX_DRAW_COUNT           :: 4096;
 MAX_INDIRECT_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
 MAX_INSTANCE_BUFFER_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
 
+Model_Pass_Specialization_Info :: struct @Gpu {
+    alpha_mode:                            Alpha_Mode;
+    discard_blend_single_sided_back_faces: u32;
+}
+
 Instance :: struct @Gpu {
     world_transform:                   Matrix4;
     inverse_transpose_world_transform: Matrix3;
@@ -301,10 +329,10 @@ Push_Constants :: struct @Gpu {
 }
 
 Pbr_Pipeline_Info :: struct {
-    layout:          VK.Pipeline_Layout;
-    opaque_pipeline: VK.Pipeline;
-    blend_pipeline:  VK.Pipeline;
-    mask_pipeline:   VK.Pipeline;
+    layout:                       VK.Pipeline_Layout;
+    opaque_pipeline:              VK.Pipeline;
+    mask_pipeline:                VK.Pipeline;
+    cull_agnostic_blend_pipeline: VK.Pipeline;
 }
 
 Model_Draw_Bucket :: struct {
@@ -320,8 +348,8 @@ Model_Draw_Bucket_Entry :: struct {
     sorting_key_within_bucket: float;
 }
 
-init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Bucket {
-    draw_buckets: [6]Model_Draw_Bucket;
+init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [5]Model_Draw_Bucket {
+    draw_buckets: [5]Model_Draw_Bucket;
     for *bucket: draw_buckets {
         array_reserve(*bucket.entries, MAX_DRAW_COUNT);
     }
@@ -329,28 +357,30 @@ init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw
     draw_buckets[0].cull_mode  = .BACK;
     draw_buckets[0].alpha_mode = .OPAQUE;
     draw_buckets[0].pipeline = pipeline_info.opaque_pipeline;
+
     draw_buckets[1].cull_mode  = .NONE;
     draw_buckets[1].alpha_mode = .OPAQUE;
     draw_buckets[1].pipeline = pipeline_info.opaque_pipeline;
+
     draw_buckets[2].cull_mode  = .BACK;
     draw_buckets[2].alpha_mode = .MASK;
     draw_buckets[2].pipeline = pipeline_info.mask_pipeline;
+
     draw_buckets[3].cull_mode  = .NONE;
     draw_buckets[3].alpha_mode = .MASK;
     draw_buckets[3].pipeline = pipeline_info.mask_pipeline;
-    draw_buckets[4].cull_mode  = .BACK;
+
+    // Contains both double sided and one sided
+    draw_buckets[4].cull_mode  = .NONE;
     draw_buckets[4].alpha_mode = .BLEND;
-    draw_buckets[4].pipeline = pipeline_info.blend_pipeline;
-    draw_buckets[5].cull_mode  = .NONE;
-    draw_buckets[5].alpha_mode = .BLEND;
-    draw_buckets[5].pipeline = pipeline_info.blend_pipeline;
+    draw_buckets[4].pipeline = pipeline_info.cull_agnostic_blend_pipeline;
 
     return draw_buckets;
 }
 
 add_model_node_to_draw_bucket :: (
     materials_info:        Materials_Info,
-    draw_buckets:          *[6]Model_Draw_Bucket,
+    draw_buckets:          []Model_Draw_Bucket,
     node:                  Node,
     nodes:                 []Node,
     parent_transform:      Matrix4,
@@ -366,7 +396,7 @@ add_model_node_to_draw_bucket :: (
             for mesh: node.meshes {
                 material := materials_info.materials[mesh.material_index];
 
-                bucket := get_model_draw_bucket_by_material(draw_buckets, material);
+                bucket := get_draw_bucket_by_material(draw_buckets, material);
 
                 entry := Model_Draw_Bucket_Entry.{
                     command = {
@@ -381,7 +411,7 @@ add_model_node_to_draw_bucket :: (
                         material_index                    = mesh.material_index,
                     },
                 };
-                if material.alpha_mode == .BLEND {
+                if bucket.alpha_mode == .BLEND {
                     center_in_world_space := (world_transform * make_vector4(mesh.center, 1)).xyz;
 
                     entry.sorting_key_within_bucket = length_squared(center_in_world_space - camera_world_position);
@@ -406,13 +436,20 @@ add_model_node_to_draw_bucket :: (
     }
 }
 
-get_model_draw_bucket_by_material :: (draw_buckets: *[6]Model_Draw_Bucket, material: Material) -> *Model_Draw_Bucket {
+get_draw_bucket_by_material :: (draw_buckets: []Model_Draw_Bucket, material: Material) -> *Model_Draw_Bucket {
     material_cull_mode: VK.Cull_Mode_Flags = ifx material.double_sided
         then .NONE
         else .BACK;
 
-    for *draw_bucket: draw_buckets.* {
-        if draw_bucket.alpha_mode == material.alpha_mode && draw_bucket.cull_mode == material_cull_mode {
+    for *draw_bucket: draw_buckets {
+        if draw_bucket.alpha_mode == .BLEND && material.alpha_mode == .BLEND {
+            return draw_bucket;
+        }
+
+        if (
+            draw_bucket.alpha_mode == material.alpha_mode
+            && draw_bucket.cull_mode == material_cull_mode
+        ) {
             return draw_bucket;
         }
     }
@@ -421,14 +458,14 @@ get_model_draw_bucket_by_material :: (draw_buckets: *[6]Model_Draw_Bucket, mater
     return null;
 }
 
-reset_draw_buckets_entries_keeping_order :: (draw_buckets: *[6]Model_Draw_Bucket) {
-    for *bucket: draw_buckets.* {
+reset_draw_buckets_entries_keeping_order :: (draw_buckets: []Model_Draw_Bucket) {
+    for *bucket: draw_buckets {
         array_reset_keeping_memory(*bucket.entries);
     }
 }
 
-destroy_model_draw_buckets :: (draw_buckets: *[6]Model_Draw_Bucket) {
-    for *bucket: draw_buckets.* {
+destroy_draw_buckets :: (draw_buckets: []Model_Draw_Bucket) {
+    for *bucket: draw_buckets {
         array_free(bucket.entries);
     }
 }
@@ -480,19 +517,26 @@ create_pbr_pipeline :: (
     }
     defer VK.destroy_shader_module(device, fragment_shader);
 
-    specialization_map_entry := VK.Specialization_Map_Entry.{
-        constant_id = 0, // As in the shader
-        offset      = 0,
-        size        = size_of(Alpha_Mode),
-    };
+    model_pass_specialization_info: Model_Pass_Specialization_Info;
 
-    alpha_mode := Alpha_Mode.OPAQUE;
+    specialization_map_entries := VK.Specialization_Map_Entry.[
+        {
+            constant_id = 0, // As in the shader
+            offset      = 0,
+            size        = size_of(type_of(Model_Pass_Specialization_Info.alpha_mode)),
+        },
+        {
+            constant_id = 1, // As in the shader
+            offset      = cast(u32, offset_of(Model_Pass_Specialization_Info, "discard_blend_single_sided_back_faces")),
+            size        = size_of(type_of(Model_Pass_Specialization_Info.discard_blend_single_sided_back_faces)),
+        },
+    ];
 
     specialization_info := VK.Specialization_Info.{
-        map_entry_count = 1,
-        p_map_entries   = *specialization_map_entry,
-        data_size       = size_of(Alpha_Mode),
-        p_data          = *alpha_mode,
+        map_entry_count = specialization_map_entries.count,
+        p_map_entries   = specialization_map_entries.data,
+        data_size       = size_of(Model_Pass_Specialization_Info),
+        p_data          = *model_pass_specialization_info,
     };
 
     shader_stage_create_infos := VK.Pipeline_Shader_Stage_Create_Info.[
@@ -590,7 +634,7 @@ create_pbr_pipeline :: (
     };
 
     { // Opaque
-        alpha_mode = .OPAQUE;
+        model_pass_specialization_info.alpha_mode = .OPAQUE;
         result:, pipeline_info.opaque_pipeline = VK.create_graphics_pipeline(
             device,
             null,
@@ -603,7 +647,7 @@ create_pbr_pipeline :: (
         }
     }
     { // Mask
-        alpha_mode = .MASK;
+        model_pass_specialization_info.alpha_mode = .MASK;
         result:, pipeline_info.mask_pipeline = VK.create_graphics_pipeline(
             device,
             null,
@@ -616,10 +660,11 @@ create_pbr_pipeline :: (
         }
     }
     { // Blend
-        alpha_mode = .BLEND;
+        model_pass_specialization_info.alpha_mode                            = .BLEND;
+        model_pass_specialization_info.discard_blend_single_sided_back_faces = xx true;
         color_blend_attachment_state.blend_enable = VK.TRUE;
         depth_stencil_state_create_info.depth_write_enable = VK.FALSE;
-        result:, pipeline_info.blend_pipeline = VK.create_graphics_pipeline(
+        result:, pipeline_info.cull_agnostic_blend_pipeline = VK.create_graphics_pipeline(
             device,
             null,
             *pipeline_create_info,
@@ -637,8 +682,19 @@ create_pbr_pipeline :: (
 destroy_pbr_pipeline :: (device: VK.Device, pipeline_info: *Pbr_Pipeline_Info) {
     VK.destroy_pipeline(device, pipeline_info.opaque_pipeline);
     VK.destroy_pipeline(device, pipeline_info.mask_pipeline);
-    VK.destroy_pipeline(device, pipeline_info.blend_pipeline);
+    VK.destroy_pipeline(device, pipeline_info.cull_agnostic_blend_pipeline);
     VK.destroy_pipeline_layout(device, pipeline_info.layout);
 
     pipeline_info.* = {};
 }
+
+offset_of :: ($T: Type, $member: string) -> int {
+    for type_info(T).members {
+        if it.name == member return it.offset_in_bytes;
+    }
+
+    assert(false, "Type '%' does not have member '%'", T, member);
+    return -1;
+}
+
+#import "Sort";

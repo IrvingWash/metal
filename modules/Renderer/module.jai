@@ -591,7 +591,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // =============================================================================
     // Writing model passes
     // =============================================================================
-    prepare_model_draw_pass(
+    prepare_model_pass(
         *renderer.model_pass,
         frame_resources_index,
         renderer.allocator,
