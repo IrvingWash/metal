@@ -94,6 +94,10 @@ do_primitive_pass :: (
     command_buffer: VK.Command_Buffer,
     allocator:      VMA.Allocator,
 ) {
+    if primitive_pass.lines.count == 0 {
+        return;
+    }
+
     assert(primitive_pass.lines.count <= MAX_LINE_COUNT, "MAX_LINE_COUNT overflow");
 
     { // Push constants
