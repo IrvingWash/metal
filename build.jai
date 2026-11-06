@@ -31,7 +31,7 @@ DEFAULT_PLUGINS_TO_CREATE :: Plugin_To_Create.[
 
 EXECUTABLE_NAME :: "metal";
 
-BUILD_ENTRY_FILE :: #run path_join(#filepath, "source", "main.jai");
+BUILD_ENTRY_FILE :: #run tprint("%source/main.jai", #filepath);
 
 COMPILED_SHADERS_ROOT_DIR_NAME :: "shaders";
 

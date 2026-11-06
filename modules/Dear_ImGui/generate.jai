@@ -104,7 +104,7 @@ build :: () -> error: string {
         );
     }
 
-    #if OS_IS_UNIX {
+    #if OS_IS_UNIX || OS == .WINDOWS {
         ok = build_cpp_static_lib(
             path_join(OUTPUT_PATH, "libimgui"),
             ..imgui_src_files,

@@ -52,7 +52,7 @@ build :: () -> error: string {
                 "-DSDL_STATIC=ON",
                 "-DSDL_SHARED=OFF",
             ];
-        } else if OS == .WINDOWS {
+        } else #if OS == .WINDOWS {
             config_command := string.[
                 "cmake",
                 "-S", absolute_sdl_path,

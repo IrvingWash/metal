@@ -701,6 +701,8 @@ show_demo_window :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui1
     libimgui :: #library,no_dll "./LINUX/libimgui";
 } else #if OS == .MACOS {
     libimgui :: #library,no_dll "./MACOS/libimgui";
+} else #if OS == .WINDOWS {
+    libimgui :: #library,no_dll "./WINDOWS/libimgui";
 }
 
 
