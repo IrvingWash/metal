@@ -213,6 +213,7 @@ do_shadow_pass :: (
 
     shadow_pass.pointers[frame_index].* = Shadow_Pass_Data.{
         view_projection_transform = view_projection_transform,
+        radius                    = DIRECTIONAL_LIGHT_RADIUS,
     };
     VMA.flush_allocation(
         allocator,
@@ -334,14 +335,14 @@ do_shadow_pass :: (
     { // Draw
         offset: int;
         bound_pipeline: VK.Pipeline;
-        for model_draw_pass: model_pass.ordered_draw_passes {
-            if model_draw_pass.bucket.count == 0 {
+        for model_draw_bucket: model_pass.ordered_draw_buckets {
+            if model_draw_bucket.entries.count == 0 {
                 continue;
             }
 
-            defer offset += model_draw_pass.bucket.count;
+            defer offset += model_draw_bucket.entries.count;
 
-            if #complete model_draw_pass.alpha_mode == {
+            if #complete model_draw_bucket.alpha_mode == {
                 case .BLEND;
                     continue;
                 case .OPAQUE;
@@ -356,13 +357,13 @@ do_shadow_pass :: (
                     }
             }
 
-            VK.cmd_set_cull_mode(command_buffer, model_draw_pass.cull_mode);
+            VK.cmd_set_cull_mode(command_buffer, model_draw_bucket.cull_mode);
 
             VK.cmd_draw_indexed_indirect(
                 command_buffer,
                 model_pass.indirect_draw_buffer_infos[frame_index].buffer,
                 offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
-                draw_count = cast(u32, model_draw_pass.bucket.count),
+                draw_count = cast(u32, model_draw_bucket.entries.count),
                 stride     = size_of(VK.Draw_Indexed_Indirect_Command),
             );
         }
@@ -406,7 +407,7 @@ DEFAULT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
 
 Shadow_Pass_Data :: struct @Gpu {
     view_projection_transform: Matrix4;
-    radius:                    float = 50;
+    radius:                    float = DIRECTIONAL_LIGHT_RADIUS;
 }
 
 Shadow_Pass_Pipeline_Info :: struct {

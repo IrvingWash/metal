@@ -3,8 +3,7 @@
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
 
-    draw_buckets:        Model_Draw_Buckets;
-    ordered_draw_passes: [6]Model_Draw_Pass;
+    ordered_draw_buckets: [6]Model_Draw_Bucket;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     instance_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*Instance;
@@ -44,7 +43,7 @@ create_model_pass :: (
             model_pass;
     }
 
-    model_pass.draw_buckets = init_model_draw_buckets();
+    model_pass.ordered_draw_buckets = init_ordered_draw_buckets(model_pass.pipeline_info);
 
     // Indirect draw buffer
     for *indirect_draw_buffer_info: model_pass.indirect_draw_buffer_infos {
@@ -127,16 +126,17 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
         );
     }
 
-    destroy_model_draw_buckets(*model_pass.draw_buckets);
+    destroy_model_draw_buckets(*model_pass.ordered_draw_buckets);
 
     destroy_pbr_pipeline(device, *model_pass.pipeline_info);
 
     model_pass.* = {};
 }
 
-reset_model_pass :: (model_pass: *Model_Pass) {
-    model_pass.ordered_draw_passes = .[{}, {}, {}, {}, {}, {}];
-    reset_model_draw_buckets(*model_pass.draw_buckets);
+reset_model_pass :: (model_pass: *Model_Pass, camera_world_position: Vector3) {
+    model_pass.camera_world_position = camera_world_position;
+
+    reset_draw_buckets_entries_keeping_order(*model_pass.ordered_draw_buckets);
 }
 
 add_model_to_model_pass :: (
@@ -152,7 +152,7 @@ add_model_to_model_pass :: (
 
         add_model_node_to_draw_bucket(
             materials_info,
-            *model_pass.draw_buckets,
+            *model_pass.ordered_draw_buckets,
             node,
             model.nodes,
             world_transform,
@@ -166,18 +166,17 @@ prepare_model_draw_pass :: (
     frame_index: u64,
     allocator:   VMA.Allocator,
 ) {
-    model_pass.ordered_draw_passes = buckets_into_ordered_draw_passes(*model_pass.draw_buckets, model_pass.pipeline_info);
     { // Check
         count: int;
-        for draw_pass: model_pass.ordered_draw_passes {
-            count += draw_pass.bucket.count;
+        for draw_bucket: model_pass.ordered_draw_buckets {
+            count += draw_bucket.entries.count;
         }
         assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
     }
 
     cursor: u32;
-    for pass: model_pass.ordered_draw_passes {
-        for entry: pass.bucket {
+    for draw_bucket: model_pass.ordered_draw_buckets {
+        for entry: draw_bucket.entries {
             command := entry.command;
             command.first_instance = cursor;
 
@@ -254,25 +253,25 @@ do_model_pass :: (
     { // Draw
         offset: int;
         bound_pipeline: VK.Pipeline;
-        for draw_pass: model_pass.ordered_draw_passes {
-            defer offset += draw_pass.bucket.count;
-
-            if draw_pass.bucket.count == 0 {
+        for draw_bucket: model_pass.ordered_draw_buckets {
+            if draw_bucket.entries.count == 0 {
                 continue;
             }
 
-            if draw_pass.pipeline != bound_pipeline {
-                VK.cmd_bind_pipeline(command_buffer, .GRAPHICS, draw_pass.pipeline);
-                bound_pipeline = draw_pass.pipeline;
+            defer offset += draw_bucket.entries.count;
+
+            if draw_bucket.pipeline != bound_pipeline {
+                VK.cmd_bind_pipeline(command_buffer, .GRAPHICS, draw_bucket.pipeline);
+                bound_pipeline = draw_bucket.pipeline;
             }
 
-            VK.cmd_set_cull_mode(command_buffer, draw_pass.cull_mode);
+            VK.cmd_set_cull_mode(command_buffer, draw_bucket.cull_mode);
 
             VK.cmd_draw_indexed_indirect(
                 command_buffer,
                 model_pass.indirect_draw_buffer_infos[frame_index].buffer,
                 offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
-                draw_count = cast(u32, draw_pass.bucket.count),
+                draw_count = cast(u32, draw_bucket.entries.count),
                 stride     = size_of(VK.Draw_Indexed_Indirect_Command),
             );
         }
@@ -308,14 +307,11 @@ Pbr_Pipeline_Info :: struct {
     mask_pipeline:   VK.Pipeline;
 }
 
-Model_Draw_Buckets :: struct {
-    double_opaque: [..]Model_Draw_Bucket_Entry;
-    double_mask:   [..]Model_Draw_Bucket_Entry;
-    double_blend:  [..]Model_Draw_Bucket_Entry;
-
-    single_opaque: [..]Model_Draw_Bucket_Entry;
-    single_mask:   [..]Model_Draw_Bucket_Entry;
-    single_blend:  [..]Model_Draw_Bucket_Entry;
+Model_Draw_Bucket :: struct {
+    entries:    [..]Model_Draw_Bucket_Entry;
+    pipeline:   VK.Pipeline;
+    cull_mode:  VK.Cull_Mode_Flags;
+    alpha_mode: Alpha_Mode;
 }
 
 Model_Draw_Bucket_Entry :: struct {
@@ -324,25 +320,37 @@ Model_Draw_Bucket_Entry :: struct {
     sorting_key_within_bucket: float;
 }
 
-Model_Draw_Pass :: struct {
-    bucket:     []Model_Draw_Bucket_Entry;
-    pipeline:   VK.Pipeline;
-    cull_mode:  VK.Cull_Mode_Flags;
-    alpha_mode: Alpha_Mode;
-}
-
-init_model_draw_buckets :: () -> Model_Draw_Buckets {
-    draw_buckets: Model_Draw_Buckets;
-    for bucket: buckets_into_array(*draw_buckets) {
-        array_reserve(bucket, MAX_DRAW_COUNT);
+init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Bucket {
+    draw_buckets: [6]Model_Draw_Bucket;
+    for *bucket: draw_buckets {
+        array_reserve(*bucket.entries, MAX_DRAW_COUNT);
     }
+
+    draw_buckets[0].cull_mode  = .BACK;
+    draw_buckets[0].alpha_mode = .OPAQUE;
+    draw_buckets[0].pipeline = pipeline_info.opaque_pipeline;
+    draw_buckets[1].cull_mode  = .NONE;
+    draw_buckets[1].alpha_mode = .OPAQUE;
+    draw_buckets[1].pipeline = pipeline_info.opaque_pipeline;
+    draw_buckets[2].cull_mode  = .BACK;
+    draw_buckets[2].alpha_mode = .MASK;
+    draw_buckets[2].pipeline = pipeline_info.mask_pipeline;
+    draw_buckets[3].cull_mode  = .NONE;
+    draw_buckets[3].alpha_mode = .MASK;
+    draw_buckets[3].pipeline = pipeline_info.mask_pipeline;
+    draw_buckets[4].cull_mode  = .BACK;
+    draw_buckets[4].alpha_mode = .BLEND;
+    draw_buckets[4].pipeline = pipeline_info.blend_pipeline;
+    draw_buckets[5].cull_mode  = .NONE;
+    draw_buckets[5].alpha_mode = .BLEND;
+    draw_buckets[5].pipeline = pipeline_info.blend_pipeline;
 
     return draw_buckets;
 }
 
 add_model_node_to_draw_bucket :: (
     materials_info:        Materials_Info,
-    draw_buckets:          *Model_Draw_Buckets,
+    draw_buckets:          *[6]Model_Draw_Bucket,
     node:                  Node,
     nodes:                 []Node,
     parent_transform:      Matrix4,
@@ -379,7 +387,7 @@ add_model_node_to_draw_bucket :: (
                     entry.sorting_key_within_bucket = length_squared(center_in_world_space - camera_world_position);
                 }
 
-                array_add(bucket, entry);
+                array_add(*bucket.entries, entry);
             }
         }
     }
@@ -398,99 +406,31 @@ add_model_node_to_draw_bucket :: (
     }
 }
 
-get_model_draw_bucket_by_material :: (draw_buckets: *Model_Draw_Buckets, material: Material) -> *[..]Model_Draw_Bucket_Entry {
-    if material.double_sided {
-        if #complete material.alpha_mode == {
-            case .OPAQUE;
-                return *draw_buckets.double_opaque;
-            case .MASK;
-                return *draw_buckets.double_mask;
-            case .BLEND;
-                return *draw_buckets.double_blend;
-        }
-    } else {
-        if #complete material.alpha_mode == {
-            case .OPAQUE;
-                return *draw_buckets.single_opaque;
-            case .MASK;
-                return *draw_buckets.single_mask;
-            case .BLEND;
-                return *draw_buckets.single_blend;
+get_model_draw_bucket_by_material :: (draw_buckets: *[6]Model_Draw_Bucket, material: Material) -> *Model_Draw_Bucket {
+    material_cull_mode: VK.Cull_Mode_Flags = ifx material.double_sided
+        then .NONE
+        else .BACK;
+
+    for *draw_bucket: draw_buckets.* {
+        if draw_bucket.alpha_mode == material.alpha_mode && draw_bucket.cull_mode == material_cull_mode {
+            return draw_bucket;
         }
     }
 
     assert(false, "Unknown material: %", material);
+    return null;
 }
 
-reset_model_draw_buckets :: (draw_buckets: *Model_Draw_Buckets) {
-    for bucket: buckets_into_array(draw_buckets) {
-        array_reset_keeping_memory(bucket);
+reset_draw_buckets_entries_keeping_order :: (draw_buckets: *[6]Model_Draw_Bucket) {
+    for *bucket: draw_buckets.* {
+        array_reset_keeping_memory(*bucket.entries);
     }
 }
 
-destroy_model_draw_buckets :: (draw_buckets: *Model_Draw_Buckets) {
-    for bucket: buckets_into_array(draw_buckets) {
-        array_free(bucket.*);
+destroy_model_draw_buckets :: (draw_buckets: *[6]Model_Draw_Bucket) {
+    for *bucket: draw_buckets.* {
+        array_free(bucket.entries);
     }
-
-    draw_buckets.* = {};
-}
-
-buckets_into_ordered_draw_passes :: (draw_buckets: *Model_Draw_Buckets, pipeline_info: Pbr_Pipeline_Info) -> [6]Model_Draw_Pass {
-    #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
-
-    return .[
-        {
-            bucket     = draw_buckets.single_opaque,
-            pipeline   = pipeline_info.opaque_pipeline,
-            cull_mode  = .BACK,
-            alpha_mode = .OPAQUE,
-        },
-        {
-            bucket     = draw_buckets.double_opaque,
-            pipeline   = pipeline_info.opaque_pipeline,
-            cull_mode  = .NONE,
-            alpha_mode = .OPAQUE,
-        },
-        {
-            bucket     = draw_buckets.single_mask,
-            pipeline   = pipeline_info.mask_pipeline,
-            cull_mode  = .BACK,
-            alpha_mode = .MASK,
-        },
-        {
-            bucket     = draw_buckets.double_mask,
-            pipeline   = pipeline_info.mask_pipeline,
-            cull_mode  = .NONE,
-            alpha_mode = .MASK,
-        },
-        {
-            bucket     = draw_buckets.single_blend,
-            pipeline   = pipeline_info.blend_pipeline,
-            cull_mode  = .BACK,
-            alpha_mode = .BLEND,
-        },
-        {
-            bucket     = draw_buckets.double_blend,
-            pipeline   = pipeline_info.blend_pipeline,
-            cull_mode  = .NONE,
-            alpha_mode = .BLEND,
-        },
-    ];
-}
-
-buckets_into_array :: (draw_buckets: *Model_Draw_Buckets) -> [6]*[..]Model_Draw_Bucket_Entry {
-    #assert cast(*Type_Info_Struct, type_info(Model_Draw_Buckets)).members.count == 6 "Update this procedure";
-
-    return .[
-        *draw_buckets.double_opaque,
-        *draw_buckets.double_mask,
-        *draw_buckets.double_blend,
-
-        *draw_buckets.single_opaque,
-        *draw_buckets.single_mask,
-        *draw_buckets.single_blend,
-    ];
 }
 
 create_pbr_pipeline :: (

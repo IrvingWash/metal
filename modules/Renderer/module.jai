@@ -404,9 +404,8 @@ deinit :: (renderer: *Renderer) {
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     renderer.scene_info.scene_data.camera_world_position = camera.position;
     renderer.tonemap_pass.exposure = camera.exposure;
-    renderer.model_pass.camera_world_position = camera.position;
 
-    reset_model_pass(*renderer.model_pass);
+    reset_model_pass(*renderer.model_pass, camera.position);
 
     if renderer.swapchain_info.should_recreate {
         VK.device_wait_idle(renderer.device);
