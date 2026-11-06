@@ -222,8 +222,10 @@ do_shadow_pass :: (
         VK.WHOLE_SIZE,
     );
 
-    { // Transition to depth attachment
-        image_memory_barrier := VK.Image_Memory_Barrier_2.{
+    // Transition to depth attachment
+    transition_images_layouts(
+        command_buffer,
+        {
             src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS | .FRAGMENT_SHADER,
             src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
             dst_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
@@ -236,15 +238,8 @@ do_shadow_pass :: (
                 level_count      = 1,
                 layer_count      = 1,
             },
-        };
-
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *image_memory_barrier,
-        };
-
-        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
-    }
+        }
+    );
 
     { // Begin rendering
         depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
@@ -371,8 +366,10 @@ do_shadow_pass :: (
 
     VK.cmd_end_rendering(command_buffer);
 
-    { // Transition for sampling
-        barrier := VK.Image_Memory_Barrier_2.{
+    // Transition for sampling
+    transition_images_layouts(
+        command_buffer,
+        {
             src_stage_mask  = .EARLY_FRAGMENT_TESTS | .LATE_FRAGMENT_TESTS,
             src_access_mask = .DEPTH_STENCIL_ATTACHMENT_WRITE,
             dst_stage_mask  = .FRAGMENT_SHADER,
@@ -385,13 +382,8 @@ do_shadow_pass :: (
                 level_count = 1,
                 layer_count = 1,
             },
-        };
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = 1,
-            p_image_memory_barriers    = *barrier,
-        };
-        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
-    }
+        },
+    );
 }
 
 

@@ -83,45 +83,28 @@ do_tonemap_pass :: (
     color_ldr_target: Image_Info,
     command_buffer:   VK.Command_Buffer,
 ) {
-    { // HDR to shader read, LDR to color attachment
-        barriers := VK.Image_Memory_Barrier_2.[
-            {
-                src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
-                src_access_mask = .COLOR_ATTACHMENT_WRITE,
-                dst_stage_mask  = .FRAGMENT_SHADER,
-                dst_access_mask = .SHADER_SAMPLED_READ,
-                old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
-                new_layout      = .SHADER_READ_ONLY_OPTIMAL,
-                image           = color_hdr_target.image_info.image,
-                subresource_range = {
-                    aspect_mask = .COLOR,
-                    level_count = 1,
-                    layer_count = 1,
-                },
-            },
-            {
-                src_stage_mask  = .BLIT,
-                src_access_mask = 0,
-                dst_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
-                dst_access_mask = .COLOR_ATTACHMENT_WRITE,
-                old_layout      = .UNDEFINED,
-                new_layout      = .COLOR_ATTACHMENT_OPTIMAL,
-                image           = color_ldr_target.image,
-                subresource_range = {
-                    aspect_mask = .COLOR,
-                    level_count = 1,
-                    layer_count = 1,
-                },
-            },
-        ];
-
-        dependency_info := VK.Dependency_Info.{
-            image_memory_barrier_count = barriers.count,
-            p_image_memory_barriers    = barriers.data,
-        };
-
-        VK.cmd_pipeline_barrier_2(command_buffer, *dependency_info);
-    }
+    // HDR to shader read, LDR to color attachment
+    transition_images_layouts(
+        command_buffer,
+        {
+            src_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
+            src_access_mask = .COLOR_ATTACHMENT_WRITE,
+            dst_stage_mask  = .FRAGMENT_SHADER,
+            dst_access_mask = .SHADER_SAMPLED_READ,
+            old_layout      = .COLOR_ATTACHMENT_OPTIMAL,
+            new_layout      = .SHADER_READ_ONLY_OPTIMAL,
+            image           = color_hdr_target.image_info.image,
+        },
+        {
+            src_stage_mask  = .BLIT,
+            src_access_mask = 0,
+            dst_stage_mask  = .COLOR_ATTACHMENT_OUTPUT,
+            dst_access_mask = .COLOR_ATTACHMENT_WRITE,
+            old_layout      = .UNDEFINED,
+            new_layout      = .COLOR_ATTACHMENT_OPTIMAL,
+            image           = color_ldr_target.image,
+        },
+    );
 
     { // Begin rendering
         color_rendering_attachment_info := VK.Rendering_Attachment_Info.{
