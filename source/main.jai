@@ -29,7 +29,7 @@ Entity :: struct {
     rotation: Quaternion;
     scale:    Vector3 = { 1, 1, 1 };
 
-    model: Renderer.Model;
+    model_handle: Model_Handle;
 }
 
 main :: () {
@@ -176,7 +176,11 @@ render :: () {
     error := Renderer.start_drawing(*game.renderer, game.camera);
     assert(!error, error);
     for entity: game.entities {
-        Renderer.draw_model(*game.renderer, entity.model, make_world_transform(entity));
+        Renderer.draw_model(
+            *game.renderer,
+            asset_manager_get_model(game.asset_manager, entity.model_handle),
+            make_world_transform(entity),
+        );
     }
     error = Renderer.finish_drawing(*game.renderer);
     assert(!error, error);
@@ -232,14 +236,14 @@ add_entity :: (
     scale:    Vector3 = { 1, 1, 1 },
     model_path: string,
 ) {
-    model := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
+    model_handle := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
 
     entity: Entity = {
         name = name,
         position = position,
         rotation = rotation,
         scale = scale,
-        model = model,
+        model_handle = model_handle,
     };
 
     array_add(*game.entities, entity);

@@ -1,7 +1,12 @@
 Asset_Manager :: struct {
     root_path:    string;
     shaders_path: string;
+
+    model_handles_by_path: Table(string, Model_Handle);
+    models:                [..]Renderer.Model;
 }
+
+Model_Handle :: #type,distinct int;
 
 init_asset_manager :: () -> Asset_Manager {
     asset_manager: Asset_Manager;
@@ -17,6 +22,13 @@ init_asset_manager :: () -> Asset_Manager {
 }
 
 deinit_asset_manager :: (asset_manager: *Asset_Manager) {
+    for value, key: asset_manager.model_handles_by_path {
+        free(key);
+    }
+    deinit(*asset_manager.model_handles_by_path);
+
+    array_free(asset_manager.models);
+
     free(asset_manager.root_path);
     free(asset_manager.shaders_path);
 
@@ -36,35 +48,55 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
     return "", content;
 }
 
+asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Handle) -> Renderer.Model {
+    return asset_manager.models[handle];
+}
+
 // @Todo: In the future, this will just upload our own binaries.
 // The convertation would be run via a script, like shader compilation
 asset_manager_upload_model :: (
     asset_manager: *Asset_Manager,
-    path: string,
-    renderer: *Renderer.Renderer,
-) -> Renderer.Model {
-    log("Asset Manager: Uploading model at %", path);
+    path:          string,
+    renderer:      *Renderer.Renderer,
+) -> Model_Handle {
+    normalized_path := get_absolute_path(path,, temp);
+
+    { // Check cache
+        found, handle := table_find(*asset_manager.model_handles_by_path, normalized_path);
+        if found {
+            return handle;
+        }
+    }
+
+    normalized_path = copy_string(normalized_path);
+
+    log("Asset Manager: Uploading model at %", normalized_path);
 
     renderer_model: Renderer.Model;
 
     maybe_model_dto: Option(Model_Dto);
 
-    extension := path_extension(path);
+    extension := path_extension(normalized_path);
     if array_find(GLTF_FILE_EXTENSIONS, extension) {
-        result := convert_gltf(path, DEBUG);
+        result := convert_gltf(normalized_path, DEBUG);
 
         set(*maybe_model_dto, result);
     }
 
     if maybe_model_dto.kind != .SOME {
-        assert(false, "Failed to load model from %", path);
+        assert(false, "Failed to load model from %", normalized_path);
     }
 
     model_dto := maybe_model_dto.some;
     defer destroy(*model_dto);
 
     for mesh_dto: model_dto.meshes {
-        assert(mesh_dto.topology == .TRIANGLES, "Model at % has meshes with unsupported topology %", mesh_dto.topology);
+        assert(
+            mesh_dto.topology == .TRIANGLES,
+            "Model at % has meshes with unsupported topology %",
+            normalized_path,
+            mesh_dto.topology,
+        );
     }
 
     uploaded_renderer_material_ids: [..]u32;
@@ -88,7 +120,6 @@ asset_manager_upload_model :: (
         material.occlusion_texture_index          = Renderer.FALLBACK_OCCLUSION_TEXTURE_ID;
         material.emissive_texture_index           = Renderer.FALLBACK_EMISSIVE_TEXTURE_ID;
 
-        error: string;
         if pbr.base_color_texture.kind == .SOME {
             assert(
                 pbr.base_color_texture.some.tex_coord == 0,
@@ -164,7 +195,7 @@ asset_manager_upload_model :: (
             );
         }
 
-        error=, material_ids := Renderer.upload_materials(
+        error, material_ids := Renderer.upload_materials(
             renderer,
             .[material],,
             temp,
@@ -248,7 +279,13 @@ asset_manager_upload_model :: (
         );
     }
 
-    return renderer_model;
+    array_add(*asset_manager.models, renderer_model);
+
+    handle := cast(Model_Handle, asset_manager.models.count - 1);
+
+    table_add(*asset_manager.model_handles_by_path, normalized_path, handle);
+
+    return handle;
 }
 
 

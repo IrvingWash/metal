@@ -1,5 +1,7 @@
 # Issues
 
+- Refactor shader handling so they're on their own. Add metainfo for each one
+
 - Refactor presentation out of `finish_frame`
 
 - Identify duplicated VK code and refactor, so later we can add other backends
