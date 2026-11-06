@@ -1,4 +1,5 @@
 #placeholder DEBUG;
+#placeholder DEVELOPER;
 
 Game :: struct {
     window:        *Windowing.Window;
@@ -12,7 +13,7 @@ Game :: struct {
 
     entities: [..]Entity;
 
-    #if DEBUG {
+    #if DEVELOPER {
         is_in_editor_mode: bool = false;
     }
 
@@ -126,7 +127,7 @@ Renderer      :: #import "Renderer"()(
 #load "camera.jai";
 #load "camera_controllers.jai";
 
-#if DEBUG {
+#if DEVELOPER {
     #load "editor.jai";
 }
 
@@ -144,7 +145,7 @@ process_input :: () {
         }
     }
 
-    #if DEBUG {
+    #if DEVELOPER {
         if game.input_state.keys[Input.Scan_Code.F1] & .PRESSED {
             game.is_in_editor_mode = !game.is_in_editor_mode;
 
@@ -154,7 +155,7 @@ process_input :: () {
 }
 
 update :: (dt: float) {
-    #if DEBUG {
+    #if DEVELOPER {
         if game.is_in_editor_mode {
             update_editor(dt);
             return;
@@ -168,7 +169,7 @@ update :: (dt: float) {
 }
 
 render :: () {
-    #if DEBUG {
+    #if DEVELOPER {
         draw_editor(game.is_in_editor_mode);
     }
 
@@ -204,13 +205,13 @@ init :: () {
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
 
-    #if DEBUG {
+    #if DEVELOPER {
         init_editor(*game);
     }
 }
 
 deinit :: () {
-    #if DEBUG {
+    #if DEVELOPER {
         deinit_editor();
     }
 

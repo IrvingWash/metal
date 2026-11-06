@@ -347,32 +347,31 @@ add_model_node_to_draw_bucket :: (
 
     if node.meshes.count > 0 {
         inversed_ok, inversed_world_matrix := inverse(world_transform);
-        if !inversed_ok {
-            return;
-        }
-        inverse_transpose_world_transform := transpose(inversed_world_matrix);
+        if inversed_ok {
+            inverse_transpose_world_transform := transpose(inversed_world_matrix);
 
-        for mesh: node.meshes {
-            material := materials_info.materials[mesh.material_index];
+            for mesh: node.meshes {
+                material := materials_info.materials[mesh.material_index];
 
-            bucket := get_model_draw_bucket_by_material(draw_buckets, material);
+                bucket := get_model_draw_bucket_by_material(draw_buckets, material);
 
-            array_add(
-                bucket,
-                {
-                    command = {
-                        index_count    = mesh.index_count,
-                        instance_count = 1, // @Todo
-                        first_index    = mesh.index_start,
-                        vertex_offset  = cast(s32, mesh.vertex_start),
+                array_add(
+                    bucket,
+                    {
+                        command = {
+                            index_count    = mesh.index_count,
+                            instance_count = 1, // @Todo
+                            first_index    = mesh.index_start,
+                            vertex_offset  = cast(s32, mesh.vertex_start),
+                        },
+                        instance = {
+                            world_transform                   = world_transform,
+                            inverse_transpose_world_transform = make_matrix3(inverse_transpose_world_transform),
+                            material_index                    = mesh.material_index,
+                        },
                     },
-                    instance = {
-                        world_transform                   = world_transform,
-                        inverse_transpose_world_transform = make_matrix3(inverse_transpose_world_transform),
-                        material_index                    = mesh.material_index,
-                    },
-                },
-            );
+                );
+            }
         }
     }
 

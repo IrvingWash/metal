@@ -176,11 +176,14 @@ asset_manager_upload_model :: (
     renderer_meshes: [..]Renderer.Mesh;
     renderer_meshes.allocator = temp;
     for mesh_dto: model_dto.meshes {
-        mesh: Renderer.Mesh;
-        defer array_add(*renderer_meshes, mesh);
+        renderer_mesh: Renderer.Mesh;
+        defer array_add(*renderer_meshes, renderer_mesh);
+
+        renderer_mesh.min = mesh_dto.min;
+        renderer_mesh.max = mesh_dto.max;
 
         if mesh_dto.material_index.kind == .SOME {
-            mesh.material_index = uploaded_renderer_material_ids[mesh_dto.material_index.some];
+            renderer_mesh.material_index = uploaded_renderer_material_ids[mesh_dto.material_index.some];
         }
 
         if mesh_dto.indices.count > 0 {
@@ -190,8 +193,8 @@ asset_manager_upload_model :: (
             );
             assert(!error, error);
 
-            mesh.index_start = start;
-            mesh.index_count = count;
+            renderer_mesh.index_start = start;
+            renderer_mesh.index_count = count;
         }
 
         if mesh_dto.vertices.count > 0 {
@@ -214,8 +217,8 @@ asset_manager_upload_model :: (
             );
             assert(!error, error);
 
-            mesh.vertex_start = start;
-            mesh.vertex_count = count;
+            renderer_mesh.vertex_start = start;
+            renderer_mesh.vertex_count = count;
         }
     }
 

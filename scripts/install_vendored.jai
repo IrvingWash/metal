@@ -67,7 +67,6 @@ Module_To_Generate :: struct {
 #load "modules_to_generate.jai";
 
 generate_modules :: () -> error: string {
-
     for module_metainfo: MODULES_TO_GENERATE {
         log("Generating %", module_metainfo.name);
 

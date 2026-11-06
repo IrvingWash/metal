@@ -16,6 +16,9 @@ Mesh :: struct {
     index_start:  u32;
     index_count:  u32;
 
+    min: Vector3;
+    max: Vector3;
+
     material_index: u32;
 }
 

@@ -12,6 +12,7 @@ Glsl_Compiler :: #import "Glsl_Compiler";
 
 Config :: struct {
     should_help:             bool;
+    developer:               bool;
     optimization_type:       Optimization_Type;
     plugins_to_create:       [..]Plugin_To_Create;
 }
@@ -21,6 +22,7 @@ Flags :: struct {
     DEBUG            :: "--debug";
     OPTIMIZED        :: "--optimized";
     VERY_OPTIMIZED   :: "--very-optimized";
+    DEVELOPER        :: "--developer";
     HELP             :: "--help";
     HELP_SHORT       :: "-h";
 }
@@ -179,7 +181,7 @@ handle_compiler_messages :: (
             }
         }
 
-        try_to_fill_debug_placeholder(message, config, w);
+        try_to_fill_placeholders(message, config, w);
 
         if message.kind == {
             case. COMPLETE;
@@ -188,7 +190,7 @@ handle_compiler_messages :: (
     }
 }
 
-try_to_fill_debug_placeholder :: (
+try_to_fill_placeholders :: (
     message: *Message,
     config:  Config,
     w:       Workspace,
@@ -203,6 +205,14 @@ try_to_fill_debug_placeholder :: (
                     tprint(
                         "DEBUG: bool : %;",
                         config.optimization_type <= .VERY_DEBUG,
+                    ),
+                    w,
+                    file,
+                );
+                add_build_string(
+                    tprint(
+                        "DEVELOPER: bool : %;",
+                        config.developer,
                     ),
                     w,
                     file,
@@ -227,6 +237,8 @@ create_config :: (arguments: []string) -> error: string, Config {
                 config.optimization_type = .OPTIMIZED;
             case Flags.VERY_OPTIMIZED;
                 config.optimization_type = .VERY_OPTIMIZED;
+            case Flags.DEVELOPER;
+                config.developer = true;
             case Flags.HELP; #through;
             case Flags.HELP_SHORT;
                 config.should_help = true;
@@ -265,6 +277,8 @@ Available flags:
     --debug            - build in debug mode
     --optimized        - build in optimized mode
     --very-optimized   - build in very optimized mode
+
+    --developer        - enable developer mode
 
     --help, -h         - show this help
     DONE

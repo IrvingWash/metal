@@ -1503,7 +1503,7 @@ DEVICE_EXTENSIONS :: *u8.[
     VK.Extension_Names.KHR_SWAPCHAIN,
 ];
 
-HAVE_MORE_DEBUG :: DEBUG && false;
+HAVE_MORE_DEBUG :: DEBUG && true;
 
 #if DEBUG {
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
@@ -3251,10 +3251,17 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
 }
 
 calculate_camera_up :: (front: Vector3) -> Vector3 {
-    WORLD_UP :: Vector3.{ 0, 1, 0 };
+    EPSILON  :: 0.001;
+
+    world_up := Vector3.{ 0, 1, 0 };
 
     normalized_front := normalize(front);
-    right := normalize(cross(normalized_front, WORLD_UP));
+
+    if abs(dot(normalized_front, world_up)) > 1 - EPSILON {
+        world_up = { 1, 0, 0 };
+    }
+
+    right := normalize(cross(normalized_front, world_up));
     up    := cross(right, normalized_front);
 
     return up;
