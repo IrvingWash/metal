@@ -15,7 +15,10 @@ VULKAN_INCLUDE_PATH :: #run path_join(#filepath, "..", "vendored", "Vulkan-Heade
 SDL_INCLUDE_PATH    :: #run path_join(#filepath, "..", "vendored", "SDL", "include",, temp);
 
 #run,stallable {
-    set_build_options_dc({ do_output = false });
+    set_build_options_dc({
+        do_output           = false,
+        write_added_strings = false,
+    });
 
     error := build();
     if error {

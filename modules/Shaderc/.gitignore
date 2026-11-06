@@ -1,1 +1,5 @@
 cmake_build
+
+LINUX/
+MACOS/
+WINDOWS/

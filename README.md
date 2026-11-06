@@ -1,27 +1,16 @@
 ## How to start working
 
-1. Clone this repo with the `--recurse-submodules` flag:
+1. Clone this repo
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone <repo-url>
 ```
 
-2. Install tools by running
+2. Init the project (install dependencies, build binaries, install git hooks, etc)
 
 ```bash
-jai ./install_tools.jai
+jai ./init.jai
 ```
-
-3. Build and generate modules for the first time
-
-```bash
-jai ./build.jai - --very-debug --generate-modules
-```
-
-Currently the "tools" are only a pre-commit hook which:
-
-- Builds the program every on every commit
-- Checks for "@ no_commit" (there should not be a space between "@" and "n") occurances in current diff
 
 ## Building
 
@@ -31,8 +20,7 @@ To build and run a debug version:
 jai ./build.jai - --very-debug +Autorun
 ```
 
-To check other options:
-
+There's help
 ```bash
 jai ./build.jai - --help
 ```

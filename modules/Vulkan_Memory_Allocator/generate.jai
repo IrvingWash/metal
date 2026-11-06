@@ -10,7 +10,10 @@ VULKAN_INCLUDE_PATH :: #run path_join(#filepath, "..", "vendored", "Vulkan-Heade
 SRC_PATH            :: #run path_join(#filepath, "..", "vendored", "VulkanMemoryAllocator", "include", "vk_mem_alloc.h",, temp);
 
 #run,stallable {
-    set_build_options_dc({ do_output = false });
+    set_build_options_dc({
+        do_output           = false,
+        write_added_strings = false,
+    });
 
     error := build_vma();
     if error {

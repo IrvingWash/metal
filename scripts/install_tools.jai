@@ -2,11 +2,12 @@
 #import "Compiler";
 #import "File_Utilities";
 #import "Process";
+#import "String";
 
-TOOLS_ABSOLUTE_PATH :: #run sprint("%tools", #filepath);
+TOOLS_ABSOLUTE_PATH :: #run path_join(#filepath, "..", "tools",, temp);
 
-HOOKS_SOURCE_ABSOLUTE_PATH      :: #run sprint("%/hooks", TOOLS_ABSOLUTE_PATH);
-HOOKS_DESTINATION_ABSOLUTE_PATH :: #run sprint("%.git/hooks", #filepath);
+HOOKS_SOURCE_ABSOLUTE_PATH      :: #run path_join(TOOLS_ABSOLUTE_PATH, "hooks",, temp);
+HOOKS_DESTINATION_ABSOLUTE_PATH :: #run path_join(#filepath, "..", ".git/hooks",, temp);
 
 #run,stallable {
     set_build_options_dc(.{
@@ -25,10 +26,10 @@ install_git_hooks :: () {
             return;
         }
 
-        resulting_path := tprint(
-            "%/%",
+        resulting_path := path_join(
             HOOKS_DESTINATION_ABSOLUTE_PATH,
-            info.short_name,
+            info.short_name,,
+            temp
         );
 
         copy_file(
@@ -52,6 +53,5 @@ make_executable :: (path: string) {
         "chmod",
         "+x",
         path,
-        working_directory = #filepath,
     );
 }

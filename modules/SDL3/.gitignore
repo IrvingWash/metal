@@ -3,3 +3,7 @@
 */lib/cmake
 */lib/pkgconfig
 */cmake
+
+LINUX/
+MACOS/
+WINDOWS/

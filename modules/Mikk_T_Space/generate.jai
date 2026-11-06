@@ -14,7 +14,10 @@ OUTPUT_BIN_NAME :: "libmikktspace";
 OUTPUT_BIN_PATH     :: #run path_join(OUTPUT_DIR_PATH, OUTPUT_BIN_NAME,, temp);
 
 #run {
-    set_build_options_dc({ do_output = false });
+    set_build_options_dc({
+        do_output           = false,
+        write_added_strings = false,
+    });
 
     build_error := build();
     if build_error {

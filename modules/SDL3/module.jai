@@ -1135,8 +1135,8 @@ free :: (array: []$T) {
 vulkan_get_instance_extensions :: (count: *u32) -> **u8 #foreign libsdl3 "SDL_Vulkan_GetInstanceExtensions";
 
 create_vulkan_surface :: (
-    window: *Window,
-    instance: VK.Instance,
+    window:    *Window,
+    instance:  VK.Instance,
     allocator: *VK.Allocation_Callbacks = null,
 ) -> ok: bool, VK.Surface_Khr {
     surface: VK.Surface_Khr;
@@ -1150,7 +1150,13 @@ get_error :: () -> *u8 #foreign libsdl3 "SDL_GetError";
 
 #scope_file
 
-SDL_Vulkan_CreateSurface :: (window: *Window, instance: VK.Instance, allocator: *VK.Allocation_Callbacks, surface: *VK.Surface_Khr) -> bool #foreign libsdl3;
+SDL_Vulkan_CreateSurface :: (
+    window: *Window,
+    instance: VK.Instance,
+    allocator: *VK.Allocation_Callbacks,
+    surface: *VK.Surface_Khr,
+) -> bool #foreign libsdl3;
+
 SDL_GetWindowSizeInPixels :: (window: *Window, w: *s32, h: *s32) -> bool #foreign libsdl3;
 
 SDL_GetDisplays :: (count: *s32) -> *Display_Id #foreign libsdl3;

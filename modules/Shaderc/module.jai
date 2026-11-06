@@ -282,14 +282,6 @@ compile_options_set_generate_debug_info :: (
     options: Compile_Options_T,
 ) -> void #foreign libshaderc "shaderc_compile_options_set_generate_debug_info";
 
-compile_options_set_generate_nonsemantic_debug_info :: (
-    options: Compile_Options_T,
-) -> void #foreign libshaderc "shaderc_compile_options_set_generate_nonsemantic_debug_info";
-
-compile_options_set_generate_nonsemantic_debug_source :: (
-    options: Compile_Options_T,
-) -> void #foreign libshaderc "shaderc_compile_options_set_generate_nonsemantic_debug_source";
-
 compile_options_set_optimization_level :: (
     options: Compile_Options_T,
     level:   Optimization_Level,
