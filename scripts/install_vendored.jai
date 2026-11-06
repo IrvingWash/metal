@@ -88,9 +88,7 @@ generate_modules :: () -> error: string {
 clone_dependency :: (dep: Dependency) -> error: string {
     resulting_path := path_join(VENDORED_PATH, dep.name,, temp);
 
-    file, ok := file_open(resulting_path);
-    defer file_close(*file);
-    if is_valid(file) && ok {
+    if file_exists(resulting_path) {
         log("% already exists, skipping", resulting_path);
         return "";
     }
@@ -122,4 +120,4 @@ clone_dependency :: (dep: Dependency) -> error: string {
 #import "Process";
 #import "Compiler";
 #import "String";
-#import "File";
+#import "File_Utilities";
