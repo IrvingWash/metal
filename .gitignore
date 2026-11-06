@@ -1,3 +1,5 @@
+modules/vendored
+
 bin
 .build
 

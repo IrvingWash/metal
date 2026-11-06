@@ -12,7 +12,6 @@ Glsl_Compiler :: #import "Glsl_Compiler";
 
 Config :: struct {
     should_help:             bool;
-    should_generate_modules: bool;
     optimization_type:       Optimization_Type;
     plugins_to_create:       [..]Plugin_To_Create;
 }
@@ -24,7 +23,6 @@ Flags :: struct {
     VERY_OPTIMIZED   :: "--very-optimized";
     HELP             :: "--help";
     HELP_SHORT       :: "-h";
-    GENERATE_MODULES :: "--generate-modules";
 }
 
 DEFAULT_PLUGINS_TO_CREATE :: Plugin_To_Create.[
@@ -55,15 +53,6 @@ COMPILED_SHADERS_ROOT_DIR_NAME :: "shaders";
         return;
     }
 
-    if config.should_generate_modules {
-        log("Generating modules...");
-        error := generate_modules();
-        if error {
-            fail_compilation_with_message("Failed to generate modules: %", error);
-            return;
-        }
-    }
-
     output_path := path_join(#filepath, "bin", tprint("%", config.optimization_type));
 
     #if !#exists(JAILS_DIAGNOSTICS_BUILD) {
@@ -85,39 +74,6 @@ COMPILED_SHADERS_ROOT_DIR_NAME :: "shaders";
         fail_compilation_with_message("Failed to build: %", error);
         return;
     }
-}
-
-generate_modules :: () -> error: string {
-    MODULES_TO_GENERATE :: struct { name: string; relative_path: string; }.[
-        {
-            name = "Vulkan_Memory_Allocator",
-            relative_path = "modules/Vulkan_Memory_Allocator/generate.jai",
-        },
-        {
-            name = "SDL3",
-            relative_path = "modules/SDL3/generate.jai",
-        },
-        {
-            name = "Shaderc",
-            relative_path = "modules/Shaderc/generate.jai",
-        },
-    ];
-
-    for module_metainfo: MODULES_TO_GENERATE {
-        log("Generating %", module_metainfo.name);
-
-        result := run_command(
-            "jai",
-            module_metainfo.relative_path,
-            working_directory = #filepath,
-        );
-
-        if result.exit_code != 0 {
-            return tprint("Failed to generate %", module_metainfo.name);
-        }
-    }
-
-    return "";
 }
 
 build :: (
@@ -274,8 +230,6 @@ create_config :: (arguments: []string) -> error: string, Config {
             case Flags.HELP; #through;
             case Flags.HELP_SHORT;
                 config.should_help = true;
-            case Flags.GENERATE_MODULES;
-                config.should_generate_modules = true;
             case;
                 PLUGIN_ARGUMENT_PREFIX ::  "+";
 
@@ -311,8 +265,6 @@ Available flags:
     --debug            - build in debug mode
     --optimized        - build in optimized mode
     --very-optimized   - build in very optimized mode
-
-    --generate-modules - build binaries/generate bindings for modules
 
     --help, -h         - show this help
     DONE

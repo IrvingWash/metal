@@ -10,7 +10,7 @@ SDL_PATH :: #run path_join(#filepath, "..", "vendored", "SDL");
 
 #run {
     set_build_options_dc({
-        do_output = false,
+        do_output           = false,
         write_added_strings = false
     });
 

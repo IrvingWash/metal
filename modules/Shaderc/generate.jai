@@ -10,7 +10,10 @@ BINARY_OUTPUT_PATH   :: #run path_join(#filepath, tprint("%", OS),, temp);
 CMAKE_ARTEFACTS_PATH :: #run path_join(#filepath, "cmake_build",, temp);
 
 #run {
-    set_build_options_dc({ do_output = false });
+    set_build_options_dc({
+        do_output           = false,
+        write_added_strings = false,
+    });
 
     error := build();
     if error {
