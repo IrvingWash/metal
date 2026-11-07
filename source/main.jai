@@ -22,16 +22,6 @@ Game :: struct {
     last_frame_time: float64;
 }
 
-Entity :: struct {
-    name: string;
-
-    position: Vector3;
-    rotation: Quaternion;
-    scale:    Vector3 = { 1, 1, 1 };
-
-    model_handle: Model_Handle;
-}
-
 main :: () {
     #if DEBUG {
         defer report_memory_leaks();
@@ -111,14 +101,6 @@ get_fly_camera_input :: () -> Fly_Camera_Input {
     };
 }
 
-make_world_transform :: (entity: Entity) -> Matrix4 {
-    translation := make_translation_matrix4(entity.position);
-    scale       := make_scale_matrix4(entity.scale);
-    rotation    := rotation_matrix(Matrix4, entity.rotation);
-
-    return translation * rotation * scale;
-}
-
 
 
 #scope_file
@@ -140,6 +122,7 @@ Renderer      :: #import "Renderer"()(
 #load "asset_manager.jai";
 #load "camera.jai";
 #load "camera_controllers.jai";
+#load "entity.jai";
 
 #if DEVELOPER {
     #load "editor.jai";

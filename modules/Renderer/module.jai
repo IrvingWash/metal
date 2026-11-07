@@ -3283,6 +3283,7 @@ calculate_camera_up :: (front: Vector3) -> Vector3 {
 
 #import "Basic";
 #import "Math";
+#import "More_Math";
 
 #if DEBUG {
     #import "Print_Vars";

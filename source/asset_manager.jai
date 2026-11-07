@@ -213,9 +213,7 @@ asset_manager_upload_model :: (
         mesh_accessor: Renderer.Mesh_Accessor;
         defer array_add(*mesh_accessors, mesh_accessor);
 
-        mesh_accessor.min    = mesh_dto.min;
-        mesh_accessor.max    = mesh_dto.max;
-        mesh_accessor.center = (mesh_accessor.min + mesh_accessor.max) / 2;
+        mesh_accessor.aabb = make_aabb(mesh_dto.min, mesh_dto.max);
 
         if mesh_dto.material_index.kind == .SOME {
             mesh_accessor.material_index = uploaded_renderer_material_ids[mesh_dto.material_index.some];
@@ -282,7 +280,7 @@ asset_manager_upload_model :: (
         );
     }
 
-    calculate_model_bounds(*model_accessor);
+    model_accessor.aabb = make_model_aabb(model_accessor);
 
     array_add(*asset_manager.model_accessors, model_accessor);
 
@@ -297,22 +295,31 @@ asset_manager_upload_model :: (
 
 #scope_file
 
-calculate_model_bounds :: (model: *Renderer.Model_Accessor) {
-    model.min = { FLOAT32_MAX, FLOAT32_MAX, FLOAT32_MAX };
-    model.max = { -FLOAT32_MAX, -FLOAT32_MAX, -FLOAT32_MAX };
+make_model_aabb :: (model: Renderer.Model_Accessor) -> AABB {
+    model_min := Vector3.{ FLOAT32_MAX, FLOAT32_MAX, FLOAT32_MAX };
+    model_max := Vector3.{ -FLOAT32_MAX, -FLOAT32_MAX, -FLOAT32_MAX };
 
-    visit :: (model: *Renderer.Model_Accessor, node: Renderer.Node, parent_transform: Matrix4) {
+    visit :: (
+        model: Renderer.Model_Accessor,
+        node: Renderer.Node,
+        parent_transform: Matrix4,
+        model_min: *Vector3,
+        model_max: *Vector3,
+    ) {
         transform := parent_transform * node.local_transform;
 
         for mesh: node.meshes {
-            transformed_mesh_min, transformed_mesh_max := transform_aabb(mesh.min, mesh.max, transform);
+            transformed_mesh_aabb := transform_aabb(
+                mesh.aabb,
+                transform,
+            );
 
-            model.min = min(model.min, transformed_mesh_min);
-            model.max = max(model.max, transformed_mesh_max);
+            model_min.* = min(model_min, transformed_mesh_aabb.min);
+            model_max.* = max(model_max, transformed_mesh_aabb.max);
         }
 
         for child_id: node.children_ids {
-            visit(model, model.nodes[child_id], transform);
+            visit(model, model.nodes[child_id], transform, model_min, model_max);
         }
     }
 
@@ -321,10 +328,10 @@ calculate_model_bounds :: (model: *Renderer.Model_Accessor) {
             continue;
         }
 
-        visit(model, node, Matrix4_Identity);
+        visit(model, node, Matrix4_Identity, *model_min, *model_max);
     }
 
-    model.center = (model.max + model.min) / 2;
+    return make_aabb(model_min, model_max);
 }
 
 convert_alpha_mode_dto :: (dto_alpha_mode: Alpha_Mode_Dto) -> Renderer.Alpha_Mode {

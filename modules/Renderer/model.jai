@@ -1,9 +1,6 @@
 Model_Accessor :: struct {
-    nodes:     [..]Node;
-
-    min:    Vector3;
-    max:    Vector3;
-    center: Vector3;
+    nodes: [..]Node;
+    aabb:  AABB;
 }
 
 Node :: struct {
@@ -20,9 +17,7 @@ Mesh_Accessor :: struct {
     index_start:  u32;
     index_count:  u32;
 
-    min:    Vector3;
-    max:    Vector3;
-    center: Vector3;
+    aabb: AABB;
 
     material_index: u32;
 }

@@ -1,3 +1,10 @@
+AABB :: struct {
+    min:     Vector3;
+    max:     Vector3;
+    center:  Vector3;
+    extents: Vector3;
+}
+
 quaternion_to_euler :: (quaternion: Quaternion) -> Vector3 {
     // https://en.wikipedia.org/wiki/Rotation_formulations_in_three_dimensions?utm_source=chatgpt.com#:~:text=Quaternion%20%E2%86%92%20Euler%20angles%20%28z%2Dy%E2%80%B2%2Dx%E2%80%B3%20intrinsic%29edit
 
@@ -40,18 +47,36 @@ euler_to_quaternion :: (e: Vector3) -> Quaternion {
 }
 
 // Transforms AABB preserving correct values for rotations & scale
-transform_aabb :: (min: Vector3, max: Vector3, transform: Matrix4) -> min: Vector3, max: Vector3 {
-    center  := (min + max) * 0.5;
-    extents := (max - min) * 0.5;
+transform_aabb :: (
+    aabb: AABB,
+    transform: Matrix4,
+) -> AABB {
+    new_center := (transform * make_vector4(aabb.center, 1)).xyz;
 
-    new_center := (transform * make_vector4(center, 1)).xyz;
     new_extents := Vector3.{
-        abs(transform._11) * extents.x + abs(transform._12) * extents.y + abs(transform._13) * extents.z,
-        abs(transform._21) * extents.x + abs(transform._22) * extents.y + abs(transform._23) * extents.z,
-        abs(transform._31) * extents.x + abs(transform._32) * extents.y + abs(transform._33) * extents.z,
+        abs(transform._11) * aabb.extents.x + abs(transform._12) * aabb.extents.y + abs(transform._13) * aabb.extents.z,
+        abs(transform._21) * aabb.extents.x + abs(transform._22) * aabb.extents.y + abs(transform._23) * aabb.extents.z,
+        abs(transform._31) * aabb.extents.x + abs(transform._32) * aabb.extents.y + abs(transform._33) * aabb.extents.z,
     };
 
-    return new_center - new_extents, new_center + new_extents;
+    return {
+        min = new_center - new_extents,
+        max = new_center + new_extents,
+        center = new_center,
+        extents = new_extents,
+    };
+}
+
+make_aabb :: (min: Vector3, max: Vector3) -> AABB {
+    aabb: AABB;
+
+    aabb.min = min;
+    aabb.max = max;
+
+    aabb.center = (aabb.max + aabb.min) / 2;
+    aabb.extents = (aabb.max - aabb.min) / 2;
+
+    return aabb;
 }
 
 deg_to_rad :: (degrees: float) -> radians: float {

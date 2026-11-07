@@ -412,7 +412,7 @@ add_model_node_to_draw_bucket :: (
                     },
                 };
                 if bucket.alpha_mode == .BLEND {
-                    center_in_world_space := (world_transform * make_vector4(mesh.center, 1)).xyz;
+                    center_in_world_space := (world_transform * make_vector4(mesh.aabb.center, 1)).xyz;
 
                     entry.sorting_key_within_bucket = length_squared(center_in_world_space - camera_world_position);
                 }
