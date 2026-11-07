@@ -986,6 +986,19 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     return "";
 }
 
+// Account for letterboxing
+get_view_rectangle :: (renderer: Renderer) -> min: Vector2, max: Vector2 {
+    left_x,
+    left_y,
+    right_x,
+    right_y := scale_keeping_ratio_and_get_rect(
+        renderer.color_ldr_target.extent,
+        renderer.swapchain_info.config.image_extent,
+    );
+
+    return { xx left_x, xx left_y }, { xx right_x, xx right_y };
+}
+
 set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
     if (
         width == renderer.color_hdr_target.image_info.extent.width

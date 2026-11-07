@@ -57,8 +57,25 @@ init_editor :: (game: *Game) {
 }
 
 update_editor :: (dt: float) {
-    if editor.game.input_state.mouse.right_button & .DOWN {
+    if editor.game.input_state.mouse.right_button & .DOWN && !editor.io.want_capture_mouse {
         fly_camera(*editor.game.camera, dt, get_fly_camera_input());
+    }
+
+    if editor.game.input_state.mouse.left_button & .DOWN && !editor.io.want_capture_mouse {
+        width, height := Windowing.get_renderable_size(editor.game.window);
+
+        view_rect_min := Renderer.get_view_rectangle(editor.game.renderer);
+
+        ray_direction := Input.cast_ray_from_mouse_position(
+            editor.game.input_state,
+            Vector2.{ xx width, xx height },
+            editor.game.renderer.transforms.projection,
+            editor.game.renderer.transforms.view,
+            offset = view_rect_min,
+        );
+
+        editor.ray_direction = ray_direction;
+        editor.ray_origin = editor.game.camera.position;
     }
 }
 
@@ -103,6 +120,9 @@ draw_whole_editor :: () {
     draw_camera_section();
     draw_entity_section();
     draw_renderer_section();
+
+    draw_line(editor.ray_origin, editor.ray_origin + editor.ray_direction * 100);
+
     IM.end();
 }
 
@@ -339,6 +359,9 @@ Editor :: struct {
     selected_entity_id: s32;
 
     descriptor_pool: VK.Descriptor_Pool;
+
+    ray_direction: Vector3;
+    ray_origin:    Vector3;
 }
 
 editor: Editor;
@@ -346,5 +369,6 @@ editor: Editor;
 IM    :: #import "Dear_ImGui";
 VK    :: #import "Jai_Vulkan";
 
-Input    :: #import "Input";
-Renderer :: #import "Renderer";
+Input     :: #import "Input";
+Renderer  :: #import "Renderer";
+Windowing :: #import "Windowing";

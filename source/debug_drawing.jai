@@ -23,6 +23,10 @@ draw_model_bounds :: (
     );
 }
 
+draw_line :: (a: Vector3, b: Vector3, color: Vector4 = DEFAULT_LINE_COLOR) {
+    Renderer.draw_line(debug_drawing.renderer, { a, b, color });
+}
+
 draw_circle :: (
     center:        Vector3,
     axis_u:        Vector3,

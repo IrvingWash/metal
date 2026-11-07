@@ -171,6 +171,23 @@ set_cursor_capture :: (input_state: *Input_State, should_capture: bool) -> error
     return "";
 }
 
+cast_ray_from_mouse_position :: (
+    input_state:       Input_State,
+    screen_size:       Vector2,
+    projection_matrix: Matrix4,
+    view_matrix:       Matrix4,
+    offset:            Vector2 = {},
+    $left_handed:      bool    = false,
+) -> Vector3 {
+    return cast_ray(
+        input_state.mouse.position - offset,
+        screen_size - 2 * offset,
+        projection_matrix,
+        view_matrix,
+        left_handed,
+    );
+}
+
 
 
 #scope_file
@@ -179,4 +196,5 @@ SCAN_CODE_COUNT :: #run enum_highest_value(Scan_Code);
 
 #import "Basic";
 #import "Math";
+#import "More_Math";
 SDL :: #import "SDL3";

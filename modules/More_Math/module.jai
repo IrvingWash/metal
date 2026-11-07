@@ -91,6 +91,55 @@ rad_to_deg :: (radians: float) -> degrees: float {
     return radians / FACTOR;
 }
 
+cast_ray :: (
+    position:          Vector2,
+    screen_size:       Vector2,
+    projection_matrix: Matrix4,
+    view_matrix:       Matrix4,
+    $left_handed:      bool    = false,
+) -> Vector3 {
+    // https://antongerdelan.net/opengl/raycasting.html
+
+    ok, inverse_projection_matrix := inverse(projection_matrix);
+    if !ok {
+        return Vector3.{};
+    }
+
+    ok =, inverse_view_matrix := inverse(view_matrix);
+    if !ok {
+        return Vector3.{};
+    }
+
+    ray_ndc: Vector3 = {
+        x = (2 * position.x) / screen_size.x - 1,
+        y = 1 - (2 * position.y) / screen_size.y,
+        z = 1,
+    };
+
+    ray_clip: Vector4 = {
+        x = ray_ndc.x,
+        y = ray_ndc.y,
+        z = -1,
+        w = 1,
+    };
+
+    ray_eye: Vector4 = inverse_projection_matrix * ray_clip;
+    ray_eye = {
+        x = ray_eye.x,
+        y = ray_eye.y,
+        z = -1,
+        w = 0,
+    };
+
+    #if left_handed {
+        ray_eye.z = 1;
+    }
+
+    ray_world := normalize((inverse_view_matrix * ray_eye).xyz);
+
+    return ray_world;
+}
+
 
 
 #scope_file
