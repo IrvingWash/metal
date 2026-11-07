@@ -173,6 +173,12 @@ draw_entity_section :: () {
         return;
     }
 
+    { // Draw bounds around the selected entity
+        entity := *editor.game.entities[editor.selected_entity_id];
+
+        draw_model_mesh_bounds(entity.model_handle, make_world_transform(entity));
+    }
+
     IM.combo(
         "Entity",
         current_item = *editor.selected_entity_id,

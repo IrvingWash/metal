@@ -68,6 +68,11 @@ main :: () {
         model_path = "../../Models/death_valley.glb",
         scale      = { 100, 100, 100 },
     );
+    add_entity(
+        name       = "Gundam",
+        model_path = "../../Models/gundam1/gundam.glb",
+        scale      = { 1, 1, 1 },
+    );
 
     while !game.should_quit {
         dt := calculate_delta_time();
@@ -106,6 +111,15 @@ get_fly_camera_input :: () -> Fly_Camera_Input {
     };
 }
 
+make_world_transform :: (entity: Entity) -> Matrix4 {
+    translation := make_translation_matrix4(entity.position);
+    scale       := make_scale_matrix4(entity.scale);
+    rotation    := rotation_matrix(Matrix4, entity.rotation);
+
+    return translation * rotation * scale;
+}
+
+
 
 #scope_file
 
@@ -129,6 +143,7 @@ Renderer      :: #import "Renderer"()(
 
 #if DEVELOPER {
     #load "editor.jai";
+    #load "debug_drawing.jai";
 }
 
 game: Game;
@@ -169,12 +184,13 @@ update :: (dt: float) {
 }
 
 render :: () {
+    error := Renderer.start_drawing(*game.renderer, game.camera);
+    assert(!error, error);
+
     #if DEVELOPER {
         draw_editor(game.is_in_editor_mode);
     }
 
-    error := Renderer.start_drawing(*game.renderer, game.camera);
-    assert(!error, error);
     for entity: game.entities {
         Renderer.draw_model(
             *game.renderer,
@@ -182,15 +198,6 @@ render :: () {
             make_world_transform(entity),
         );
     }
-
-    Renderer.draw_line(
-        *game.renderer,
-        {
-            game.entities[0].position,
-            game.entities[1].position,
-            { 0, 1, 0, 1 },
-        },
-    );
 
     error = Renderer.finish_drawing(*game.renderer);
     assert(!error, error);
@@ -221,6 +228,7 @@ init :: () {
 
     #if DEVELOPER {
         init_editor(*game);
+        init_debug_drawing(*game);
     }
 }
 
@@ -228,6 +236,7 @@ deinit :: () {
     array_free(game.entities);
 
     #if DEVELOPER {
+        deinit_debug_drawing();
         deinit_editor();
     }
 
@@ -270,14 +279,6 @@ calculate_delta_time :: () -> float {
     game.last_frame_time = now;
 
     return cast(float, dt);
-}
-
-make_world_transform :: (entity: Entity) -> Matrix4 {
-    translation := make_translation_matrix4(entity.position);
-    scale       := make_scale_matrix4(entity.scale);
-    rotation    := rotation_matrix(Matrix4, entity.rotation);
-
-    return translation * rotation * scale;
 }
 
 get_compiled_shader :: (name: string) -> error: string, shader: string {
