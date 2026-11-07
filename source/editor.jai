@@ -6,7 +6,8 @@ init_editor :: (game: *Game) {
 
     editor.io.log_filename = null;
 
-    IM.impl_sdl3_init_for_vulkan(cast(*void, game.window));
+    ok := IM.impl_sdl3_init_for_vulkan(cast(*void, game.window));
+    assert(ok, "Failed to init SDL3 for vulkan for editor");
 
     pool_sizes := VK.Descriptor_Pool_Size.[
         {
@@ -40,15 +41,16 @@ init_editor :: (game: *Game) {
         use_dynamic_rendering = true,
         pipeline_info_main.pipeline_rendering_create_info = {
             color_attachment_count     = 1,
-            p_color_attachment_formats = *game.
-                renderer.
-                swapchain_info
-                .config.
-                image_format,
+            p_color_attachment_formats = *game
+                .renderer
+                .swapchain_info
+                .config
+                .image_format,
         },
     };
 
-    IM.impl_vulkan_init(*vulkan_init_info);
+    ok = IM.impl_vulkan_init(*vulkan_init_info);
+    assert(ok, "Failed to init vulkan for editor");
 
     Renderer.set_overlay_callback(*game.renderer, draw_overlay, null);
     Input.set_raw_event_callback(*game.input_state, process_editor_events);
@@ -77,7 +79,7 @@ draw_editor :: (draw_editing_stuff: bool) {
 deinit_editor :: () {
     VK.device_wait_idle(editor.game.renderer.device);
 
-    Input.set_raw_event_callback(*editor.game.input_state, process_editor_events);
+    Input.set_raw_event_callback(*editor.game.input_state, null);
     Renderer.set_overlay_callback(*editor.game.renderer, null, null);
 
     IM.impl_vulkan_shutdown();
