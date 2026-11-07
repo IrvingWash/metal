@@ -173,17 +173,6 @@ draw_entity_section :: () {
         return;
     }
 
-    { // Draw bounds around the selected entity's model
-        selected_entity := *editor.game.entities[editor.selected_entity_id];
-
-        model := asset_manager_get_model(
-            editor.game.asset_manager,
-            selected_entity.model_handle,
-        );
-
-        draw_model_bounds(model, make_world_transform(selected_entity));
-    }
-
     IM.combo(
         "Entity",
         current_item = *editor.selected_entity_id,
@@ -199,6 +188,15 @@ draw_entity_section :: () {
     );
 
     selected_entity := *editor.game.entities[editor.selected_entity_id];
+
+    { // Draw bounds around the selected entity's model
+        model := asset_manager_get_model(
+            editor.game.asset_manager,
+            selected_entity.model_handle,
+        );
+
+        draw_model_bounds(model, make_world_transform(selected_entity));
+    }
 
     IM.drag_float3(
         "Position##Entity",

@@ -3215,20 +3215,17 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
 }
 
 calculate_camera_up :: (front: Vector3) -> Vector3 {
-    EPSILON  :: 0.001;
-
-    world_up := Vector3.{ 0, 1, 0 };
+    WORLD_UP :: Vector3.{ 0, 1, 0 };
 
     normalized_front := normalize(front);
 
-    if abs(dot(normalized_front, world_up)) > 1 - EPSILON {
-        world_up = { 1, 0, 0 };
+    right := cross(normalized_front, WORLD_UP);
+    if length_squared(right) < 0.000001 {
+        right = cross(normalized_front, .{ 1, 0, 0 });
     }
+    right = normalize(right);
 
-    right := normalize(cross(normalized_front, world_up));
-    up    := cross(right, normalized_front);
-
-    return up;
+    return cross(right, normalized_front);
 }
 
 #if DEBUG {

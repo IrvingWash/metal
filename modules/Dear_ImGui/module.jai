@@ -688,6 +688,12 @@ color_picker4 :: (
     ref_col: *float = null,
 ) -> bool #foreign libimgui "_ZN5ImGui12ColorPicker4EPKcPfiPKf";
 
+button :: (label: *u8, size: *Vector2) -> bool #foreign libimgui "_ZN5ImGui6ButtonEPKcRK6ImVec2";
+
+button :: inline (label: *u8, size: Vector2 = {}) -> bool {
+    return button(label, *size);
+}
+
 same_line :: (
     offset_from_start_x: float = 0.0,
     spacing: float = -1.0,
