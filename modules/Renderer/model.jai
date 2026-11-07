@@ -1,5 +1,9 @@
 Model_Accessor :: struct {
     nodes:     [..]Node;
+
+    min:    Vector3;
+    max:    Vector3;
+    center: Vector3;
 }
 
 Node :: struct {

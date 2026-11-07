@@ -282,6 +282,8 @@ asset_manager_upload_model :: (
         );
     }
 
+    calculate_model_bounds(*model_accessor);
+
     array_add(*asset_manager.model_accessors, model_accessor);
 
     handle := cast(Model_Handle, asset_manager.model_accessors.count - 1);
@@ -294,6 +296,36 @@ asset_manager_upload_model :: (
 
 
 #scope_file
+
+calculate_model_bounds :: (model: *Renderer.Model_Accessor) {
+    model.min = { FLOAT32_MAX, FLOAT32_MAX, FLOAT32_MAX };
+    model.max = { -FLOAT32_MAX, -FLOAT32_MAX, -FLOAT32_MAX };
+
+    visit :: (model: *Renderer.Model_Accessor, node: Renderer.Node, parent_transform: Matrix4) {
+        transform := parent_transform * node.local_transform;
+
+        for mesh: node.meshes {
+            transformed_mesh_min, transformed_mesh_max := transform_aabb(mesh.min, mesh.max, transform);
+
+            model.min = min(model.min, transformed_mesh_min);
+            model.max = max(model.max, transformed_mesh_max);
+        }
+
+        for child_id: node.children_ids {
+            visit(model, model.nodes[child_id], transform);
+        }
+    }
+
+    for node: model.nodes {
+        if node.parent_index.kind == .SOME {
+            continue;
+        }
+
+        visit(model, node, Matrix4_Identity);
+    }
+
+    model.center = (model.max + model.min) / 2;
+}
 
 convert_alpha_mode_dto :: (dto_alpha_mode: Alpha_Mode_Dto) -> Renderer.Alpha_Mode {
     if #complete dto_alpha_mode == {

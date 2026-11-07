@@ -8,6 +8,16 @@ init_debug_drawing :: (game: *Game) {
 
 deinit_debug_drawing :: () {};
 
+draw_model_bounds :: (
+    model_handle: Model_Handle,
+    transform: Matrix4,
+    color: Vector4 = { 0, 1, 0, 1 },
+) {
+    model := asset_manager_get_model(debug_drawing.game.asset_manager, model_handle);
+
+    draw_box(model.min, model.max, transform, color);
+}
+
 draw_model_mesh_bounds :: (
     model_handle: Model_Handle,
     transform: Matrix4,

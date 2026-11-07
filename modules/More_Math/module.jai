@@ -39,6 +39,21 @@ euler_to_quaternion :: (e: Vector3) -> Quaternion {
     return result;
 }
 
+// Transforms AABB preserving correct values for rotations & scale
+transform_aabb :: (min: Vector3, max: Vector3, transform: Matrix4) -> min: Vector3, max: Vector3 {
+    center  := (min + max) * 0.5;
+    extents := (max - min) * 0.5;
+
+    new_center := (transform * make_vector4(center, 1)).xyz;
+    new_extents := Vector3.{
+        abs(transform._11) * extents.x + abs(transform._12) * extents.y + abs(transform._13) * extents.z,
+        abs(transform._21) * extents.x + abs(transform._22) * extents.y + abs(transform._23) * extents.z,
+        abs(transform._31) * extents.x + abs(transform._32) * extents.y + abs(transform._33) * extents.z,
+    };
+
+    return new_center - new_extents, new_center + new_extents;
+}
+
 deg_to_rad :: (degrees: float) -> radians: float {
     FACTOR :: PI / 180;
 
