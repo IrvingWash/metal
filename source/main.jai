@@ -211,7 +211,7 @@ init :: () {
 
     #if DEVELOPER {
         init_editor(*game);
-        init_debug_drawing(*game);
+        init_debug_drawing(*game.renderer);
     }
 }
 

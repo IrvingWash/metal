@@ -176,7 +176,10 @@ draw_entity_section :: () {
     { // Draw bounds around the selected entity's model
         selected_entity := *editor.game.entities[editor.selected_entity_id];
 
-        model := asset_manager_get_model(editor.game.asset_manager, selected_entity.model_handle);
+        model := asset_manager_get_model(
+            editor.game.asset_manager,
+            selected_entity.model_handle,
+        );
 
         draw_model_bounds(model, make_world_transform(selected_entity));
     }
