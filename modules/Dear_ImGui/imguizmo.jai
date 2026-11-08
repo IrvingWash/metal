@@ -120,7 +120,7 @@ Zmo :: struct {
     // Needs view and projection matrices.
     // matrix parameter is the source matrix (where will be gizmo be drawn) and might be transformed by the function. Return deltaMatrix is optional
     // translation is applied in world space
-    OPERATION :: enum u32 {
+    Operation :: enum u32 {
         TRANSLATE_X   :: 1;
         TRANSLATE_Y   :: 2;
         TRANSLATE_Z   :: 4;
@@ -143,7 +143,7 @@ Zmo :: struct {
         UNIVERSAL     :: 14463;
     }
 
-    MODE :: enum u32 {
+    Mode :: enum u32 {
         LOCAL :: 0;
         WORLD :: 1;
     }
@@ -151,8 +151,8 @@ Zmo :: struct {
     manipulate :: (
         view: *float,
         projection: *float,
-        operation: OPERATION,
-        mode: MODE,
+        operation: Operation,
+        mode: Mode,
         matrix: *float,
         deltaMatrix: *float = null,
         snap: *float = null,
@@ -177,8 +177,8 @@ Zmo :: struct {
     view_manipulate :: (
         view: *float,
         projection: *float,
-        operation: OPERATION,
-        mode: MODE,
+        operation: Operation,
+        mode: Mode,
         matrix: *float,
         length: float,
         position: Vector2,
@@ -211,7 +211,7 @@ Zmo :: struct {
     get_id :: (ptr_id: *void) -> ID #foreign libimgui "_ZN8ImGuizmo5GetIDEPKv";
 
     // return true if the cursor is over the operation's gizmo
-    is_over :: (op: OPERATION) -> bool #foreign libimgui "_ZN8ImGuizmo6IsOverENS_9OPERATIONE";
+    is_over :: (op: Operation) -> bool #foreign libimgui "_ZN8ImGuizmo6IsOverENS_9OPERATIONE";
     set_gizmo_size_clip_space :: (value: float) -> void #foreign libimgui "_ZN8ImGuizmo21SetGizmoSizeClipSpaceEf";
 
     // Allow axis to flip

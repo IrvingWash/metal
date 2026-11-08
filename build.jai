@@ -261,6 +261,10 @@ create_config :: (arguments: []string) -> error: string, Config {
     }
     array_add(*config.plugins_to_create, ..DEFAULT_PLUGINS_TO_CREATE);
 
+    #if #exists(JAILS_DIAGNOSTICS_BUILD) {
+        config.developer = true;
+    }
+
     return "", config;
 }
 

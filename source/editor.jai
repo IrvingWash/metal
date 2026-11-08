@@ -111,11 +111,22 @@ Editor :: struct {
 
     descriptor_pool: VK.Descriptor_Pool;
 
-    is_entity_header_open: bool;
-    selected_entity_id:    s32;
-    gizmo_mode:            IM.Zmo.MODE = .WORLD;
-    gizmoa_operation:      IM.Zmo.OPERATION = .ROTATE;
+    is_entity_header_open:    bool;
+    selected_entity_id:       s32;
+    gizmo_mode:               Gizmo_Mode;
+    gizmo_operation:          Gizmo_Operation;
     should_draw_model_bounds: bool;
+}
+
+Gizmo_Mode :: enum {
+    WORLD;
+    LOCAL;
+}
+
+Gizmo_Operation :: enum {
+    TRANSLATE;
+    ROTATE;
+    SCALE;
 }
 
 editor: Editor;
@@ -151,16 +162,22 @@ draw_gizmos :: () {
     IM.Zmo.manipulate(
         view = transpose(editor.game.renderer.transforms.view).floats.data,
         projection = transpose(editor.game.renderer.transforms.projection).floats.data,
-        operation = editor.gizmoa_operation,
-        mode = editor.gizmo_mode,
+        operation = gizmo_operation_to_imguizmo(editor.gizmo_operation),
+        mode = gizmo_mode_to_imguizmo(editor.gizmo_mode),
         matrix = column_major_matrix.floats.data,
     );
 
     if IM.Zmo.is_using() {
         matrix := transpose(column_major_matrix);
-        selected_entity.position = get_translation_from_transform(matrix);
-        selected_entity.scale    = get_scale_from_transform(matrix);
-        selected_entity.rotation = get_rotation(matrix);
+
+        if #complete editor.gizmo_operation == {
+            case .TRANSLATE;
+                selected_entity.position = get_translation_from_transform(matrix);
+            case .SCALE;
+                selected_entity.scale    = get_scale_from_transform(matrix);
+            case .ROTATE;
+                selected_entity.rotation = get_rotation(matrix);
+        }
     }
 }
 
@@ -237,13 +254,11 @@ draw_entity_section :: () {
         "Entity",
         current_item = *editor.selected_entity_id,
         getter = (user_data: *void, idx: s32) -> *u8 #c_call {
-            entities := cast(*[..]Entity, user_data);
-
             push_context {
-                return temp_c_string(entities.*[idx].name);
+                return temp_c_string(editor.game.entities[idx].name);
             }
         },
-        user_data = *editor.game.entities,
+        user_data = null,
         items_count = xx editor.game.entities.count,
     );
 
@@ -263,6 +278,30 @@ draw_entity_section :: () {
         draw_model_aabb(model, entity_transform);
         draw_model_obb(model, entity_transform, { 1, 0, 0, 1 });
     }
+
+    IM.combo(
+        "Gizmo operation",
+        cast(*s32, *editor.gizmo_operation),
+        getter = (user_data: *void, idx: s32) -> *u8 #c_call {
+            push_context {
+                return temp_c_string(enum_names(Gizmo_Operation)[idx]);
+            }
+        },
+        user_data = null,
+        xx enum_name_count(Gizmo_Operation),
+    );
+
+    IM.combo(
+        "Gizmo mode",
+        cast(*s32, *editor.gizmo_mode),
+        getter = (user_data: *void, idx: s32) -> *u8 #c_call {
+            push_context {
+                return temp_c_string(enum_names(Gizmo_Mode)[idx]);
+            }
+        },
+        user_data = null,
+        xx enum_name_count(Gizmo_Mode),
+    );
 
     IM.drag_float3(
         "Position##Entity",
@@ -470,6 +509,26 @@ pick_entity :: () {
     }
 }
 
+gizmo_operation_to_imguizmo :: (operation: Gizmo_Operation) -> IM.Zmo.Operation {
+    if #complete operation == {
+        case .TRANSLATE;
+            return .TRANSLATE;
+        case .ROTATE;
+            return .ROTATE;
+        case .SCALE;
+            return .SCALE;
+    }
+}
+
+gizmo_mode_to_imguizmo :: (mode: Gizmo_Mode) -> IM.Zmo.Mode {
+    if #complete mode == {
+        case .WORLD;
+            return .WORLD;
+        case .LOCAL;
+            return .LOCAL;
+    }
+}
+
 #import "Sort";
 
 IM    :: #import "Dear_ImGui";
@@ -478,3 +537,4 @@ VK    :: #import "Jai_Vulkan";
 Input     :: #import "Input";
 Renderer  :: #import "Renderer";
 Windowing :: #import "Windowing";
+#import "Type_Utils";
