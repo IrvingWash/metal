@@ -1,7 +1,5 @@
 # Issues
 
-- Add picking
-
 - Refactor shader handling so they're on their own. Add metainfo for each one
 
 - Refactor presentation out of `finish_frame`
@@ -12,13 +10,9 @@
 
 - Add logs everywhere
 
-- Refactor pbr shader
-
 - Generate tangents
 
-- Sort everything so parent nodes come before children nodes so we don't need to use recursion when traversing the nodes
-
-- Add caching in `asset_manger`
+- Sort everything so parent nodes come before children nodes so we don't need to use recursion when traversing the nodes. This is when adding nodes to buckets
 
 - Refactor `assert_manager_upload_model` so it batches or uploads
 
