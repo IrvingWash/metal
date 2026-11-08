@@ -531,7 +531,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         camera,
         renderer.shadow_distance,
         aspect_ratio,
-        renderer.transforms,
+        renderer.transforms.view,
     );
 
     reset_model_pass(

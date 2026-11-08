@@ -1,5 +1,3 @@
-#scope_module
-
 Light :: union kind: Light_Kind {
     .DIRECTIONAL,, directional: Directional_Light;
 }
@@ -17,12 +15,14 @@ Directional_Light :: struct @Gpu {
     radius:                    float   = 1;
 }
 
+#scope_module
+
 update_directional_light :: (
     directional_light: *Directional_Light,
     camera:            $T/interface Camera,
     shadow_distance:   float,
     aspect_ratio:      float,
-    transforms:        Transforms,
+    view_transform:   Matrix4,
 ) {
     shadow_far := min(camera.z_far, shadow_distance);
     shadow_projection_transform := make_projection_matrix(
@@ -34,7 +34,7 @@ update_directional_light :: (
     );
 
     frustum_corners := make_frustum_corners(
-        transforms.view,
+        view_transform,
         shadow_projection_transform,
         depth_range_01 = true,
     );
