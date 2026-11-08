@@ -5,6 +5,18 @@ AABB :: struct {
     extents: Vector3;
 }
 
+deg_to_rad :: (degrees: float) -> radians: float {
+    FACTOR :: PI / 180;
+
+    return degrees * FACTOR;
+}
+
+rad_to_deg :: (radians: float) -> degrees: float {
+    FACTOR :: PI / 180;
+
+    return radians / FACTOR;
+}
+
 quaternion_to_euler :: (quaternion: Quaternion) -> Vector3 {
     // https://en.wikipedia.org/wiki/Rotation_formulations_in_three_dimensions?utm_source=chatgpt.com#:~:text=Quaternion%20%E2%86%92%20Euler%20angles%20%28z%2Dy%E2%80%B2%2Dx%E2%80%B3%20intrinsic%29edit
 
@@ -79,18 +91,6 @@ make_aabb :: (min: Vector3, max: Vector3) -> AABB {
     return aabb;
 }
 
-deg_to_rad :: (degrees: float) -> radians: float {
-    FACTOR :: PI / 180;
-
-    return degrees * FACTOR;
-}
-
-rad_to_deg :: (radians: float) -> degrees: float {
-    FACTOR :: PI / 180;
-
-    return radians / FACTOR;
-}
-
 cast_ray :: (
     position:          Vector2,
     screen_size:       Vector2,
@@ -140,8 +140,43 @@ cast_ray :: (
     return ray_world;
 }
 
+ray_vs_aabb :: (
+    ray_origin:    Vector3,
+    ray_direction: Vector3,
+    aabb:          AABB,
+    transform:     Matrix4,
+) -> bool, distance: float {
+    // https://tavianator.com/2022/ray_box_boundary.html
+
+    ok, inversed_transform := inverse(transform);
+    if !ok {
+        return false, 0;
+    }
+
+    transformed_ray_origin    := (inversed_transform * make_vector4(ray_origin, 1)).xyz;
+    transformed_ray_direction := (inversed_transform * make_vector4(ray_direction, 0)).xyz;
+
+    t_min: float = 0;
+    t_max: float = FLOAT32_INFINITY;
+
+    inversed_transformed_ray_direction := 1 / transformed_ray_direction;
+
+    for 0 .. 2 {
+        t1 := (aabb.min.component[it] - transformed_ray_origin.component[it])
+            * inversed_transformed_ray_direction.component[it];
+        t2 := (aabb.max.component[it] - transformed_ray_origin.component[it])
+            * inversed_transformed_ray_direction.component[it];
+
+        t_min = max(t_min, min(min(t1, t2), t_max));
+        t_max = min(t_max, max(max(t1, t2), t_min));
+    }
+
+    return t_min < t_max, t_min;
+}
+
 
 
 #scope_file
 
+#import "Basic";
 #import "Math";

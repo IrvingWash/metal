@@ -694,6 +694,10 @@ button :: inline (label: *u8, size: Vector2 = {}) -> bool {
     return button(label, *size);
 }
 
+set_next_item_open :: (is_open: bool, cond: Condition = .NONE) -> void #foreign libimgui "_ZN5ImGui15SetNextItemOpenEbi";
+
+is_item_toggled_selection :: () -> bool #foreign libimgui "_ZN5ImGui22IsItemToggledSelectionEv";
+
 same_line :: (
     offset_from_start_x: float = 0.0,
     spacing: float = -1.0,

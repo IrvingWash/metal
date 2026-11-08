@@ -61,21 +61,8 @@ update_editor :: (dt: float) {
         fly_camera(*editor.game.camera, dt, get_fly_camera_input());
     }
 
-    if editor.game.input_state.mouse.left_button & .DOWN && !editor.io.want_capture_mouse {
-        width, height := Windowing.get_renderable_size(editor.game.window);
-
-        view_rect_min := Renderer.get_view_rectangle(editor.game.renderer);
-
-        ray_direction := Input.cast_ray_from_mouse_position(
-            editor.game.input_state,
-            Vector2.{ xx width, xx height },
-            editor.game.renderer.transforms.projection,
-            editor.game.renderer.transforms.view,
-            offset = view_rect_min,
-        );
-
-        editor.ray_direction = ray_direction;
-        editor.ray_origin = editor.game.camera.position;
+    if editor.game.input_state.mouse.left_button & .PRESSED && !editor.io.want_capture_mouse {
+        pick_entity();
     }
 }
 
@@ -112,6 +99,20 @@ deinit_editor :: () {
 
 #scope_file
 
+Editor :: struct {
+    game: *Game;
+
+    ctx: *IM.Context;
+    io:  *IM.IO;
+
+    descriptor_pool: VK.Descriptor_Pool;
+
+    is_entity_header_open: bool;
+    selected_entity_id: s32;
+}
+
+editor: Editor;
+
 draw_whole_editor :: () {
     IM.begin(
         "Editor",
@@ -120,8 +121,6 @@ draw_whole_editor :: () {
     draw_camera_section();
     draw_entity_section();
     draw_renderer_section();
-
-    draw_line(editor.ray_origin, editor.ray_origin + editor.ray_direction * 100);
 
     IM.end();
 }
@@ -189,7 +188,9 @@ draw_renderer_section :: () {
 }
 
 draw_entity_section :: () {
-    if !IM.collapsing_header("Entities") {
+    IM.set_next_item_open(editor.is_entity_header_open);
+    editor.is_entity_header_open = IM.collapsing_header("Entities");
+    if !editor.is_entity_header_open {
         return;
     }
 
@@ -352,21 +353,81 @@ draw_overlay : Renderer.Overlay_Callback : (command_buffer: VK.Command_Buffer, u
     }
 }
 
-Editor :: struct {
-    game: *Game;
+pick_entity :: () {
+    width, height := Windowing.get_renderable_size(editor.game.window);
 
-    ctx: *IM.Context;
-    io:  *IM.IO;
+    // Letterboxing offset
+    view_rect_min := Renderer.get_view_rectangle(editor.game.renderer);
 
-    selected_entity_id: s32;
+    ray_direction := Input.cast_ray_from_mouse_position(
+        editor.game.input_state,
+        Vector2.{ xx width, xx height },
+        editor.game.renderer.transforms.projection,
+        editor.game.renderer.transforms.view,
+        offset = view_rect_min,
+    );
 
-    descriptor_pool: VK.Descriptor_Pool;
+    ray_position := editor.game.camera.position;
 
-    ray_direction: Vector3;
-    ray_origin:    Vector3;
+    Hit_Entity :: struct {
+        id:       int;
+        distance: float;
+    };
+
+    hit_entities: [..]Hit_Entity;
+    hit_entities.allocator = temp;
+    for entity: editor.game.entities {
+        model := asset_manager_get_model(editor.game.asset_manager, entity.model_handle);
+
+        ok, distance := ray_vs_aabb(
+            ray_position,
+            ray_direction,
+            model.aabb,
+            make_world_transform(entity),
+        );
+
+        if ok {
+            array_add(*hit_entities, { id = it_index, distance = distance });
+        }
+    }
+
+    if hit_entities.count < 1 {
+        return;
+    }
+
+    editor.is_entity_header_open = true;
+
+    quick_sort(
+        hit_entities,
+        (a: Hit_Entity, b: Hit_Entity) -> int {
+            if b.distance > a.distance
+                return -1;
+            if a.distance > b.distance
+                return 1;
+            return 0;
+        },
+    );
+
+    currently_selected_entity_index := -1;
+    for hit_entity: hit_entities {
+        if hit_entity.id == editor.selected_entity_id {
+            currently_selected_entity_index = it_index;
+        }
+    }
+
+    if (
+        currently_selected_entity_index > -1
+        && hit_entities.count - 1 > currently_selected_entity_index
+    ) {
+        editor.selected_entity_id = cast(s32, hit_entities[currently_selected_entity_index + 1].id);
+        return;
+    } else {
+        editor.selected_entity_id = cast(s32, hit_entities[0].id);
+        return;
+    }
 }
 
-editor: Editor;
+#import "Sort";
 
 IM    :: #import "Dear_ImGui";
 VK    :: #import "Jai_Vulkan";

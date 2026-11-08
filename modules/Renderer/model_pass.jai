@@ -181,7 +181,7 @@ prepare_model_pass :: (
             model_pass.ordered_draw_buckets,
             { alpha_mode = .BLEND },
         );
-        blend_bucket.entries.data = quick_sort(
+        quick_sort(
             blend_bucket.entries,
             (a: Model_Draw_Bucket_Entry, b: Model_Draw_Bucket_Entry) -> int {
                 if b.sorting_key_within_bucket > a.sorting_key_within_bucket {
