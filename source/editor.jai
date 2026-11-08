@@ -251,7 +251,7 @@ draw_entity_section :: () {
     }
 
     IM.combo(
-        "Entity",
+        "##Entity",
         current_item = *editor.selected_entity_id,
         getter = (user_data: *void, idx: s32) -> *u8 #c_call {
             push_context {
@@ -279,29 +279,33 @@ draw_entity_section :: () {
         draw_model_obb(model, entity_transform, { 1, 0, 0, 1 });
     }
 
-    IM.combo(
-        "Gizmo operation",
-        cast(*s32, *editor.gizmo_operation),
-        getter = (user_data: *void, idx: s32) -> *u8 #c_call {
-            push_context {
-                return temp_c_string(enum_names(Gizmo_Operation)[idx]);
-            }
-        },
-        user_data = null,
-        xx enum_name_count(Gizmo_Operation),
-    );
-
-    IM.combo(
-        "Gizmo mode",
-        cast(*s32, *editor.gizmo_mode),
-        getter = (user_data: *void, idx: s32) -> *u8 #c_call {
-            push_context {
-                return temp_c_string(enum_names(Gizmo_Mode)[idx]);
-            }
-        },
-        user_data = null,
-        xx enum_name_count(Gizmo_Mode),
-    );
+    { // Gizmo operations
+        IM.push_item_width(100);
+        defer IM.pop_item_width();
+        IM.combo(
+            "##Gizmo operation",
+            cast(*s32, *editor.gizmo_operation),
+            getter = (user_data: *void, idx: s32) -> *u8 #c_call {
+                push_context {
+                    return temp_c_string(enum_names(Gizmo_Operation)[idx]);
+                }
+            },
+            user_data = null,
+            xx enum_name_count(Gizmo_Operation),
+        );
+        IM.same_line();
+        IM.combo(
+            "##Gizmo mode",
+            cast(*s32, *editor.gizmo_mode),
+            getter = (user_data: *void, idx: s32) -> *u8 #c_call {
+                push_context {
+                    return temp_c_string(enum_names(Gizmo_Mode)[idx]);
+                }
+            },
+            user_data = null,
+            xx enum_name_count(Gizmo_Mode),
+        );
+    }
 
     IM.drag_float3(
         "Position##Entity",

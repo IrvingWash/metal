@@ -708,6 +708,8 @@ same_line :: (
 
 push_item_width :: (item_width: float) -> void #foreign libimgui "_ZN5ImGui13PushItemWidthEf";
 
+pop_item_width :: () -> void #foreign libimgui "_ZN5ImGui12PopItemWidthEv";
+
 get_background_draw_list :: () -> *Draw_List #foreign libimgui "_ZN5ImGui21GetBackgroundDrawListEv";
 
 show_demo_window :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui14ShowDemoWindowEPb";
