@@ -215,7 +215,9 @@ draw_entity_section :: () {
             selected_entity.model_handle,
         );
 
-        draw_model_bounds(model, make_world_transform(selected_entity));
+        entity_transform := make_world_transform(selected_entity);
+        draw_model_aabb(model, entity_transform);
+        draw_model_obb(model, entity_transform, { 1, 0, 0, 1 });
     }
 
     IM.drag_float3(

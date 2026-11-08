@@ -8,7 +8,20 @@ init_debug_drawing :: (renderer: *Renderer.Renderer) {
 
 deinit_debug_drawing :: () {};
 
-draw_model_bounds :: (
+draw_model_obb :: (
+    model:     Renderer.Model_Accessor,
+    transform: Matrix4,
+    color:     Vector4 = DEFAULT_LINE_COLOR,
+) {
+    draw_box(
+        model.aabb.min,
+        model.aabb.max,
+        transform,
+        color,
+    );
+}
+
+draw_model_aabb :: (
     model:     Renderer.Model_Accessor,
     transform: Matrix4,
     color:     Vector4 = DEFAULT_LINE_COLOR,
@@ -113,7 +126,7 @@ draw_box :: (
 
     if transform != Matrix4_Identity {
         for *corner: corners {
-            corner.* *= (transform * make_vector4(corner, 1)).xyz;
+            corner.* = (transform * make_vector4(corner, 1)).xyz;
         }
     }
 
