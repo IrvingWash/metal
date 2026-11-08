@@ -91,7 +91,7 @@ Image_Params :: struct {
 Directional_Light_Params :: struct {
     color:     Vector3;
     direction: Vector3;
-    intensity: float = 5;
+    intensity: float;
 }
 
 Camera :: struct {
@@ -1048,7 +1048,6 @@ get_directional_light :: (renderer: Renderer) -> Directional_Light {
     return renderer.scene_info.scene_data.directional_light;
 }
 
-// @Todo accept Params, so user doesn't set the transform
 set_directional_light :: (renderer: *Renderer, params: Directional_Light_Params) {
     light: Light;
     light.kind = .DIRECTIONAL;
