@@ -112,6 +112,31 @@ vec3 get_normal_from_texel(vec3 world_space_vertex_normal, vec4 vertex_tangent, 
     return N;
 }
 
+vec3 do_light(
+    vec3 V,
+    vec3 L,
+    vec3 N,
+    vec3 F0,
+    vec3 radiance,
+    vec3 albedo,
+    float roughness_squared,
+    float roughness_clamped,
+    float metallic
+) {
+    vec3 H = normalize(V + L);
+
+    float D = ndf_ggx(roughness_squared, N, H);
+    float G = geometry_smith(roughness_clamped, N, V, L);
+    vec3 F = fresnel_schlick(F0, max(dot(H, V), 0));
+
+    vec3 specular = specular_brdf(D, G, F, N, V, L);
+
+    vec3  kS = F; // "Energy consevration"
+    vec3  kD = (vec3(1) - kS) * (1 - metallic); // Diffuse contribution coeff (nothing for metalls)
+
+    return (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0);
+}
+
 layout(constant_id = 0) const uint ALPHA_MODE                            = 0;
 layout(constant_id = 1) const uint DISCARD_BLEND_SINGLE_SIDED_BACK_FACES = 0; // 0 or 1
 
@@ -199,18 +224,20 @@ void main() {
         vec3 radiance = scene_data.directional_light.color * scene_data.directional_light.intensity;
 
         vec3 L = normalize(-scene_data.directional_light.direction);
-        vec3 H = normalize(V + L);
 
-        float D = ndf_ggx(roughness_squared, N, H);
-        float G = geometry_smith(roughness_clamped, N, V, L);
-        vec3 F = fresnel_schlick(F0, max(dot(H, V), 0));
+        vec3 light = do_light(
+            V,
+            L,
+            N,
+            F0,
+            radiance,
+            albedo.rgb,
+            roughness_squared,
+            roughness_clamped,
+            metallic
+        );
 
-        vec3 specular = specular_brdf(D, G, F, N, V, L);
-
-        vec3  kS = F; // "Energy consevration"
-        vec3  kD = (vec3(1) - kS) * (1 - metallic); // Diffuse contribution coeff (nothing for metalls)
-
-        Lo += (1 - shadow) * (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0);
+        Lo += (1 - shadow) * light;
     }
 
     vec3 ambient = scene_data.ambient_color * albedo.rgb * occlusion;
