@@ -34,7 +34,12 @@ DEPENDENCIES :: Dependency.[
         git_url     = "https://github.com/google/shaderc.git",
         pin         = "v2026.4",
         on_complete = shaderc_on_complete,
-    }
+    },
+    {
+        name = "ImGuizmo",
+        git_url = "https://github.com/CedricGuillemet/ImGuizmo.git",
+        pin = "1.10",
+    },
 ];
 
 shaderc_on_complete :: () -> ok: bool {

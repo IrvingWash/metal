@@ -8,6 +8,7 @@
 
 IMGUI_PATH          :: #run path_join(#filepath, "..", "vendored", "imgui",, temp);
 IMGUI_BACKENDS_PATH :: #run path_join(#filepath, "..", "vendored", "imgui", "backends",, temp);
+IMGUIZMO_PATH        :: #run path_join(#filepath, "..", "vendored", "ImGuizmo",, temp);
 
 OUTPUT_PATH :: #run path_join(#filepath, tprint("%", OS),, temp);
 
@@ -56,12 +57,14 @@ generate_bindings :: () -> error: string {
         IMGUI_BACKENDS_PATH,
         VULKAN_INCLUDE_PATH,
         SDL_INCLUDE_PATH,
+        path_join(IMGUIZMO_PATH, "src",, temp),
     );
     array_add(
         *options.source_files,
         path_join(IMGUI_PATH, "imgui.h",, temp),
         path_join(IMGUI_BACKENDS_PATH, "imgui_impl_sdl3.h",, temp),
         path_join(IMGUI_BACKENDS_PATH, "imgui_impl_vulkan.h",, temp),
+        path_join(IMGUIZMO_PATH, "src", "ImGuizmo.h",, temp),
     );
     array_add(
         *options.extra_clang_arguments,
@@ -94,6 +97,8 @@ build :: () -> error: string {
 
         path_join(IMGUI_BACKENDS_PATH, "imgui_impl_sdl3.cpp",, temp),
         path_join(IMGUI_BACKENDS_PATH, "imgui_impl_vulkan.cpp",, temp),
+
+        path_join(IMGUIZMO_PATH, "src/ImGuizmo.cpp",, temp),
     ];
 
     ok := make_directory_if_it_does_not_exist(OUTPUT_PATH);

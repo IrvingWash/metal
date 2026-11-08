@@ -1,5 +1,6 @@
 #load "vulkan_backend.jai";
 #load "sdl_backend.jai";
+#load "imguizmo.jai";
 
 ID :: #type u32;
 
