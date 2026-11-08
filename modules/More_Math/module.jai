@@ -5,6 +5,19 @@ AABB :: struct {
     extents: Vector3;
 }
 
+Frustum :: struct {
+    top:    Plane3;
+    bottom: Plane3;
+
+    right: Plane3;
+    left:  Plane3;
+
+    far:  Plane3;
+    near: Plane3;
+
+    #overlay(top) planes: [6]Plane3;
+}
+
 deg_to_rad :: (degrees: float) -> radians: float {
     FACTOR :: PI / 180;
 
@@ -210,6 +223,77 @@ calculate_rotation_from_transform :: (original: Matrix4) -> Quaternion {
     }
 
     return get_rotation(m);
+}
+
+make_frustum_from_matrix :: (matrix: Matrix4, $should_normalize: bool, $depth_range_01: bool) -> Frustum {
+    // https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf
+
+    frustum: Frustum;
+
+    frustum.left.a = matrix._41 + matrix._11;
+    frustum.left.b = matrix._42 + matrix._12;
+    frustum.left.c = matrix._43 + matrix._13;
+    frustum.left.d = matrix._44 + matrix._14;
+
+    frustum.right.a = matrix._41 - matrix._11;
+    frustum.right.b = matrix._42 - matrix._12;
+    frustum.right.c = matrix._43 - matrix._13;
+    frustum.right.d = matrix._44 - matrix._14;
+
+    frustum.top.a = matrix._41 - matrix._21;
+    frustum.top.b = matrix._42 - matrix._22;
+    frustum.top.c = matrix._43 - matrix._23;
+    frustum.top.d = matrix._44 - matrix._24;
+
+    frustum.bottom.a = matrix._41 + matrix._21;
+    frustum.bottom.b = matrix._42 + matrix._22;
+    frustum.bottom.c = matrix._43 + matrix._23;
+    frustum.bottom.d = matrix._44 + matrix._24;
+
+    #if depth_range_01 {
+        frustum.near.a = matrix._31;
+        frustum.near.b = matrix._32;
+        frustum.near.c = matrix._33;
+        frustum.near.d = matrix._34;
+    } else {
+        frustum.near.a = matrix._41 + matrix._31;
+        frustum.near.b = matrix._42 + matrix._32;
+        frustum.near.c = matrix._43 + matrix._33;
+        frustum.near.d = matrix._44 + matrix._34;
+    }
+
+    frustum.far.a = matrix._41 - matrix._31;
+    frustum.far.b = matrix._42 - matrix._32;
+    frustum.far.c = matrix._43 - matrix._33;
+    frustum.far.d = matrix._44 - matrix._34;
+
+    #if should_normalize {
+        frustum.left   = normalize(frustum.left);
+        frustum.right  = normalize(frustum.right);
+        frustum.top    = normalize(frustum.top);
+        frustum.bottom = normalize(frustum.bottom);
+        frustum.near   = normalize(frustum.near);
+        frustum.far    = normalize(frustum.far);
+    }
+
+    return frustum;
+}
+
+aabb_vs_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
+    // https://outerra.blogspot.com/2012/11/view-frustum-culling-of-sphere-mapped.html
+
+    for plane: frustum.planes {
+        d := plane_dot(plane, aabb.center);
+
+        normal := Vector3.{ plane.a, plane.b, plane.c };
+        r := dot(abs(normal), aabb.extents);
+
+        if d + r < 0 {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 

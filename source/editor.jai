@@ -208,7 +208,11 @@ draw_renderer_section :: () {
         if is_changed {
             Renderer.set_directional_light(
                 *editor.game.renderer,
-                directional_light,
+                {
+                    color     = directional_light.color,
+                    intensity = directional_light.intensity,
+                    direction = directional_light.direction,
+                }
             );
         }
     }

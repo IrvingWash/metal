@@ -3,27 +3,12 @@
 Shadow_Pass :: struct {
     descriptor_pool:       VK.Descriptor_Pool;
     descriptor_set_layout: VK.Descriptor_Set_Layout;
-    descriptor_sets:       [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
+    descriptor_set:       VK.Descriptor_Set;
 
     depth_image_info: Image_Info;
     sampler:          VK.Sampler;
 
     pipeline_info: Shadow_Pass_Pipeline_Info;
-
-    buffer_infos: [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
-    pointers:     [FRAMES_IN_FLIGHT_COUNT]*Shadow_Pass_Data;
-}
-
-Light_Source :: union kind: Light_Source_Kind {
-    .DIRECTIONAL,, directional: Directional_Light_Source;
-}
-
-Light_Source_Kind :: enum {
-    DIRECTIONAL;
-}
-
-Directional_Light_Source :: struct {
-    direction: Vector3;
 }
 
 create_shadow_pass :: (
@@ -37,7 +22,7 @@ create_shadow_pass :: (
     error:,
         shadow_pass.descriptor_pool,
         shadow_pass.descriptor_set_layout,
-        shadow_pass.descriptor_sets = create_shadow_pass_descriptors(device);
+        shadow_pass.descriptor_set = create_shadow_pass_descriptor(device);
     if error {
         return
             tprint("Failed to create descriptors for shadow pass: %", error),
@@ -87,68 +72,16 @@ create_shadow_pass :: (
             image_layout = .SHADER_READ_ONLY_OPTIMAL,
         };
 
-        writes: [FRAMES_IN_FLIGHT_COUNT]VK.Write_Descriptor_Set;
-        for set: shadow_pass.descriptor_sets {
-            writes[it_index] = VK.Write_Descriptor_Set.{
-                dst_set           = set,
-                dst_binding       = 0,
-                dst_array_element = 0,
-                descriptor_count  = 1,
-                descriptor_type   = .COMBINED_IMAGE_SAMPLER,
-                p_image_info      = *image_descriptor,
-            };
-        }
-
-        VK.update_descriptor_sets(device, writes, .[]);
-    }
-
-    // Create and write buffers
-    for *buffer_info: shadow_pass.buffer_infos {
-        error, new_buffer_info := create_buffer(
-            device,
-            allocator,
-            usage = .UNIFORM_BUFFER,
-            size_of(Shadow_Pass_Data),
-            memory_usage = .AUTO,
-            mappable = true,
-        );
-        if error {
-            return
-                tprint("Failed to create shadow pass uniform buffer: %", error),
-                shadow_pass;
-        }
-
-        buffer_info.* = new_buffer_info;
-
-        result:, shadow_pass.pointers[it_index] = VMA.map_memory(
-            allocator,
-            buffer_info.allocation,
-        );
-        if result != .SUCCESS {
-            return
-                tprint("Failed to map shadow pass buffer memory: %", result),
-                shadow_pass;
-        }
-
-        descriptor_buffer_info := VK.Descriptor_Buffer_Info.{
-            buffer = buffer_info.buffer,
-            offset = 0,
-            range = size_of(Shadow_Pass_Data),
+        write := VK.Write_Descriptor_Set.{
+            dst_set           = shadow_pass.descriptor_set,
+            dst_binding       = 0,
+            dst_array_element = 0,
+            descriptor_count  = 1,
+            descriptor_type   = .COMBINED_IMAGE_SAMPLER,
+            p_image_info      = *image_descriptor,
         };
 
-        write_descriptor_set := VK.Write_Descriptor_Set.{
-            dst_set          = shadow_pass.descriptor_sets[it_index],
-            dst_binding      = 1,
-            descriptor_count = 1,
-            descriptor_type  = .UNIFORM_BUFFER,
-            p_buffer_info    = *descriptor_buffer_info,
-        };
-
-        VK.update_descriptor_sets(
-            device,
-            .[write_descriptor_set],
-            .[],
-        );
+        VK.update_descriptor_sets(device, .[write], .[]);
     }
 
     error, shadow_pass.pipeline_info = create_shadow_pass_pipeline_info(
@@ -176,15 +109,6 @@ destroy_shadow_pass :: (
 
     VK.destroy_sampler(device, shadow_pass.sampler);
 
-    for buffer_info: shadow_pass.buffer_infos {
-        VMA.unmap_memory(allocator, buffer_info.allocation);
-        VMA.destroy_buffer(
-            allocator,
-            buffer_info.buffer,
-            buffer_info.allocation,
-        );
-    }
-
     destroy_shadow_pass_pipeline_info(
         *shadow_pass.pipeline_info,
         device,
@@ -200,27 +124,19 @@ destroy_shadow_pass :: (
 }
 
 do_shadow_pass :: (
-    shadow_pass:        *Shadow_Pass,
-    light_source:       Light_Source,
-    command_buffer:     VK.Command_Buffer,
-    mesh_geometry_info: Mesh_Geometry_Info,
-    materials_info:     Materials_Info,
-    model_pass:         Model_Pass,
-    frame_index:        u64,
-    allocator:          VMA.Allocator,
+    shadow_pass:                     *Shadow_Pass,
+    light:                           Light,
+    command_buffer:                  VK.Command_Buffer,
+    mesh_geometry_info:              Mesh_Geometry_Info,
+    materials_info:                  Materials_Info,
+    model_pass:                      Model_Pass,
+    frame_index:                     u64,
 ) {
-    view_projection_transform := create_view_projection_transform_for_light_source(light_source);
-
-    shadow_pass.pointers[frame_index].* = Shadow_Pass_Data.{
-        view_projection_transform = view_projection_transform,
-        radius                    = DIRECTIONAL_LIGHT_RADIUS,
-    };
-    VMA.flush_allocation(
-        allocator,
-        shadow_pass.buffer_infos[frame_index].allocation,
-        offset = 0,
-        VK.WHOLE_SIZE,
-    );
+    light_view_projection_transform: Matrix4;
+    if #complete light.kind == {
+        case .DIRECTIONAL;
+            light_view_projection_transform = light.directional.view_projection_transform;
+    }
 
     // Transition to depth attachment
     transition_images_layouts(
@@ -289,7 +205,7 @@ do_shadow_pass :: (
             material_buffer_address = materials_info.material_buffer_info.device_address,
             instance_buffer_address = model_pass.instance_buffer_infos[frame_index].device_address,
 
-            view_projection_transform = view_projection_transform,
+            view_projection_transform = light_view_projection_transform,
         };
 
         VK.cmd_push_constants(
@@ -390,17 +306,9 @@ do_shadow_pass :: (
 
 #scope_file
 
-DIRECTIONAL_LIGHT_RADIUS :: 50; // @Todo: Hardcode
-DIRECTIONAL_LIGHT_CENTER :: Vector3.{};
-
 DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
 DEFAULT_SHADOW_DEPTH_IMAGE_WIDTH  :: 2048;
 DEFAULT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
-
-Shadow_Pass_Data :: struct @Gpu {
-    view_projection_transform: Matrix4;
-    radius:                    float = DIRECTIONAL_LIGHT_RADIUS;
-}
 
 Shadow_Pass_Pipeline_Info :: struct {
     layout:   VK.Pipeline_Layout;
@@ -427,31 +335,25 @@ destroy_shadow_pass_pipeline_info :: (
     pipeline_info.* = {};
 }
 
-create_shadow_pass_descriptors :: (device: VK.Device) -> error: string,
+create_shadow_pass_descriptor :: (device: VK.Device) -> error: string,
     VK.Descriptor_Pool,
     VK.Descriptor_Set_Layout,
-    [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set
+    VK.Descriptor_Set
 {
     descriptor_pool:       VK.Descriptor_Pool;
     descriptor_set_layout: VK.Descriptor_Set_Layout;
-    descriptor_sets:       [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set;
+    descriptor_set:        VK.Descriptor_Set;
 
     { // Pool
-        descriptor_pool_sizes := VK.Descriptor_Pool_Size.[
-            {
-                type             = .COMBINED_IMAGE_SAMPLER,
-                descriptor_count = FRAMES_IN_FLIGHT_COUNT,
-            },
-            {
-                type             = .UNIFORM_BUFFER,
-                descriptor_count = FRAMES_IN_FLIGHT_COUNT,
-            }
-        ];
+        descriptor_pool_size := VK.Descriptor_Pool_Size.{
+            type             = .COMBINED_IMAGE_SAMPLER,
+            descriptor_count = 1,
+        };
 
         descriptor_pool_create_info := VK.Descriptor_Pool_Create_Info.{
-            max_sets        = FRAMES_IN_FLIGHT_COUNT,
-            pool_size_count = descriptor_pool_sizes.count,
-            p_pool_sizes    = descriptor_pool_sizes.data,
+            max_sets        = 1,
+            pool_size_count = 1,
+            p_pool_sizes    = *descriptor_pool_size,
         };
         result:, descriptor_pool = VK.create_descriptor_pool(device, *descriptor_pool_create_info);
         if result != .SUCCESS {
@@ -459,29 +361,21 @@ create_shadow_pass_descriptors :: (device: VK.Device) -> error: string,
                 tprint("Failed to create descriptor pool for shadow pass: %", result),
                 descriptor_pool,
                 descriptor_set_layout,
-                descriptor_sets;
+                descriptor_set;
         }
     }
 
     { // Layout
-        bindings := VK.Descriptor_Set_Layout_Binding.[
-            {
-                binding          = 0,
-                descriptor_type  = .COMBINED_IMAGE_SAMPLER,
-                descriptor_count = 1,
-                stage_flags      = .FRAGMENT,
-            },
-            {
-                binding          = 1,
-                descriptor_type  = .UNIFORM_BUFFER,
-                descriptor_count = 1,
-                stage_flags      = .FRAGMENT,
-            }
-        ];
+        binding := VK.Descriptor_Set_Layout_Binding.{
+            binding          = 0,
+            descriptor_type  = .COMBINED_IMAGE_SAMPLER,
+            descriptor_count = 1,
+            stage_flags      = .FRAGMENT,
+        };
 
         descriptor_set_layout_create_info := VK.Descriptor_Set_Layout_Create_Info.{
-            binding_count = bindings.count,
-            p_bindings    = bindings.data,
+            binding_count = 1,
+            p_bindings    = *binding,
         };
 
         result:, descriptor_set_layout = VK.create_descriptor_set_layout(
@@ -493,19 +387,15 @@ create_shadow_pass_descriptors :: (device: VK.Device) -> error: string,
                 tprint("Failed to create descriptor set layout for shadow pass: %", result),
                 descriptor_pool,
                 descriptor_set_layout,
-                descriptor_sets;
+                descriptor_set;
         }
     }
 
     { // Set
-        layouts: [FRAMES_IN_FLIGHT_COUNT]VK.Descriptor_Set_Layout;
-        for *layout: layouts {
-            layout.* = descriptor_set_layout;
-        }
         descriptor_set_allocate_info := VK.Descriptor_Set_Allocate_Info.{
             descriptor_pool      = descriptor_pool,
-            descriptor_set_count = layouts.count,
-            p_set_layouts        = layouts.data,
+            descriptor_set_count = 1,
+            p_set_layouts        = *descriptor_set_layout,
         };
 
         result, created_descriptor_sets := VK.allocate_descriptor_sets(device, *descriptor_set_allocate_info,, temp);
@@ -514,19 +404,17 @@ create_shadow_pass_descriptors :: (device: VK.Device) -> error: string,
                 tprint("Failed to allocate descriptor sets for shadow pass: %", result),
                 descriptor_pool,
                 descriptor_set_layout,
-                descriptor_sets;
+                descriptor_set;
         }
 
-        for set: created_descriptor_sets {
-            descriptor_sets[it_index] = set;
-        }
+        descriptor_set = created_descriptor_sets[0];
     }
 
     return
         "",
         descriptor_pool,
         descriptor_set_layout,
-        descriptor_sets;
+        descriptor_set;
 }
 
 create_shadow_pass_pipeline_info :: (
@@ -688,40 +576,4 @@ create_shadow_pass_pipeline_info :: (
     }
 
     return "", pipeline_info;
-}
-
-create_view_projection_transform_for_light_source :: (light_source: Light_Source) -> Matrix4 {
-    if #complete light_source.kind == {
-        case .DIRECTIONAL;
-            projection_transform := orthographic_projection_matrix(
-                left           = -DIRECTIONAL_LIGHT_RADIUS,
-                right          = DIRECTIONAL_LIGHT_RADIUS,
-                bottom         = -DIRECTIONAL_LIGHT_RADIUS,
-                top            = DIRECTIONAL_LIGHT_RADIUS,
-                near           = 0,
-                far            = 2 * DIRECTIONAL_LIGHT_RADIUS,
-                depth_range_01 = true,
-            );
-
-            view_transform := make_look_at_matrix(
-                viewpoint = DIRECTIONAL_LIGHT_CENTER - normalize(light_source.directional.direction) * DIRECTIONAL_LIGHT_RADIUS,
-                look_at   = DIRECTIONAL_LIGHT_CENTER,
-                reference_up_vector = calculate_reference_up_vector(light_source.directional.direction),
-                x_is_forward = false,
-            );
-
-            return projection_transform * view_transform;
-    }
-}
-
-calculate_reference_up_vector :: (light_direction: Vector3) -> Vector3 {
-    EPSILON :: 0.01;
-
-    normalized_light_direction := normalize(light_direction);
-
-  if abs(dot(normalized_light_direction, .{0, 1, 0})) > 1 - EPSILON {
-      return .{1, 0, 0};
-  }
-
-  return .{0, 1, 0};
 }

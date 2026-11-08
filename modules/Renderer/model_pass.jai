@@ -13,7 +13,8 @@ Model_Pass :: struct {
     indirect_draw_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     indirect_draw_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*VK.Draw_Indexed_Indirect_Command;
 
-    camera_world_position: Vector3; // For sorting
+    view_point_for_sorting: Vector3;
+    frustums_for_culling:   [..]Frustum;
 }
 
 create_model_pass :: (
@@ -104,6 +105,8 @@ create_model_pass :: (
 }
 
 destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VMA.Allocator) {
+    array_free(model_pass.frustums_for_culling);
+
     for instance_buffer_info: model_pass.instance_buffer_infos {
         VMA.unmap_memory(
             allocator,
@@ -135,8 +138,13 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
     model_pass.* = {};
 }
 
-reset_model_pass :: (model_pass: *Model_Pass, camera_world_position: Vector3) {
-    model_pass.camera_world_position = camera_world_position;
+reset_model_pass :: (model_pass: *Model_Pass, view_point_for_sorting: Vector3, frustums_for_culling: []Frustum) {
+    model_pass.view_point_for_sorting = view_point_for_sorting;
+
+    array_reset_keeping_memory(*model_pass.frustums_for_culling);
+    for frustum: frustums_for_culling {
+        array_add(*model_pass.frustums_for_culling, frustum);
+    }
 
     reset_draw_buckets_entries_keeping_order(model_pass.ordered_draw_buckets);
 }
@@ -147,6 +155,20 @@ add_model_to_model_pass :: (
     materials_info:  Materials_Info,
     world_transform: Matrix4,
 ) {
+    { // Frustum culling
+        transformed_aabb := transform_aabb(model_accessor.aabb, world_transform);
+        is_inside_one_of_the_frustums: bool;
+        for frustum: model_pass.frustums_for_culling {
+            if aabb_vs_frustum(transformed_aabb, frustum) {
+                is_inside_one_of_the_frustums = true;
+                break;
+            }
+        }
+        if !is_inside_one_of_the_frustums {
+            return;
+        }
+    }
+
     for node: model_accessor.nodes {
         if node.parent_index.kind != .NONE {
             continue;
@@ -158,7 +180,7 @@ add_model_to_model_pass :: (
             node,
             model_accessor.nodes,
             world_transform,
-            model_pass.camera_world_position,
+            model_pass.view_point_for_sorting,
         );
     }
 }
@@ -194,7 +216,7 @@ prepare_model_pass :: (
 
                 return 0;
             }
-        ).data;
+        );
     }
 
     cursor: u32;

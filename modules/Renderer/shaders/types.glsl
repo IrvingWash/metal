@@ -24,9 +24,11 @@ struct Material {
 };
 
 struct Directional_Light {
-    vec3 direction;
-    float intensity;
-    vec3 color;
+    vec3   direction;
+    float  intensity;
+    vec3   color;
+    mat4x4 view_projection_transform;
+    float radius;
 };
 
 struct Vertex {
