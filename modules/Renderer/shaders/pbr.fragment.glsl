@@ -125,19 +125,13 @@ layout(buffer_reference, scalar) readonly buffer Material_Buffer {
 
 layout(set = 0, binding = 0) uniform sampler2D textures[];
 
-layout(scalar, set = 1, binding = 0) uniform Scene_Data {
+layout(scalar, set = 1, binding = 0, row_major) uniform Scene_Data {
     Directional_Light directional_light;
     vec3 camera_world_position;
     vec3 ambient_color;
 } scene_data;
 
 layout(set = 2, binding = 0) uniform sampler2DShadow shadow_map;
-
-layout(scalar, set = 2, binding = 1, row_major) uniform Shadow_Pass_Data {
-    mat4x4 light_view_projection_transform;
-    float  radius;
-} shadow_pass_data;
-
 
 layout(location = 0) in Vertex_Input {
          vec4 color;
@@ -167,9 +161,9 @@ void main() {
     float shadow = calculate_shadow(
         shadow_map,
         vertex_input.fragment_world_position,
-        shadow_pass_data.light_view_projection_transform,
+        scene_data.directional_light.view_projection_transform,
         vertex_input.world_space_normal,
-        shadow_pass_data.radius
+        scene_data.directional_light.radius
     );
 
     vec4 albedo = base_color_texel * material.base_color_factor * vertex_input.color;

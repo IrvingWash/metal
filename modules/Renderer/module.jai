@@ -69,12 +69,12 @@ Get_Compiled_Shader :: #type (name: string) -> error: string, content: string;
 
 Overlay_Callback :: #type (command_buffer: VK.Command_Buffer, user_data: *void);
 
-Create_Sampler_Params :: VK.Sampler_Create_Info;
-
 Overlay_Callback_Info :: struct {
     proc:      Overlay_Callback;
     user_data: *void;
 }
+
+Create_Sampler_Params :: VK.Sampler_Create_Info;
 
 Image_Params :: struct {
     width:           u32;
@@ -86,6 +86,12 @@ Image_Params :: struct {
         SRGB;
         UNORM;
     }
+}
+
+Directional_Light_Params :: struct {
+    color:     Vector3;
+    direction: Vector3;
+    intensity: float = 5;
 }
 
 Camera :: struct {
@@ -101,10 +107,20 @@ Camera :: struct {
     exposure: float = 1;
 }
 
+Light :: union kind: Light_Kind {
+    .DIRECTIONAL,, directional: Directional_Light;
+}
+
+Light_Kind :: enum {
+    DIRECTIONAL;
+}
+
 Directional_Light :: struct @Gpu {
-    direction: Vector3 = { 0, -1, -1 };
-    intensity: float   = 5;
-    color:     Vector3 = { 1, 1, 1 };
+    direction:                 Vector3 = { 0, -1, -1 };
+    intensity:                 float   = 5;
+    color:                     Vector3 = { 1, 1,  1  };
+    view_projection_transform: Matrix4;
+    radius: float              = DIRECTIONAL_LIGHT_RADIUS;
 }
 
 Color_Hdr_Target :: struct {
@@ -510,7 +526,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     renderer.transforms.view = make_look_at_matrix(
         camera.position,
         look_at = camera.position + camera.front,
-        calculate_camera_up(camera.front),
+        calculate_reference_up_vector(camera.front),
         x_is_forward = false,
     );
     aspect_ratio := cast(float, renderer.color_hdr_target.image_info.extent.width)
@@ -527,11 +543,18 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     reset_model_pass(
         *renderer.model_pass,
         camera.position,
-        make_frustum_from_matrix(
-            renderer.transforms.view_projection,
-            should_normalize = true,
-            depth_range_01 = true,
-        ),
+        .[
+            make_frustum_from_matrix(
+                renderer.transforms.view_projection,
+                should_normalize = true,
+                depth_range_01 = true,
+            ),
+            make_frustum_from_matrix(
+                renderer.scene_info.scene_data.directional_light.view_projection_transform,
+                should_normalize = true,
+                depth_range_01 = true,
+            ),
+        ],
     );
 
     return "";
@@ -640,18 +663,17 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // Shadow pass start
     // =========================================================================
     {
-        light_source: Light_Source;
-        light_source.kind = .DIRECTIONAL;
-        light_source.directional.direction = renderer.scene_info.scene_data.directional_light.direction;
+        light: Light;
+        light.kind = .DIRECTIONAL;
+        light.directional = renderer.scene_info.scene_data.directional_light;
         directional_light_shadow_pass_result := do_shadow_pass(
             *renderer.shadow_pass,
-            light_source,
+            light,
             frame_resources.command_buffer,
             renderer.mesh_geometry_info,
             renderer.materials_info,
             renderer.model_pass,
             frame_resources_index,
-            renderer.allocator,
         );
     }
 
@@ -746,7 +768,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         frame_resources_index,
         frame_resources.command_buffer,
         renderer.scene_info.descriptor_sets[frame_resources_index],
-        renderer.shadow_pass.descriptor_sets[frame_resources_index],
+        renderer.shadow_pass.descriptor_set,
         renderer.transforms,
     );
 
@@ -1026,16 +1048,26 @@ get_directional_light :: (renderer: Renderer) -> Directional_Light {
     return renderer.scene_info.scene_data.directional_light;
 }
 
+// @Todo accept Params, so user doesn't set the transform
+set_directional_light :: (renderer: *Renderer, params: Directional_Light_Params) {
+    light: Light;
+    light.kind = .DIRECTIONAL;
+    light.directional = {
+        color = params.color,
+        intensity = params.intensity,
+        direction = params.direction,
+    };
+    light.directional.view_projection_transform = create_view_projection_transform_for_light(light);
+
+    renderer.scene_info.scene_data.directional_light = light.directional;
+}
+
 get_clear_color :: (renderer: Renderer) -> Vector4 {
     return renderer.normalized_clear_color;
 }
 
 set_clear_color :: (renderer: *Renderer, color: Vector4) {
     renderer.normalized_clear_color = color;
-}
-
-set_directional_light :: (renderer: *Renderer, light: Directional_Light) {
-    renderer.scene_info.scene_data.directional_light = light;
 }
 
 get_ambient_color :: (renderer: Renderer) -> Vector3 {
@@ -1272,6 +1304,9 @@ MAX_MATERIAL_COUNT       :: 256;
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
+DIRECTIONAL_LIGHT_RADIUS :: 50; // @Todo: Hardcode
+DIRECTIONAL_LIGHT_CENTER :: Vector3.{};
+
 Transition_Image_Layout_Params :: struct {
     src_stage_mask:  VK.Pipeline_Stage_Flags_2;
     src_access_mask: VK.Access_Flags_2;
@@ -1342,6 +1377,45 @@ Materials_Info :: struct {
     texture_descriptor_set_layout: VK.Descriptor_Set_Layout;
     texture_descriptor_set: VK.Descriptor_Set;
 }
+
+create_view_projection_transform_for_light :: (light: Light) -> Matrix4 {
+    if #complete light.kind == {
+        case .DIRECTIONAL;
+            projection_transform := orthographic_projection_matrix(
+                left           = -DIRECTIONAL_LIGHT_RADIUS, // @Todo: hardcode!
+                right          = DIRECTIONAL_LIGHT_RADIUS,
+                bottom         = -DIRECTIONAL_LIGHT_RADIUS,
+                top            = DIRECTIONAL_LIGHT_RADIUS,
+                near           = 0,
+                far            = 2 * DIRECTIONAL_LIGHT_RADIUS,
+                depth_range_01 = true,
+            );
+
+            view_transform := make_look_at_matrix( // @Todo: hardcode!
+                viewpoint = DIRECTIONAL_LIGHT_CENTER - normalize(light.directional.direction) * DIRECTIONAL_LIGHT_RADIUS,
+                look_at   = DIRECTIONAL_LIGHT_CENTER,
+                reference_up_vector = calculate_reference_up_vector(light.directional.direction),
+                x_is_forward = false,
+            );
+
+            return projection_transform * view_transform;
+    }
+}
+
+calculate_reference_up_vector :: (front: Vector3) -> Vector3 {
+    WORLD_UP :: Vector3.{ 0, 1, 0 };
+
+    normalized_front := normalize(front);
+
+    right := cross(normalized_front, WORLD_UP);
+    if length_squared(right) < 0.000001 {
+        right = cross(normalized_front, .{ 1, 0, 0 });
+    }
+    right = normalize(right);
+
+    return cross(right, normalized_front);
+}
+
 
 transition_images_layouts :: (
     command_buffer: VK.Command_Buffer,
@@ -2428,6 +2502,11 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
         );
     }
 
+    light: Light;
+    light.kind = .DIRECTIONAL;
+    light.directional = scene_info.scene_data.directional_light;
+    scene_info.scene_data.directional_light.view_projection_transform = create_view_projection_transform_for_light(light);
+
     return "", scene_info;
 }
 
@@ -3235,20 +3314,6 @@ scale_keeping_ratio_and_get_rect :: (src: VK.Extent_2D, dst: VK.Extent_2D) -> (
     left_y := (cast(s32, dst.height) - height) / 2;
 
     return left_x, left_y, left_x + width, left_y + height;
-}
-
-calculate_camera_up :: (front: Vector3) -> Vector3 {
-    WORLD_UP :: Vector3.{ 0, 1, 0 };
-
-    normalized_front := normalize(front);
-
-    right := cross(normalized_front, WORLD_UP);
-    if length_squared(right) < 0.000001 {
-        right = cross(normalized_front, .{ 1, 0, 0 });
-    }
-    right = normalize(right);
-
-    return cross(right, normalized_front);
 }
 
 #if DEBUG {
