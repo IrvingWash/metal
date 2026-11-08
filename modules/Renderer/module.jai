@@ -423,9 +423,9 @@ deinit :: (renderer: *Renderer) {
 
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     renderer.scene_info.scene_data.camera_world_position = camera.position;
+
     renderer.tonemap_pass.exposure = camera.exposure;
 
-    reset_model_pass(*renderer.model_pass, camera.position);
     reset_primitive_pass(*renderer.primitive_pass);
 
     if renderer.swapchain_info.should_recreate {
@@ -523,6 +523,16 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         depth_range_01 = true,
     );
     renderer.transforms.view_projection = renderer.transforms.projection * renderer.transforms.view;
+
+    reset_model_pass(
+        *renderer.model_pass,
+        camera.position,
+        make_frustum_from_matrix(
+            renderer.transforms.view_projection,
+            should_normalize = true,
+            depth_range_01 = true,
+        ),
+    );
 
     return "";
 }

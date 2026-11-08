@@ -14,6 +14,8 @@ Frustum :: struct {
 
     far:  Plane3;
     near: Plane3;
+
+    #overlay(top) planes: [6]Plane3;
 }
 
 deg_to_rad :: (degrees: float) -> radians: float {
@@ -275,6 +277,23 @@ make_frustum_from_matrix :: (matrix: Matrix4, $should_normalize: bool, $depth_ra
     }
 
     return frustum;
+}
+
+aabb_vs_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
+    // https://outerra.blogspot.com/2012/11/view-frustum-culling-of-sphere-mapped.html
+
+    for plane: frustum.planes {
+        d := plane_dot(plane, aabb.center);
+
+        normal := Vector3.{ plane.a, plane.b, plane.c };
+        r := dot(abs(normal), aabb.extents);
+
+        if d + r < 0 {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 
