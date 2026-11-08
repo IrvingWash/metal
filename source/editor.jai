@@ -159,24 +159,22 @@ draw_gizmos :: () {
 
     column_major_matrix := transpose(make_world_transform(selected_entity));
 
-    IM.Zmo.manipulate(
+    if IM.Zmo.manipulate(
         view = transpose(editor.game.renderer.transforms.view).floats.data,
         projection = transpose(editor.game.renderer.transforms.projection).floats.data,
         operation = gizmo_operation_to_imguizmo(editor.gizmo_operation),
         mode = gizmo_mode_to_imguizmo(editor.gizmo_mode),
         matrix = column_major_matrix.floats.data,
-    );
-
-    if IM.Zmo.is_using() {
+    ) {
         matrix := transpose(column_major_matrix);
 
         if #complete editor.gizmo_operation == {
             case .TRANSLATE;
-                selected_entity.position = get_translation_from_transform(matrix);
+                selected_entity.position = calculate_translation_from_transform(matrix);
             case .SCALE;
-                selected_entity.scale    = get_scale_from_transform(matrix);
+                selected_entity.scale    = calculate_scale_from_transform(matrix);
             case .ROTATE;
-                selected_entity.rotation = get_rotation(matrix);
+                selected_entity.rotation = calculate_rotation_from_transform(matrix);
         }
     }
 }
