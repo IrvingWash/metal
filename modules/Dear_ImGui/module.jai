@@ -695,6 +695,8 @@ button :: inline (label: *u8, size: Vector2 = {}) -> bool {
     return button(label, *size);
 }
 
+checkbox :: (label: *u8, v: *bool) -> bool #foreign libimgui "_ZN5ImGui8CheckboxEPKcPb";
+
 set_next_item_open :: (is_open: bool, cond: Condition = .NONE) -> void #foreign libimgui "_ZN5ImGui15SetNextItemOpenEbi";
 
 is_item_toggled_selection :: () -> bool #foreign libimgui "_ZN5ImGui22IsItemToggledSelectionEv";
@@ -705,6 +707,8 @@ same_line :: (
 ) -> void #foreign libimgui "_ZN5ImGui8SameLineEff";
 
 push_item_width :: (item_width: float) -> void #foreign libimgui "_ZN5ImGui13PushItemWidthEf";
+
+get_background_draw_list :: () -> *Draw_List #foreign libimgui "_ZN5ImGui21GetBackgroundDrawListEv";
 
 show_demo_window :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui14ShowDemoWindowEPb";
 

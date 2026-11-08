@@ -74,7 +74,11 @@ draw_editor :: (draw_editing_stuff: bool) {
     draw_fps_stat();
 
     if draw_editing_stuff {
-        draw_whole_editor();
+        draw_editor_window();
+
+        if editor.is_entity_header_open {
+            draw_gizmos();
+        }
     }
 
     IM.render();
@@ -108,12 +112,15 @@ Editor :: struct {
     descriptor_pool: VK.Descriptor_Pool;
 
     is_entity_header_open: bool;
-    selected_entity_id: s32;
+    selected_entity_id:    s32;
+    gizmo_mode:            IM.Zmo.MODE = .WORLD;
+    gizmoa_operation:      IM.Zmo.OPERATION = .ROTATE;
+    should_draw_model_bounds: bool;
 }
 
 editor: Editor;
 
-draw_whole_editor :: () {
+draw_editor_window :: () {
     IM.begin(
         "Editor",
     );
@@ -123,6 +130,38 @@ draw_whole_editor :: () {
     draw_renderer_section();
 
     IM.end();
+}
+
+draw_gizmos :: () {
+    IM.Zmo.begin_frame();
+    IM.Zmo.set_orthographic(false);
+    IM.Zmo.set_drawlist(IM.get_background_draw_list());
+    view_rect_min, view_rect_max := Renderer.get_view_rectangle(editor.game.renderer);
+    IM.Zmo.set_rect(
+        view_rect_min.x,
+        view_rect_min.y,
+        view_rect_max.x - view_rect_min.x,
+        view_rect_max.y - view_rect_min.y,
+    );
+
+    selected_entity := *editor.game.entities[editor.selected_entity_id];
+
+    column_major_matrix := transpose(make_world_transform(selected_entity));
+
+    IM.Zmo.manipulate(
+        view = transpose(editor.game.renderer.transforms.view).floats.data,
+        projection = transpose(editor.game.renderer.transforms.projection).floats.data,
+        operation = editor.gizmoa_operation,
+        mode = editor.gizmo_mode,
+        matrix = column_major_matrix.floats.data,
+    );
+
+    if IM.Zmo.is_using() {
+        matrix := transpose(column_major_matrix);
+        selected_entity.position = get_translation_from_transform(matrix);
+        selected_entity.scale    = get_scale_from_transform(matrix);
+        selected_entity.rotation = get_rotation(matrix);
+    }
 }
 
 draw_renderer_section :: () {
@@ -210,7 +249,11 @@ draw_entity_section :: () {
 
     selected_entity := *editor.game.entities[editor.selected_entity_id];
 
-    { // Draw bounds around the selected entity's model
+    IM.checkbox(
+        "Draw model bounds",
+        *editor.should_draw_model_bounds,
+    );
+    if editor.should_draw_model_bounds {
         model := asset_manager_get_model(
             editor.game.asset_manager,
             selected_entity.model_handle,

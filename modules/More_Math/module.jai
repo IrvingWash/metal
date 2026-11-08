@@ -174,6 +174,19 @@ ray_vs_aabb :: (
     return t_min < t_max, t_min;
 }
 
+get_translation_from_transform :: (m: Matrix4) -> Vector3 {
+    return { m._14, m._24, m._34 };
+}
+
+get_scale_from_transform :: (m: Matrix4) -> Vector3 {
+    // https://math.stackexchange.com/questions/237369/given-this-transformation-matrix-how-do-i-decompose-it-into-translation-rotati
+    x := length(Vector3.{ m._11, m._21, m._31 });
+    y := length(Vector3.{ m._12, m._22, m._32 });
+    z := length(Vector3.{ m._13, m._23, m._33 });
+
+    return { x, y, z };
+}
+
 
 
 #scope_file
