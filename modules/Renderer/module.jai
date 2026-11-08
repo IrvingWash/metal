@@ -46,6 +46,8 @@ Renderer :: struct {
 
     transforms: Transforms;
 
+    shadow_distance: float = 40;
+
     #if DEBUG {
         debug_utils_messenger: VK.Debug_Utils_Messenger_Ext;
     }
@@ -119,8 +121,9 @@ Directional_Light :: struct @Gpu {
     direction:                 Vector3 = { 0, -1, -1 };
     intensity:                 float   = 5;
     color:                     Vector3 = { 1, 1,  1  };
-    view_projection_transform: Matrix4;
-    radius: float              = DIRECTIONAL_LIGHT_RADIUS;
+
+    view_projection_transform: Matrix4 = Matrix4_Identity;
+    radius:                    float   = 1;
 }
 
 Color_Hdr_Target :: struct {
@@ -539,6 +542,31 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         depth_range_01 = true,
     );
     renderer.transforms.view_projection = renderer.transforms.projection * renderer.transforms.view;
+
+    { // Update directional light view projection transform
+        shadow_far := min(camera.z_far, renderer.shadow_distance);
+        shadow_projection_transform := make_projection_matrix(
+            camera.fov_vertical,
+            aspect_ratio,
+            camera.z_near,
+            shadow_far,
+            depth_range_01 = true,
+        );
+
+        frustum_corners := make_frustum_corners(
+            renderer.transforms.view,
+            shadow_projection_transform,
+            depth_range_01 = true,
+        );
+
+        directional_light := *renderer.scene_info.scene_data.directional_light;
+
+        directional_light.view_projection_transform,
+            directional_light.radius = create_fitted_view_projection_transform_for_directional_light(
+            renderer.scene_info.scene_data.directional_light.direction,
+            frustum_corners,
+        );
+    }
 
     reset_model_pass(
         *renderer.model_pass,
@@ -1049,16 +1077,11 @@ get_directional_light :: (renderer: Renderer) -> Directional_Light {
 }
 
 set_directional_light :: (renderer: *Renderer, params: Directional_Light_Params) {
-    light: Light;
-    light.kind = .DIRECTIONAL;
-    light.directional = {
-        color = params.color,
-        intensity = params.intensity,
-        direction = params.direction,
-    };
-    light.directional.view_projection_transform = create_view_projection_transform_for_light(light);
-
-    renderer.scene_info.scene_data.directional_light = light.directional;
+    light := *renderer.scene_info.scene_data.directional_light;
+    light.color = params.color;
+    light.intensity = params.intensity;
+    light.direction = params.direction;
+    // view_projection_transform is recomputed in start_drawing
 }
 
 get_clear_color :: (renderer: Renderer) -> Vector4 {
@@ -1303,9 +1326,6 @@ MAX_MATERIAL_COUNT       :: 256;
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
-DIRECTIONAL_LIGHT_RADIUS :: 50; // @Todo: Hardcode
-DIRECTIONAL_LIGHT_CENTER :: Vector3.{};
-
 Transition_Image_Layout_Params :: struct {
     src_stage_mask:  VK.Pipeline_Stage_Flags_2;
     src_access_mask: VK.Access_Flags_2;
@@ -1377,28 +1397,58 @@ Materials_Info :: struct {
     texture_descriptor_set: VK.Descriptor_Set;
 }
 
-create_view_projection_transform_for_light :: (light: Light) -> Matrix4 {
-    if #complete light.kind == {
-        case .DIRECTIONAL;
-            projection_transform := orthographic_projection_matrix(
-                left           = -DIRECTIONAL_LIGHT_RADIUS, // @Todo: hardcode!
-                right          = DIRECTIONAL_LIGHT_RADIUS,
-                bottom         = -DIRECTIONAL_LIGHT_RADIUS,
-                top            = DIRECTIONAL_LIGHT_RADIUS,
-                near           = 0,
-                far            = 2 * DIRECTIONAL_LIGHT_RADIUS,
-                depth_range_01 = true,
-            );
+create_fitted_view_projection_transform_for_directional_light :: (
+    direction:       Vector3,
+    frustum_corners: []Vector4,
+) -> Matrix4, radius: float {
+    // @Todo: use sphere to prevent shimmering
+    // https://learnopengl.com/Guest-Articles/2021/CSM
 
-            view_transform := make_look_at_matrix( // @Todo: hardcode!
-                viewpoint = DIRECTIONAL_LIGHT_CENTER - normalize(light.directional.direction) * DIRECTIONAL_LIGHT_RADIUS,
-                look_at   = DIRECTIONAL_LIGHT_CENTER,
-                reference_up_vector = calculate_reference_up_vector(light.directional.direction),
-                x_is_forward = false,
-            );
-
-            return projection_transform * view_transform;
+    frustum_center: Vector3;
+    for corner: frustum_corners {
+        frustum_center += corner.xyz;
     }
+    frustum_center /= cast(float, frustum_corners.count);
+
+    light_view_transform := make_look_at_matrix(
+        viewpoint = frustum_center - normalize(direction),
+        look_at   = frustum_center,
+        reference_up_vector = calculate_reference_up_vector(direction),
+        x_is_forward = false,
+    );
+
+    light_projection_transform: Matrix4 = ---;
+    radius: float = ---;
+    {
+        min_x, min_y, min_z := FLOAT32_MAX;
+        max_x, max_y, max_z := -FLOAT32_MAX;
+
+        for corner: frustum_corners {
+            trf := light_view_transform * corner;
+            min_x = min(min_x, trf.x);
+            max_x = max(max_x, trf.x);
+            min_y = min(min_y, trf.y);
+            max_y = max(max_y, trf.y);
+            min_z = min(min_z, trf.z);
+            max_z = max(max_z, trf.z);
+        }
+
+        radius = max(max_x - min_x, max_y - min_y) * 0.5;
+
+        OUTSIDE_CASTERS_RANGE :: 50.0;
+
+        light_projection_transform = orthographic_projection_matrix(
+            left           = min_x,
+            right          = max_x,
+            bottom         = min_y,
+            top            = max_y,
+            near           = -max_z - OUTSIDE_CASTERS_RANGE,
+            far            = -min_z,
+            depth_range_01 = true,
+        );
+    }
+
+    return light_projection_transform * light_view_transform, radius;
 }
 
 calculate_reference_up_vector :: (front: Vector3) -> Vector3 {
@@ -1622,7 +1672,7 @@ DEVICE_EXTENSIONS :: *u8.[
 ];
 
 #if DEBUG {
-    HAVE_MORE_DEBUG :: true;
+    HAVE_MORE_DEBUG :: false;
 
     DEBUG_INSTANCE_EXTENSIONS :: *u8.[
         VK.Extension_Names.DEBUG_UTILS,
@@ -2500,11 +2550,6 @@ create_scene_info :: (device: VK.Device, allocator: VMA.Allocator) -> error: str
             .[],
         );
     }
-
-    light: Light;
-    light.kind = .DIRECTIONAL;
-    light.directional = scene_info.scene_data.directional_light;
-    scene_info.scene_data.directional_light.view_projection_transform = create_view_projection_transform_for_light(light);
 
     return "", scene_info;
 }

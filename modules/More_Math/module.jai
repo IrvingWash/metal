@@ -104,6 +104,7 @@ make_aabb :: (min: Vector3, max: Vector3) -> AABB {
     return aabb;
 }
 
+// @Todo: return bool
 cast_ray :: (
     position:          Vector2,
     screen_size:       Vector2,
@@ -294,6 +295,38 @@ aabb_vs_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
     }
 
     return true;
+}
+
+// @Todo: return bool
+make_frustum_corners :: (view_matrix: Matrix4, projection_matrix: Matrix4, depth_range_01: bool) -> [8]Vector4 {
+    // https://learnopengl.com/Guest-Articles/2021/CSM
+
+    corners: [8]Vector4;
+
+    ok, inverse_view_projection := inverse(projection_matrix * view_matrix);
+    if !ok {
+        return corners;
+    }
+
+    index: int;
+    for x: 0 .. 2 - 1 {
+        for y: 0 .. 2 - 1 {
+            for z: 0 .. 2 - 1 {
+                corner := inverse_view_projection * Vector4.{
+                    x = 2 * cast(float, x) - 1,
+                    y = 2 * cast(float, y) - 1,
+                    z = ifx depth_range_01
+                        then cast(float, z)
+                        else 2 * cast(float, z) - 1,
+                    w = 1,
+                };
+                corners[index] = (corner / corner.w);
+                index += 1;
+            }
+        }
+    }
+
+    return corners;
 }
 
 

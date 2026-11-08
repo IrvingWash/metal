@@ -184,6 +184,12 @@ draw_renderer_section :: () {
         return;
     }
 
+    IM.drag_float(
+        "Shadow distance ##Renderer",
+        *editor.game.renderer.shadow_distance,
+        v_speed = 0.5,
+    );
+
     IM.separator_text("Directional light##Renderer");
     {
         directional_light := Renderer.get_directional_light(editor.game.renderer);
