@@ -175,7 +175,6 @@ update :: (dt: float) {
 
     game.spot_light.position = game.camera.position;
     game.spot_light.direction = game.camera.front;
-    game.spot_light.position += Vector3.{ 0.1, -0.1, -0.1 };
 }
 
 render :: () {
