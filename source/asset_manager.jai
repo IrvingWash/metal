@@ -3,10 +3,10 @@ Asset_Manager :: struct {
     shaders_path: string;
 
     model_accessor_handles_by_path: Table(string, Model_Handle);
-    model_accessors:                [..]Renderer.Model_Accessor;
+    model_accessors:                Bucket_Array(Renderer.Model_Accessor, 64);
 }
 
-Model_Handle :: #type,distinct int;
+Model_Handle :: #type,distinct Bucket_Locator;
 
 init_asset_manager :: () -> Asset_Manager {
     asset_manager: Asset_Manager;
@@ -30,7 +30,7 @@ deinit_asset_manager :: (asset_manager: *Asset_Manager) {
     for *model_accessor: asset_manager.model_accessors {
         Renderer.destroy_model_accessor(model_accessor);
     }
-    array_free(asset_manager.model_accessors);
+    bucket_array_reset(*asset_manager.model_accessors);
 
     free(asset_manager.root_path);
     free(asset_manager.shaders_path);
@@ -51,8 +51,12 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
     return "", content;
 }
 
+asset_manager_get_model_pointer :: (asset_manager: Asset_Manager, handle: Model_Handle) -> *Renderer.Model_Accessor {
+    return bucket_array_find_pointer(*asset_manager.model_accessors, cast(Bucket_Locator, handle));
+}
+
 asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Handle) -> Renderer.Model_Accessor {
-    return asset_manager.model_accessors[handle];
+    return bucket_array_find(*asset_manager.model_accessors, cast(Bucket_Locator, handle));
 }
 
 // @Todo: In the future, this will just upload our own binaries.
@@ -282,13 +286,11 @@ asset_manager_upload_model :: (
 
     model_accessor.aabb = make_model_aabb(model_accessor);
 
-    array_add(*asset_manager.model_accessors, model_accessor);
+    handle := bucket_array_add(*asset_manager.model_accessors, model_accessor);
 
-    handle := cast(Model_Handle, asset_manager.model_accessors.count - 1);
+    table_add(*asset_manager.model_accessor_handles_by_path, normalized_path, cast(Model_Handle, handle));
 
-    table_add(*asset_manager.model_accessor_handles_by_path, normalized_path, handle);
-
-    return handle;
+    return cast(Model_Handle, handle);
 }
 
 
@@ -511,3 +513,5 @@ Renderer :: #import "Renderer";
 
 #load "convertation/model_dto.jai";
 #load "convertation/gltf_converter.jai";
+
+#import "Bucket_Array";

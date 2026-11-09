@@ -277,14 +277,11 @@ do_shadow_pass :: (
     );
 
     { // Draw
-        offset: int;
         bound_pipeline: VK.Pipeline;
         for model_draw_bucket: model_pass.ordered_draw_buckets {
-            if model_draw_bucket.entries.count == 0 {
+            if model_draw_bucket.command_count == 0 {
                 continue;
             }
-
-            defer offset += model_draw_bucket.entries.count;
 
             if #complete model_draw_bucket.alpha_mode == {
                 case .BLEND;
@@ -306,8 +303,8 @@ do_shadow_pass :: (
             VK.cmd_draw_indexed_indirect(
                 command_buffer,
                 model_pass.indirect_draw_buffer_infos[frame_index].buffer,
-                offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
-                draw_count = cast(u32, model_draw_bucket.entries.count),
+                offset     = cast(u64, model_draw_bucket.first_command_index * size_of(VK.Draw_Indexed_Indirect_Command)),
+                draw_count = cast(u32, model_draw_bucket.command_count),
                 stride     = size_of(VK.Draw_Indexed_Indirect_Command),
             );
         }

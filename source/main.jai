@@ -63,6 +63,12 @@ main :: () {
         tint = { 1, 0, 0, 1 },
     );
     add_entity(
+        name       = "Damaged Helmet III",
+        model_path = "../../Models/damaged_helmet/scene.glb",
+        position   = { -1, -0.5 ,0 },
+        tint = { 0, 1, 0, 1 },
+    );
+    add_entity(
         name       = "SciFiHelmet",
         model_path = "../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf",
         position   = {1, -4.5, 0 },

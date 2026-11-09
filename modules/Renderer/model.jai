@@ -6,7 +6,7 @@ Model_Accessor :: struct {
 Node :: struct {
     local_transform: Matrix4 = Matrix4_Identity;
 
-    meshes:       [..]Mesh_Accessor;
+    meshes:       [..]Mesh_Accessor; // @Todo: Refactor so Model_Accessor holds all the meshes
     parent_index: Option(u32);
     children_ids: [..]u32;
 }

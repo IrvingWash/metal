@@ -203,10 +203,10 @@ prepare_model_pass :: (
         for draw_bucket: model_pass.ordered_draw_buckets {
             count += draw_bucket.entries.count;
         }
-        assert(count <= MAX_DRAW_COUNT, "MAX_DRAW_COUNT overflow");
+        assert(count <= MAX_INSTANCE_COUNT, "MAX_INSTANCE_COUNT overflow");
     }
 
-    { // Sort entries in the blend bucket
+    { // Sort entries in the blend bucket for correct blending
         blend_bucket := get_draw_bucket_by_material(
             model_pass.ordered_draw_buckets,
             { alpha_mode = .BLEND },
@@ -214,30 +214,78 @@ prepare_model_pass :: (
         quick_sort(
             blend_bucket.entries,
             (a: Model_Draw_Bucket_Entry, b: Model_Draw_Bucket_Entry) -> int {
-                if b.sorting_key_within_bucket > a.sorting_key_within_bucket {
+                if b.sorting_key_within_bucket > a.sorting_key_within_bucket
                     return 1;
-                }
-
-                if a.sorting_key_within_bucket > b.sorting_key_within_bucket {
+                if a.sorting_key_within_bucket > b.sorting_key_within_bucket
                     return -1;
-                }
-
                 return 0;
             }
         );
     }
 
-    cursor: u32;
-    for draw_bucket: model_pass.ordered_draw_buckets {
-        for entry: draw_bucket.entries {
-            command := entry.command;
-            command.first_instance = cursor;
+    // Batch instances by mesh and write instance and indirect draw command buffers
+    command_cursor:  int;
+    instance_cursor: int;
+    for *draw_bucket: model_pass.ordered_draw_buckets {
+        draw_bucket.first_command_index = command_cursor;
+        defer draw_bucket.command_count = command_cursor - draw_bucket.first_command_index;
 
-            model_pass.indirect_draw_buffer_pointers[frame_index][cursor] = command;
-            model_pass.instance_buffer_pointers[frame_index][cursor]      = entry.instance;
-
-            cursor += 1;
+        if draw_bucket.entries.count == 0 {
+            continue;
         }
+
+        allow_grouping := draw_bucket.alpha_mode != .BLEND;
+
+        if allow_grouping {
+            // Sort for instancing, except blend (sorted above)
+            quick_sort(
+                draw_bucket.entries,
+                (a: Model_Draw_Bucket_Entry, b: Model_Draw_Bucket_Entry) -> int {
+                    if a.geometry_accessor.index_start  < b.geometry_accessor.index_start
+                        return -1;
+                    if a.geometry_accessor.index_start  > b.geometry_accessor.index_start
+                        return 1;
+                    if a.geometry_accessor.vertex_start < b.geometry_accessor.vertex_start
+                        return -1;
+                    if a.geometry_accessor.vertex_start > b.geometry_accessor.vertex_start
+                        return 1;
+                    return 0;
+                },
+            );
+        }
+
+        current_command: VK.Draw_Indexed_Indirect_Command;
+        for entry: draw_bucket.entries {
+            is_first_iteration := it_index == 0;
+
+            is_same_geometry := !is_first_iteration
+                && allow_grouping
+                && entry.geometry_accessor.index_start == current_command.first_index
+                && cast(s32, entry.geometry_accessor.vertex_start) == current_command.vertex_offset;
+
+            if !is_same_geometry {
+                if !is_first_iteration {
+                    model_pass.indirect_draw_buffer_pointers[frame_index][command_cursor] = current_command;
+                    command_cursor += 1;
+                }
+
+                current_command = {
+                    index_count    = entry.geometry_accessor.index_count,
+                    first_index    = entry.geometry_accessor.index_start,
+                    vertex_offset  = cast(s32, entry.geometry_accessor.vertex_start),
+                    first_instance = cast(u32, instance_cursor),
+                };
+            }
+
+            current_command.instance_count += 1;
+
+            model_pass.instance_buffer_pointers[frame_index][instance_cursor] = entry.instance;
+            instance_cursor += 1;
+        }
+
+        // Last
+        model_pass.indirect_draw_buffer_pointers[frame_index][command_cursor] = current_command;
+        command_cursor += 1;
     }
 
     VMA.flush_allocation(
@@ -304,14 +352,11 @@ do_model_pass :: (
     );
 
     { // Draw
-        offset: int;
         bound_pipeline: VK.Pipeline;
         for draw_bucket: model_pass.ordered_draw_buckets {
-            if draw_bucket.entries.count == 0 {
+            if draw_bucket.command_count == 0 {
                 continue;
             }
-
-            defer offset += draw_bucket.entries.count;
 
             if draw_bucket.pipeline != bound_pipeline {
                 VK.cmd_bind_pipeline(command_buffer, .GRAPHICS, draw_bucket.pipeline);
@@ -323,8 +368,8 @@ do_model_pass :: (
             VK.cmd_draw_indexed_indirect(
                 command_buffer,
                 model_pass.indirect_draw_buffer_infos[frame_index].buffer,
-                offset     = cast(u64, offset * size_of(VK.Draw_Indexed_Indirect_Command)),
-                draw_count = cast(u32, draw_bucket.entries.count),
+                offset     = cast(u64, draw_bucket.first_command_index * size_of(VK.Draw_Indexed_Indirect_Command)),
+                draw_count = cast(u32, draw_bucket.command_count),
                 stride     = size_of(VK.Draw_Indexed_Indirect_Command),
             );
         }
@@ -335,9 +380,9 @@ do_model_pass :: (
 
 #scope_file
 
-MAX_DRAW_COUNT                :: 4096;
-MAX_INDIRECT_BUFFER_BYTE_SIZE :: MAX_DRAW_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
-MAX_INSTANCE_BUFFER_BYTE_SIZE :: MAX_DRAW_COUNT * size_of(Instance);
+MAX_INSTANCE_COUNT                :: 4096;
+MAX_INDIRECT_BUFFER_BYTE_SIZE :: MAX_INSTANCE_COUNT * size_of(VK.Draw_Indexed_Indirect_Command);
+MAX_INSTANCE_BUFFER_BYTE_SIZE :: MAX_INSTANCE_COUNT * size_of(Instance);
 
 Model_Pass_Specialization_Info :: struct @Gpu {
     alpha_mode:                            Alpha_Mode;
@@ -371,18 +416,27 @@ Model_Draw_Bucket :: struct {
     pipeline:   VK.Pipeline;
     cull_mode:  VK.Cull_Mode_Flags;
     alpha_mode: Alpha_Mode;
+
+    first_command_index: int;
+    command_count:       int;
 }
 
 Model_Draw_Bucket_Entry :: struct {
-    command:                   VK.Draw_Indexed_Indirect_Command;
+    geometry_accessor:         Geometry_Accessor;
     instance:                  Instance;
     sorting_key_within_bucket: float;
+}
+
+Geometry_Accessor :: struct {
+    index_count:  u32;
+    index_start:  u32;
+    vertex_start: u32;
 }
 
 init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [5]Model_Draw_Bucket {
     draw_buckets: [5]Model_Draw_Bucket;
     for *bucket: draw_buckets {
-        array_reserve(*bucket.entries, MAX_DRAW_COUNT);
+        array_reserve(*bucket.entries, MAX_INSTANCE_COUNT);
     }
 
     draw_buckets[0].cull_mode  = .BACK;
@@ -431,11 +485,10 @@ add_model_node_to_draw_bucket :: (
                 bucket := get_draw_bucket_by_material(draw_buckets, material);
 
                 entry := Model_Draw_Bucket_Entry.{
-                    command = {
-                        index_count    = mesh.index_count,
-                        instance_count = 1, // @Todo
-                        first_index    = mesh.index_start,
-                        vertex_offset  = cast(s32, mesh.vertex_start),
+                    geometry_accessor = {
+                        index_start = mesh.index_start,
+                        index_count = mesh.index_count,
+                        vertex_start = mesh.vertex_start,
                     },
                     instance = {
                         world_transform                   = world_transform,
