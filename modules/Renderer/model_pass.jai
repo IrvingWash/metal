@@ -5,6 +5,7 @@
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
 
+    models_to_draw:       [..]struct { accessor: Model_Accessor; transform: Matrix4; };
     ordered_draw_buckets: [5]Model_Draw_Bucket;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
@@ -12,9 +13,6 @@ Model_Pass :: struct {
 
     indirect_draw_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
     indirect_draw_buffer_pointers: [FRAMES_IN_FLIGHT_COUNT]*VK.Draw_Indexed_Indirect_Command;
-
-    view_point_for_sorting: Vector3;
-    frustums_for_culling:   [..]Frustum;
 }
 
 create_model_pass :: (
@@ -105,7 +103,7 @@ create_model_pass :: (
 }
 
 destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VMA.Allocator) {
-    array_free(model_pass.frustums_for_culling);
+    array_free(model_pass.models_to_draw);
 
     for instance_buffer_info: model_pass.instance_buffer_infos {
         VMA.unmap_memory(
@@ -138,58 +136,59 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
     model_pass.* = {};
 }
 
-reset_model_pass :: (model_pass: *Model_Pass, view_point_for_sorting: Vector3, frustums_for_culling: []Frustum) {
-    model_pass.view_point_for_sorting = view_point_for_sorting;
-
-    array_reset_keeping_memory(*model_pass.frustums_for_culling);
-    for frustum: frustums_for_culling {
-        array_add(*model_pass.frustums_for_culling, frustum);
-    }
-
+reset_model_pass :: (model_pass: *Model_Pass) {
+    array_reset_keeping_memory(*model_pass.models_to_draw);
     reset_draw_buckets_entries_keeping_order(model_pass.ordered_draw_buckets);
 }
 
 add_model_to_model_pass :: (
     model_pass:      *Model_Pass,
     model_accessor:  Model_Accessor,
-    materials_info:  Materials_Info,
     world_transform: Matrix4,
 ) {
-    { // Frustum culling
-        transformed_aabb := transform_aabb(model_accessor.aabb, world_transform);
-        is_inside_one_of_the_frustums: bool;
-        for frustum: model_pass.frustums_for_culling {
-            if aabb_vs_frustum(transformed_aabb, frustum) {
-                is_inside_one_of_the_frustums = true;
-                break;
-            }
-        }
-        if !is_inside_one_of_the_frustums {
-            return;
-        }
-    }
-
-    for node: model_accessor.nodes {
-        if node.parent_index.kind != .NONE {
-            continue;
-        }
-
-        add_model_node_to_draw_bucket(
-            materials_info,
-            model_pass.ordered_draw_buckets,
-            node,
-            model_accessor.nodes,
-            world_transform,
-            model_pass.view_point_for_sorting,
-        );
-    }
+    array_add(*model_pass.models_to_draw, { model_accessor, world_transform });
 }
 
 prepare_model_pass :: (
     model_pass:  *Model_Pass,
+    materials_info: Materials_Info,
     frame_index: u64,
     allocator:   VMA.Allocator,
+    view_point_for_sorting: Vector3,
+    frustums_for_culling: []Frustum,
 ) {
+    // Adding to buckets
+    for model_to_draw: model_pass.models_to_draw {
+        { // Frustum culling
+            transformed_aabb := transform_aabb(model_to_draw.accessor.aabb, model_to_draw.transform);
+            is_inside_one_of_the_frustums: bool;
+            for frustum: frustums_for_culling {
+                if aabb_vs_frustum(transformed_aabb, frustum) {
+                    is_inside_one_of_the_frustums = true;
+                    break;
+                }
+            }
+            if !is_inside_one_of_the_frustums {
+                continue;
+            }
+        }
+
+        for node: model_to_draw.accessor.nodes {
+            if node.parent_index.kind != .NONE {
+                continue;
+            }
+
+            add_model_node_to_draw_bucket(
+                materials_info,
+                model_pass.ordered_draw_buckets,
+                node,
+                model_to_draw.accessor.nodes,
+                model_to_draw.transform,
+                view_point_for_sorting,
+            );
+        }
+    }
+
     { // Check
         count: int;
         for draw_bucket: model_pass.ordered_draw_buckets {

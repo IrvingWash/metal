@@ -9,8 +9,6 @@ Tonemap_Pass :: struct {
 
     pipeline_layout: VK.Pipeline_Layout;
     pipeline:        VK.Pipeline;
-
-    exposure: float = 1;
 }
 
 create_tonemap_pass :: (
@@ -83,6 +81,7 @@ do_tonemap_pass :: (
     tonemap_pass:     *Tonemap_Pass,
     color_hdr_target: Color_Hdr_Target,
     color_ldr_target: Image_Info,
+    exposure: float,
     command_buffer:   VK.Command_Buffer,
 ) {
     // HDR to shader read, LDR to color attachment
@@ -153,7 +152,7 @@ do_tonemap_pass :: (
 
     { // Push constants
         push_constants: Push_Constants = {
-            exposure = tonemap_pass.exposure,
+            exposure = exposure,
         };
 
         VK.cmd_push_constants(

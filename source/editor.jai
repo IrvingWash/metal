@@ -138,9 +138,88 @@ draw_editor_window :: () {
     IM.show_demo_window();
     draw_camera_section();
     draw_entity_section();
+    draw_directional_light_section();
+    draw_spot_light_section();
     draw_renderer_section();
 
     IM.end();
+}
+
+draw_directional_light_section :: () {
+    if !IM.collapsing_header("Directional light") {
+        return;
+    }
+
+    IM.push_item_width(200);
+    is_changed := IM.color_picker3(
+        "Color##DirectionalLight",
+        *editor.game.directional_light.color.component,
+        flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
+    );
+    is_changed |= IM.drag_float(
+        "Intensity##DirectionalLight",
+        *editor.game.directional_light.intensity,
+        v_speed = 0.1,
+    );
+    is_changed |= IM.drag_float3(
+        "Direction##DirectionalLight",
+        *editor.game.directional_light.direction.component,
+        v_speed = 0.1,
+    );
+}
+
+draw_spot_light_section :: () {
+    if !IM.collapsing_header("Spot light") {
+        return;
+    }
+
+    IM.drag_float3(
+        "Position##SpotLight",
+        *editor.game.spot_light.position.component,
+        v_speed = 0.1,
+        v_min = 0,
+        v_max = 0,
+    );
+
+    IM.drag_float3(
+        "Direction##SpotLight",
+        *editor.game.spot_light.direction.component,
+        v_speed = 0.1,
+    );
+
+    IM.drag_float(
+        "Intensity##SpotLight",
+        *editor.game.spot_light.intensity,
+        v_speed = 0.1,
+    );
+
+    IM.color_picker3(
+        "Color##SpotLight",
+        *editor.game.spot_light.color.component,
+        flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
+    );
+
+    IM.drag_float(
+        "Range##SpotLight",
+        *editor.game.spot_light.range,
+        v_speed = 0.1,
+    );
+
+    inner_cutoff := rad_to_deg(editor.game.spot_light.inner_cutoff_half_angle);
+    if IM.drag_float(
+        "Inner cutoff",
+        *inner_cutoff,
+    ) {
+        editor.game.spot_light.inner_cutoff_half_angle = deg_to_rad(inner_cutoff);
+    }
+
+    outer_cutoff := rad_to_deg(editor.game.spot_light.outer_cutoff_half_angle);
+    if IM.drag_float(
+        "Outer cutoff",
+        *outer_cutoff,
+    ) {
+        editor.game.spot_light.outer_cutoff_half_angle = deg_to_rad(outer_cutoff);
+    }
 }
 
 draw_gizmos :: () {
@@ -189,39 +268,6 @@ draw_renderer_section :: () {
         *editor.game.renderer.shadow_distance,
         v_speed = 0.5,
     );
-
-    IM.separator_text("Directional light##Renderer");
-    {
-        directional_light := Renderer.get_directional_light(editor.game.renderer);
-
-        IM.push_item_width(200);
-        is_changed := IM.color_picker3(
-            "Color##DirectionalLight",
-            *directional_light.color.component,
-            flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
-        );
-        is_changed |= IM.drag_float(
-            "Intensity##DirectionalLight",
-            *directional_light.intensity,
-            v_speed = 0.1,
-        );
-        is_changed |= IM.drag_float3(
-            "Direction##DirectionalLight",
-            *directional_light.direction.component,
-            v_speed = 0.1,
-        );
-
-        if is_changed {
-            Renderer.set_directional_light(
-                *editor.game.renderer,
-                {
-                    color     = directional_light.color,
-                    intensity = directional_light.intensity,
-                    direction = directional_light.direction,
-                }
-            );
-        }
-    }
 
     IM.separator_text("Ambient color##Renderer");
     { // Ambient

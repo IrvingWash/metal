@@ -45,6 +45,7 @@ Renderer :: struct {
     overlay_callback_info: Overlay_Callback_Info;
 
     transforms: Transforms;
+    camera: Camera;
 
     shadow_distance: float = 40;
 
@@ -88,12 +89,6 @@ Image_Params :: struct {
         SRGB;
         UNORM;
     }
-}
-
-Directional_Light_Params :: struct {
-    color:     Vector3;
-    direction: Vector3;
-    intensity: float;
 }
 
 Camera :: struct {
@@ -424,10 +419,20 @@ deinit :: (renderer: *Renderer) {
 }
 
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
-    renderer.scene_info.scene_data.camera_world_position = camera.position;
+    renderer.camera = {
+        position     = camera.position,
+        front        = camera.front,
+        z_near       = camera.z_near,
+        z_far        = camera.z_far,
+        fov_vertical = camera.fov_vertical,
+        exposure     = camera.exposure,
+    };
 
-    renderer.tonemap_pass.exposure = camera.exposure;
+    renderer.scene_info.scene_data.camera_world_position = renderer.camera.position;
+    renderer.scene_info.scene_data.directional_light_count = 0;
+    renderer.scene_info.scene_data.spot_light_count = 0;
 
+    reset_model_pass(*renderer.model_pass);
     reset_primitive_pass(*renderer.primitive_pass);
 
     if renderer.swapchain_info.should_recreate {
@@ -510,46 +515,20 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     }
 
     renderer.transforms.view = make_look_at_matrix(
-        camera.position,
-        look_at = camera.position + camera.front,
-        calculate_reference_up_vector(camera.front),
+        renderer.camera.position,
+        look_at = renderer.camera.position + renderer.camera.front,
+        calculate_reference_up_vector(renderer.camera.front),
         x_is_forward = false,
     );
-    aspect_ratio := cast(float, renderer.color_hdr_target.image_info.extent.width)
-        / cast(float, renderer.color_hdr_target.image_info.extent.height);
     renderer.transforms.projection = make_projection_matrix(
-        camera.fov_vertical,
-        aspect_ratio,
-        camera.z_near,
-        camera.z_far,
+        renderer.camera.fov_vertical,
+        cast(float, renderer.color_hdr_target.image_info.extent.width)
+                / cast(float, renderer.color_hdr_target.image_info.extent.height),
+        renderer.camera.z_near,
+        renderer.camera.z_far,
         depth_range_01 = true,
     );
     renderer.transforms.view_projection = renderer.transforms.projection * renderer.transforms.view;
-
-    update_directional_light(
-        *renderer.scene_info.scene_data.directional_light,
-        camera,
-        renderer.shadow_distance,
-        aspect_ratio,
-        renderer.transforms,
-    );
-
-    reset_model_pass(
-        *renderer.model_pass,
-        camera.position,
-        .[
-            make_frustum_from_matrix(
-                renderer.transforms.view_projection,
-                should_normalize = true,
-                depth_range_01 = true,
-            ),
-            make_frustum_from_matrix(
-                renderer.scene_info.scene_data.directional_light.view_projection_transform,
-                should_normalize = true,
-                depth_range_01 = true,
-            ),
-        ],
-    );
 
     return "";
 }
@@ -562,9 +541,43 @@ draw_model :: (
     add_model_to_model_pass(
         *renderer.model_pass,
         model_accessor,
-        renderer.materials_info,
         world_transform,
     );
+}
+
+draw_directional_light :: (renderer: *Renderer, params: Directional_Light_Params) -> error: string {
+    if renderer.scene_info.scene_data.directional_light_count >= MAX_DIRECTIONAL_LIGHT_COUNT {
+        return tprint("Reached the maximum of % directional lights", MAX_DIRECTIONAL_LIGHT_COUNT);
+    }
+
+    renderer.scene_info.scene_data.directional_lights[
+        renderer.scene_info.scene_data.directional_light_count
+    ] = create_directional_light(
+        params,
+        renderer.camera,
+        renderer.shadow_distance,
+        aspect_ratio = cast(float, renderer.color_hdr_target.image_info.extent.width)
+            / cast(float, renderer.color_hdr_target.image_info.extent.height),
+        view_transform = renderer.transforms.view,
+    );
+
+    renderer.scene_info.scene_data.directional_light_count += 1;
+
+    return "";
+}
+
+draw_spot_light :: (renderer: *Renderer, params: Spot_Light_Params) -> error: string {
+    if renderer.scene_info.scene_data.spot_light_count >= MAX_SPOT_LIGHT_COUNT {
+        return tprint("Reached the maximum of % spot lights", MAX_SPOT_LIGHT_COUNT);
+    }
+
+    renderer.scene_info.scene_data.spot_lights[
+        renderer.scene_info.scene_data.spot_light_count
+    ] = create_spot_light(params);
+
+    renderer.scene_info.scene_data.spot_light_count += 1;
+
+    return "";
 }
 
 draw_line :: (renderer: *Renderer, line: Line_Primitive) {
@@ -645,21 +658,50 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     }
 
     // =============================================================================
-    // Writing model passes
+    // Preparing model draw data for the passes
     // =============================================================================
+    frustums_for_culling: [..]Frustum;
+    frustums_for_culling.allocator = temp;
+    array_add(
+        *frustums_for_culling,
+        make_frustum_from_matrix(
+            renderer.transforms.view_projection,
+            should_normalize = true,
+            depth_range_01 = true,
+        ),
+    );
+
+    if renderer.scene_info.scene_data.directional_light_count > 0 {
+        for 0 .. renderer.scene_info.scene_data.directional_light_count - 1 {
+            directional_light := renderer.scene_info.scene_data.directional_lights[it];
+
+            array_add(
+                *frustums_for_culling,
+                make_frustum_from_matrix(
+                    directional_light.view_projection_transform,
+                    should_normalize = true,
+                    depth_range_01 = true,
+                ),
+            );
+        }
+    }
+
     prepare_model_pass(
         *renderer.model_pass,
+        renderer.materials_info,
         frame_resources_index,
         renderer.allocator,
+        renderer.camera.position,
+        frustums_for_culling,
     );
 
     // =========================================================================
     // Shadow pass start
     // =========================================================================
-    {
+    if renderer.scene_info.scene_data.directional_light_count > 0 {
         light: Light;
         light.kind = .DIRECTIONAL;
-        light.directional = renderer.scene_info.scene_data.directional_light;
+        light.directional = renderer.scene_info.scene_data.directional_lights[0];
         directional_light_shadow_pass_result := do_shadow_pass(
             *renderer.shadow_pass,
             light,
@@ -780,6 +822,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         *renderer.tonemap_pass,
         renderer.color_hdr_target,
         renderer.color_ldr_target,
+        renderer.camera.exposure,
         frame_resources.command_buffer,
     );
 
@@ -1038,18 +1081,6 @@ set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
     renderer.color_hdr_target.requested_extent = { width, height };
 }
 
-get_directional_light :: (renderer: Renderer) -> Directional_Light {
-    return renderer.scene_info.scene_data.directional_light;
-}
-
-set_directional_light :: (renderer: *Renderer, params: Directional_Light_Params) {
-    light := *renderer.scene_info.scene_data.directional_light;
-    light.color = params.color;
-    light.intensity = params.intensity;
-    light.direction = params.direction;
-    // view_projection_transform is recomputed in start_drawing
-}
-
 get_clear_color :: (renderer: Renderer) -> Vector4 {
     return renderer.normalized_clear_color;
 }
@@ -1286,9 +1317,11 @@ set_overlay_callback :: (renderer: *Renderer, proc: Overlay_Callback, user_data:
 VK  :: #import "Jai_Vulkan";
 VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
-MAX_TEXTURE_COUNT        :: 256;
-MAX_SAMPLER_COUNT        :: 256;
-MAX_MATERIAL_COUNT       :: 256;
+MAX_TEXTURE_COUNT           :: 256;
+MAX_SAMPLER_COUNT           :: 256;
+MAX_MATERIAL_COUNT          :: 256;
+MAX_DIRECTIONAL_LIGHT_COUNT :: 1;  @Gpu
+MAX_SPOT_LIGHT_COUNT        :: 16; @Gpu
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
@@ -1631,9 +1664,12 @@ Frame_Resources :: struct {
 
 // @Todo: give this a better name
 Scene_Data :: struct @Gpu {
-    directional_light:     Directional_Light;
-    camera_world_position: Vector3;
-    ambient_color:         Vector3 = { 0.03, 0.03, 0.03 };
+    directional_lights:      [MAX_DIRECTIONAL_LIGHT_COUNT]Directional_Light;
+    directional_light_count: u32;
+    camera_world_position:   Vector3;
+    ambient_color:           Vector3 = { 0.03, 0.03, 0.03 };
+    spot_lights:             [MAX_SPOT_LIGHT_COUNT]Spot_Light;
+    spot_light_count:        u32;
 }
 
 create_color_hdr_target :: (
