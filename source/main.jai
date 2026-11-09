@@ -13,8 +13,13 @@ Game :: struct {
 
     entities: [..]Entity;
 
-    directional_light: Renderer.Directional_Light_Params;
-    spot_light: Renderer.Spot_Light_Params;
+    directional_light: Renderer.Directional_Light_Params = { color = { 0, 0, 0 } };
+    spot_light: Renderer.Spot_Light_Params = {
+        intensity = 17,
+        range = 14,
+        inner_cutoff_half_angle = #run deg_to_rad(30),
+        outer_cutoff_half_angle = #run deg_to_rad(35),
+    };
 
     #if DEVELOPER {
         is_in_editor_mode: bool = false;
@@ -44,7 +49,7 @@ main :: () {
         cast(u32, display_info.width * display_info.dpi),
         cast(u32, display_info.height * display_info.dpi),
     );
-    game.renderer.normalized_clear_color = { 142.0 / 255.0, 204.0 / 255.0, 254.0 / 255.0, 1 };
+    game.renderer.normalized_clear_color = { 0, 0, 0, 1 };
 
     add_entity(
         name       = "Damaged Helmet",
@@ -167,6 +172,10 @@ update :: (dt: float) {
         case .FLY;
             fly_camera(*game.camera, dt, get_fly_camera_input());
     }
+
+    game.spot_light.position = game.camera.position;
+    game.spot_light.direction = game.camera.front;
+    game.spot_light.position += Vector3.{ 0.1, -0.1, -0.1 };
 }
 
 render :: () {
