@@ -432,8 +432,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     renderer.scene_info.scene_data.directional_light_count = 0;
     renderer.scene_info.scene_data.spot_light_count = 0;
 
-    renderer.tonemap_pass.exposure = renderer.camera.exposure;
-
+    reset_model_pass(*renderer.model_pass);
     reset_primitive_pass(*renderer.primitive_pass);
 
     if renderer.swapchain_info.should_recreate {
@@ -530,8 +529,6 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         depth_range_01 = true,
     );
     renderer.transforms.view_projection = renderer.transforms.projection * renderer.transforms.view;
-
-    reset_model_pass(*renderer.model_pass);
 
     return "";
 }
@@ -825,6 +822,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         *renderer.tonemap_pass,
         renderer.color_hdr_target,
         renderer.color_ldr_target,
+        renderer.camera.exposure,
         frame_resources.command_buffer,
     );
 
