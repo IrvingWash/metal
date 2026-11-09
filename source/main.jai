@@ -57,6 +57,12 @@ main :: () {
         position   = { -1, -4.5 ,0 },
     );
     add_entity(
+        name       = "Damaged Helmet II",
+        model_path = "../../Models/damaged_helmet/scene.glb",
+        position   = { -1, -2.5 ,0 },
+        tint = { 1, 0, 0, 1 },
+    );
+    add_entity(
         name       = "SciFiHelmet",
         model_path = "../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf",
         position   = {1, -4.5, 0 },
@@ -190,6 +196,7 @@ render :: () {
             *game.renderer,
             asset_manager_get_model(game.asset_manager, entity.model_handle),
             make_world_transform(entity),
+            entity.tint,
         );
     }
 
@@ -261,6 +268,7 @@ add_entity :: (
     position: Vector3 = {},
     rotation: Quaternion = {},
     scale:    Vector3 = { 1, 1, 1 },
+    tint:     Vector4 = { 1, 1, 1, 1 },
     model_path: string,
 ) {
     model_handle := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
@@ -271,6 +279,7 @@ add_entity :: (
         rotation = rotation,
         scale = scale,
         model_handle = model_handle,
+        tint = tint,
     };
 
     array_add(*game.entities, entity);

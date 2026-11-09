@@ -64,6 +64,7 @@ struct Instance {
     mat4x4 world_transform;
     mat3x3 inverse_transpose_world_transform;
     uint   material_index;
+    vec4   tint;
 };
 
 struct Line_Primitive {

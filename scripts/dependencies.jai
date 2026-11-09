@@ -10,11 +10,6 @@ DEPENDENCIES :: Dependency.[
         pin     = "master",
     },
     {
-        name    = "MikkTSpace",
-        git_url = "https://github.com/mmikk/MikkTSpace.git",
-        pin     = "master",
-    },
-    {
         name    = "Vulkan-Headers",
         git_url = "https://github.com/KhronosGroup/vulkan-headers.git",
         pin     = "vulkan-sdk-1.4.363.0",

@@ -539,14 +539,16 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
 }
 
 draw_model :: (
-    renderer: *Renderer,
-    model_accessor: Model_Accessor,
+    renderer:        *Renderer,
+    model_accessor:  Model_Accessor,
     world_transform: Matrix4,
+    tint:            Vector4 = { 1, 1, 1, 1 },
 ) {
     add_model_to_model_pass(
         *renderer.model_pass,
         model_accessor,
         world_transform,
+        tint,
     );
 }
 

@@ -5,7 +5,7 @@
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
 
-    models_to_draw:       [..]struct { accessor: Model_Accessor; transform: Matrix4; };
+    models_to_draw:       [..]struct { accessor: Model_Accessor; transform: Matrix4; tint: Vector4; };
     ordered_draw_buckets: [5]Model_Draw_Bucket;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
@@ -145,8 +145,16 @@ add_model_to_model_pass :: (
     model_pass:      *Model_Pass,
     model_accessor:  Model_Accessor,
     world_transform: Matrix4,
+    tint:            Vector4,
 ) {
-    array_add(*model_pass.models_to_draw, { model_accessor, world_transform });
+    array_add(
+        *model_pass.models_to_draw,
+        {
+            model_accessor,
+            world_transform,
+            tint,
+        },
+    );
 }
 
 prepare_model_pass :: (
@@ -184,6 +192,7 @@ prepare_model_pass :: (
                 node,
                 model_to_draw.accessor.nodes,
                 model_to_draw.transform,
+                model_to_draw.tint,
                 view_point_for_sorting,
             );
         }
@@ -339,6 +348,7 @@ Instance :: struct @Gpu {
     world_transform:                   Matrix4;
     inverse_transpose_world_transform: Matrix3;
     material_index:                    u32;
+    tint:                              Vector4 = { 1, 1, 1, 1 };
 }
 
 Push_Constants :: struct @Gpu {
@@ -405,6 +415,7 @@ add_model_node_to_draw_bucket :: (
     node:                  Node,
     nodes:                 []Node,
     parent_transform:      Matrix4,
+    tint:                  Vector4,
     camera_world_position: Vector3,
 ) {
     world_transform := parent_transform * node.local_transform;
@@ -430,6 +441,7 @@ add_model_node_to_draw_bucket :: (
                         world_transform                   = world_transform,
                         inverse_transpose_world_transform = make_matrix3(inverse_transpose_world_transform),
                         material_index                    = mesh.material_index,
+                        tint                              = tint,
                     },
                 };
                 if bucket.alpha_mode == .BLEND {
@@ -452,6 +464,7 @@ add_model_node_to_draw_bucket :: (
             child_node,
             nodes,
             world_transform,
+            tint,
             camera_world_position,
         );
     }

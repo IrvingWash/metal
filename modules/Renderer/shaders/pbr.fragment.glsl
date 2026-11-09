@@ -171,6 +171,7 @@ layout(set = 2, binding = 1) uniform sampler2DShadow spot_shadow_maps[MAX_SHADOW
 
 layout(location = 0) in Vertex_Input {
          vec4 color;
+    flat vec4 tint;
          vec3 world_space_normal;
          vec4 world_space_tangent;
          vec2 uv;
@@ -194,7 +195,10 @@ void main() {
     vec4 occlusion_texel          = texture(textures[material.occlusion_texture_index], vertex_input.uv);
     vec4 emissive_texel           = texture(textures[material.emissive_texture_index], vertex_input.uv);
 
-    vec4 albedo = base_color_texel * material.base_color_factor * vertex_input.color;
+    vec4 albedo = base_color_texel
+        * material.base_color_factor
+        * vertex_input.color
+        * vertex_input.tint;
 
     if (ALPHA_MODE == ALPHA_MODE_MASK && albedo.a < material.alpha_cutoff) {
         discard;

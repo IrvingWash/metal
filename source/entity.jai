@@ -5,6 +5,8 @@ Entity :: struct {
     rotation: Quaternion;
     scale:    Vector3 = { 1, 1, 1 };
 
+    tint: Vector4 = { 1, 1, 1, 1 };
+
     model_handle: Model_Handle;
 }
 

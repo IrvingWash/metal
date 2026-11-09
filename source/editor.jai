@@ -404,6 +404,12 @@ draw_entity_section :: () {
 
         selected_entity.rotation = euler_to_quaternion(euler_radians);
     }
+
+    IM.color_picker4(
+        "Tint##Entity",
+        *selected_entity.tint.component,
+        flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
+    );
 }
 
 draw_camera_section :: () {

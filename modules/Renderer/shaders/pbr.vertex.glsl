@@ -24,6 +24,7 @@ layout(buffer_reference, scalar, row_major) readonly buffer Instance_Buffer {
 
 layout(location = 0) out Vertex_Output {
          vec4 color;
+    flat vec4 tint;
          vec3 world_space_normal;
          vec4 world_space_tangent;
          vec2 uv;
@@ -40,12 +41,13 @@ void main() {
 
     gl_Position = constants.view_projection_transform * instance.world_transform * vec4(vertex.position, 1);
 
-    vertex_output.color                      = vertex.color;
-    vertex_output.uv                         = vertex.uv;
-    vertex_output.material_index             = instance.material_index;
-    vertex_output.fragment_world_position    = (instance.world_transform * vec4(vertex.position, 1)).xyz;
-    vertex_output.world_space_normal         = instance.inverse_transpose_world_transform * vertex.normal;
-    vertex_output.world_space_tangent        = vec4(
+    vertex_output.color                   = vertex.color;
+    vertex_output.tint                    = instance.tint;
+    vertex_output.uv                      = vertex.uv;
+    vertex_output.material_index          = instance.material_index;
+    vertex_output.fragment_world_position = (instance.world_transform                  * vec4(vertex.position, 1)).xyz;
+    vertex_output.world_space_normal      = instance.inverse_transpose_world_transform * vertex.normal;
+    vertex_output.world_space_tangent     = vec4(
         mat3(instance.world_transform) * vertex.tangent.xyz,
         vertex.tangent.w
     );

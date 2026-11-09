@@ -13,23 +13,13 @@
         "modules/SDL3/module.jai",
         "modules/Shaderc/module.jai",
         "modules/Shaderc/generate.jai",
-        "modules/Mikk_T_Space/module.jai",
-        "modules/Mikk_T_Space/generate.jai",
-        "source/Renderer/module.jai",
-        "source/Windowing/module.jai",
-        "source/Input/module.jai",
-        "source/Gltf/module.jai",
-        "source/Asset_Manager/module.jai"
+        "modules/Renderer/module.jai",
+        "modules/Type_Utils/module.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",
     "local_modules": [
-        "modules",
-        "source/Renderer",
-        "source/Windowing",
-        "source/Input",
-        "source/Gltf",
-        "source/Asset_Manager"
+        "modules"
     ],
     "auto_insert_parentheses": false,
     "use_symbols_from_local_modules": true
