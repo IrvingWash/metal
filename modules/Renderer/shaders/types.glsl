@@ -55,4 +55,10 @@ struct Instance {
     uint   material_index;
 };
 
+struct Line_Primitive {
+    vec3 a;
+    vec3 b;
+    vec4 color;
+};
+
 #endif

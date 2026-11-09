@@ -140,7 +140,7 @@ vec3 do_light(
     return (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0.0);
 }
 
-layout(constant_id = 0) const uint ALPHA_MODE                            = 0;
+layout(constant_id = 0) const uint ALPHA_MODE = 0;
 layout(constant_id = 1) const uint DISCARD_BLEND_SINGLE_SIDED_BACK_FACES = 0; // 0 or 1
 
 layout(push_constant, scalar) uniform Constants {

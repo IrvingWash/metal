@@ -4,16 +4,12 @@
 #extension GL_EXT_buffer_reference                       : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
+#include "types.glsl";
+
 layout(push_constant, scalar, row_major) uniform Constants {
     uint64_t line_buffer_address;
     mat4x4   view_projection_transform;
 } constants;
-
-struct Line_Primitive {
-    vec3 a;
-    vec3 b;
-    vec4 color;
-};
 
 layout(location = 0) out Vertex_Output {
          vec4 color;
