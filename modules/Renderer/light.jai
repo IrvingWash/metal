@@ -13,19 +13,11 @@ Spot_Light_Params :: struct {
 
     outer_cutoff_half_angle: float = #run deg_to_rad(20);
     inner_cutoff_half_angle: float = #run deg_to_rad(10);
+
+    shadowed: bool = true;
 }
 
 #scope_module
-
-Light :: union kind: Light_Kind {
-    .DIRECTIONAL,, directional: Directional_Light;
-    .SPOT,,        spot:        Spot_Light;
-}
-
-Light_Kind :: enum {
-    DIRECTIONAL;
-    SPOT;
-}
 
 Directional_Light :: struct @Gpu {
     direction:                 Vector3 = #run normalize(Vector3.{ 0, -1, -1 });
@@ -46,6 +38,12 @@ Spot_Light :: struct @Gpu {
     inner_cutoff_half_angle_cos: float   = #run cos(deg_to_rad(10));
 }
 
+Shadowed_Spot_Light :: struct @Gpu {
+    #as using base: Spot_Light;
+
+    view_projection_transform:  Matrix4;
+}
+
 create_spot_light :: (params: Spot_Light_Params) -> Spot_Light {
     light: Spot_Light;
 
@@ -60,7 +58,6 @@ create_spot_light :: (params: Spot_Light_Params) -> Spot_Light {
     return light;
 }
 
-/*
 create_shadowed_spot_light :: (params: Spot_Light_Params) -> Shadowed_Spot_Light {
     shadowed_spot_light: Shadowed_Spot_Light;
     shadowed_spot_light.base = create_spot_light(params);
@@ -73,18 +70,17 @@ create_shadowed_spot_light :: (params: Spot_Light_Params) -> Shadowed_Spot_Light
     );
 
     projection_transform := make_projection_matrix(
-        fov_vertical   = 2 * acos(shadowed_spot_light.outer_cutoff_half_angle_cos),
-        aspect_ratio   = 1,
-        z_near         = shadowed_spot_light.range / 100,
-        z_far          = shadowed_spot_light.range,
-        depth_range_01 = true,
+        fov_vertical                          = 2 * acos(shadowed_spot_light.outer_cutoff_half_angle_cos),
+        aspect_ratio_horizontal_over_vertical = 1,
+        z_near                                = shadowed_spot_light.range / 100,
+        z_far                                 = shadowed_spot_light.range,
+        depth_range_01                        = true,
     );
 
     shadowed_spot_light.view_projection_transform = projection_transform * view_transform;
 
     return shadowed_spot_light;
 }
-*/
 
 create_directional_light :: (
     params:          Directional_Light_Params,

@@ -220,6 +220,11 @@ draw_spot_light_section :: () {
     ) {
         editor.game.spot_light.outer_cutoff_half_angle = deg_to_rad(outer_cutoff);
     }
+
+    IM.checkbox(
+        "Shadowed##SpotLight",
+        *editor.game.spot_light.shadowed,
+    );
 }
 
 draw_gizmos :: () {

@@ -5,47 +5,31 @@ Shadow_Pass :: struct {
     descriptor_set_layout: VK.Descriptor_Set_Layout;
     descriptor_set:       VK.Descriptor_Set;
 
-    depth_image_info: Image_Info;
-    sampler:          VK.Sampler;
+    sampler: VK.Sampler;
+
+    directional_light_shadow_maps: [MAX_DIRECTIONAL_LIGHT_SHADOW_MAP_COUNT]Image_Info;
+    occupied_directional_light_shadow_map_count: u32;
+
+    spot_light_shadow_maps: [MAX_SPOT_LIGHT_SHADOW_MAP_COUNT]Image_Info;
+    occupied_spot_light_shadow_map_count: u32;
 
     pipeline_info: Shadow_Pass_Pipeline_Info;
+}
+
+Light_Kind :: enum {
+    DIRECTIONAL;
+    SPOT;
 }
 
 create_shadow_pass :: (
     device:                        VK.Device,
     allocator:                     VMA.Allocator,
+    transient_command_pool:        VK.Command_Pool,
+    queue:                         VK.Queue,
     get_compiled_shader:           Get_Compiled_Shader,
     texture_descriptor_set_layout: VK.Descriptor_Set_Layout,
 ) -> error: string, Shadow_Pass {
     shadow_pass: Shadow_Pass;
-
-    error:,
-        shadow_pass.descriptor_pool,
-        shadow_pass.descriptor_set_layout,
-        shadow_pass.descriptor_set = create_shadow_pass_descriptor(device);
-    if error {
-        return
-            tprint("Failed to create descriptors for shadow pass: %", error),
-            shadow_pass;
-    }
-
-    error, shadow_pass.depth_image_info = create_image_info(
-        device,
-        allocator,
-        DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT,
-        DEFAULT_SHADOW_DEPTH_IMAGE_WIDTH,
-        DEFAULT_SHADOW_DEPTH_IMAGE_HEIGHT,
-        depth = 1,
-        tiling = .OPTIMAL,
-        usage = .DEPTH_STENCIL_ATTACHMENT | .SAMPLED,
-        allocation_flags = .DEDICATED_MEMORY,
-        aspect_mask = .DEPTH,
-    );
-    if error {
-        return
-            tprint("Failed to create depth image for shadow pass: %", error),
-            shadow_pass;
-    }
 
     result:, shadow_pass.sampler = VK.create_sampler(
         device,
@@ -61,38 +45,65 @@ create_shadow_pass :: (
     );
     if result != .SUCCESS {
         return
-            tprint("Failed to create depth image sampler shadow pass: %", result),
+            tprint("Failed to create sampler shadow pass: %", result),
             shadow_pass;
     }
 
-    { // Write image
-        image_descriptor := VK.Descriptor_Image_Info.{
-            sampler      = shadow_pass.sampler,
-            image_view   = shadow_pass.depth_image_info.image_view,
-            image_layout = .SHADER_READ_ONLY_OPTIMAL,
-        };
-
-        write := VK.Write_Descriptor_Set.{
-            dst_set           = shadow_pass.descriptor_set,
-            dst_binding       = 0,
-            dst_array_element = 0,
-            descriptor_count  = 1,
-            descriptor_type   = .COMBINED_IMAGE_SAMPLER,
-            p_image_info      = *image_descriptor,
-        };
-
-        VK.update_descriptor_sets(device, .[write], .[]);
+    error:,
+        shadow_pass.descriptor_pool,
+        shadow_pass.descriptor_set_layout,
+        shadow_pass.descriptor_set = create_shadow_pass_descriptor(device);
+    if error {
+        return
+            tprint("Failed to create descriptors for shadow pass: %", error),
+            shadow_pass;
     }
 
     error, shadow_pass.pipeline_info = create_shadow_pass_pipeline_info(
         device,
         get_compiled_shader,
-        shadow_pass.depth_image_info.format,
+        DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT,
         .[texture_descriptor_set_layout],
     );
     if error {
         return
             tprint("Failed to create pipeline for shadow pass: %", error),
+            shadow_pass;
+    }
+
+    error, shadow_pass.directional_light_shadow_maps = create_shadow_maps(
+        device,
+        allocator,
+        transient_command_pool,
+        queue,
+        shadow_pass.sampler,
+        shadow_pass.descriptor_set,
+        binding = 0,
+        MAX_DIRECTIONAL_LIGHT_SHADOW_MAP_COUNT,
+        DEFAULT_DIRECTIONAL_LIGHT_SHADOW_DEPTH_IMAGE_WIDTH,
+        DEFAULT_DIRECTIONAL_LIGHT_SHADOW_DEPTH_IMAGE_HEIGHT,
+    );
+    if error {
+        return
+            tprint("Failed to create directional light shadow maps: %", error),
+            shadow_pass;
+    }
+
+    error, shadow_pass.spot_light_shadow_maps = create_shadow_maps(
+        device,
+        allocator,
+        transient_command_pool,
+        queue,
+        shadow_pass.sampler,
+        shadow_pass.descriptor_set,
+        binding = 1,
+        MAX_SPOT_LIGHT_SHADOW_MAP_COUNT,
+        DEFAULT_SPOT_LIGHT_SHADOW_DEPTH_IMAGE_WIDTH,
+        DEFAULT_SPOT_LIGHT_SHADOW_DEPTH_IMAGE_HEIGHT,
+    );
+    if error {
+        return
+            tprint("Failed to create sopt light shadow maps: %", error),
             shadow_pass;
     }
 
@@ -104,8 +115,21 @@ destroy_shadow_pass :: (
     device:      VK.Device,
     allocator:   VMA.Allocator,
 ) {
-    VK.destroy_descriptor_set_layout(device, shadow_pass.descriptor_set_layout);
-    VK.destroy_descriptor_pool(device, shadow_pass.descriptor_pool);
+    for *map: shadow_pass.spot_light_shadow_maps {
+        destroy_image_info(
+            device,
+            allocator,
+            map,
+        );
+    }
+
+    for *map: shadow_pass.directional_light_shadow_maps {
+        destroy_image_info(
+            device,
+            allocator,
+            map,
+        );
+    }
 
     VK.destroy_sampler(device, shadow_pass.sampler);
 
@@ -114,30 +138,37 @@ destroy_shadow_pass :: (
         device,
     );
 
-    destroy_image_info(
-        device,
-        allocator,
-        *shadow_pass.depth_image_info,
-    );
+    VK.destroy_descriptor_set_layout(device, shadow_pass.descriptor_set_layout);
+    VK.destroy_descriptor_pool(device, shadow_pass.descriptor_pool);
 
     shadow_pass.* = {};
 }
 
 do_shadow_pass :: (
     shadow_pass:                     *Shadow_Pass,
-    light:                           Light,
+    light_kind:                      Light_Kind,
+    light_view_projection_transform: Matrix4,
     command_buffer:                  VK.Command_Buffer,
     mesh_geometry_info:              Mesh_Geometry_Info,
     materials_info:                  Materials_Info,
     model_pass:                      Model_Pass,
     frame_index:                     u64,
 ) {
-    light_view_projection_transform: Matrix4;
-    if #complete light.kind == {
+    image_info: Image_Info;
+    if #complete light_kind == {
         case .DIRECTIONAL;
-            light_view_projection_transform = light.directional.view_projection_transform;
+            assert(shadow_pass.occupied_directional_light_shadow_map_count < MAX_DIRECTIONAL_LIGHT_SHADOW_MAP_COUNT);
+
+            image_info = shadow_pass
+                .directional_light_shadow_maps[shadow_pass.occupied_directional_light_shadow_map_count];
+
+            shadow_pass.occupied_directional_light_shadow_map_count += 1;
         case .SPOT;
-            // @Todo
+            assert(shadow_pass.occupied_spot_light_shadow_map_count < MAX_SPOT_LIGHT_SHADOW_MAP_COUNT);
+            image_info = shadow_pass
+                .spot_light_shadow_maps[shadow_pass.occupied_spot_light_shadow_map_count];
+
+            shadow_pass.occupied_spot_light_shadow_map_count += 1;
     }
 
     // Transition to depth attachment
@@ -150,7 +181,7 @@ do_shadow_pass :: (
             dst_access_mask = .DEPTH_STENCIL_ATTACHMENT_READ | .DEPTH_STENCIL_ATTACHMENT_WRITE,
             old_layout      = .UNDEFINED,
             new_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
-            image           = shadow_pass.depth_image_info.image,
+            image           = image_info.image,
             subresource_range = {
                 aspect_mask      = .DEPTH,
                 level_count      = 1,
@@ -161,7 +192,7 @@ do_shadow_pass :: (
 
     { // Begin rendering
         depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
-            image_view                      = shadow_pass.depth_image_info.image_view,
+            image_view                      = image_info.image_view,
             image_layout                    = .DEPTH_ATTACHMENT_OPTIMAL,
             load_op                         = .CLEAR,
             store_op                        = .STORE,
@@ -171,7 +202,7 @@ do_shadow_pass :: (
         rendering_info := VK.Rendering_Info.{
             render_area = {
                 offset = { x = 0, y = 0 },
-                extent = shadow_pass.depth_image_info.extent,
+                extent = image_info.extent,
             },
             layer_count = 1,
             p_depth_attachment = *depth_rendering_attachment_info,
@@ -183,9 +214,9 @@ do_shadow_pass :: (
     { // Viewport and scissor
         viewport := VK.Viewport.{
             x      = 0,
-            y      = cast(float, shadow_pass.depth_image_info.extent.height),
-            width  = cast(float, shadow_pass.depth_image_info.extent.width),
-            height = -cast(float, shadow_pass.depth_image_info.extent.height),
+            y      = cast(float, image_info.extent.height),
+            width  = cast(float, image_info.extent.width),
+            height = -cast(float, image_info.extent.height),
             min_depth = 0,
             max_depth = 1,
         };
@@ -196,7 +227,7 @@ do_shadow_pass :: (
                 x = 0,
                 y = 0,
             },
-            extent = shadow_pass.depth_image_info.extent,
+            extent = image_info.extent,
         };
         VK.cmd_set_scissor(command_buffer, VK.Rect_2D.[scissor]);
     }
@@ -294,7 +325,7 @@ do_shadow_pass :: (
             dst_access_mask = .SHADER_SAMPLED_READ,
             old_layout      = .DEPTH_ATTACHMENT_OPTIMAL,
             new_layout      = .SHADER_READ_ONLY_OPTIMAL,
-            image           = shadow_pass.depth_image_info.image,
+            image           = image_info.image,
             subresource_range = {
                 aspect_mask = .DEPTH,
                 level_count = 1,
@@ -304,13 +335,135 @@ do_shadow_pass :: (
     );
 }
 
+reset_shadow_pass :: (shadow_pass: *Shadow_Pass) {
+    shadow_pass.occupied_directional_light_shadow_map_count = 0;
+    shadow_pass.occupied_spot_light_shadow_map_count = 0;
+}
+
 
 
 #scope_file
 
+MAX_DIRECTIONAL_LIGHT_SHADOW_MAP_COUNT :: MAX_DIRECTIONAL_LIGHT_COUNT;
+MAX_SPOT_LIGHT_SHADOW_MAP_COUNT        :: MAX_SHADOWED_SPOT_LIGHT_COUNT;
+
 DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
-DEFAULT_SHADOW_DEPTH_IMAGE_WIDTH  :: 2048;
-DEFAULT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
+DEFAULT_DIRECTIONAL_LIGHT_SHADOW_DEPTH_IMAGE_WIDTH  :: 2048;
+DEFAULT_DIRECTIONAL_LIGHT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
+DEFAULT_SPOT_LIGHT_SHADOW_DEPTH_IMAGE_WIDTH :: 512;
+DEFAULT_SPOT_LIGHT_SHADOW_DEPTH_IMAGE_HEIGHT :: 512;
+
+create_shadow_maps :: (
+    device:                 VK.Device,
+    allocator:              VMA.Allocator,
+    transient_command_pool: VK.Command_Pool,
+    queue:                  VK.Queue,
+    sampler:                VK.Sampler,
+    descriptor_set:         VK.Descriptor_Set,
+    binding:                u32,
+    $count:                 u32,
+    width: u32,
+    height: u32,
+) -> error: string, [count]Image_Info {
+    maps: [count]Image_Info;
+
+    for *map: maps {
+        error:, map.* = create_image_info(
+            device,
+            allocator,
+            DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT,
+            width,
+            height,
+            depth = 1,
+            tiling = .OPTIMAL,
+            usage = .DEPTH_STENCIL_ATTACHMENT | .SAMPLED,
+            allocation_flags = .DEDICATED_MEMORY,
+            aspect_mask = .DEPTH,
+        );
+        if error {
+            return
+                tprint("Failed to create image for shadow map: %", error),
+                maps;
+        }
+    }
+
+    { // Transition to shader readonly
+        error, transient_command_buffer := start_transient_command_buffer(
+            device,
+            transient_command_pool,
+        );
+        if error {
+            return
+                tprint("Failed to start trainsient command buffer to transition shadow map: %", error),
+                maps;
+        }
+
+        params: [..]Transition_Image_Layout_Params;
+        params.allocator = temp;
+        for map: maps {
+            array_add(
+                *params,
+                {
+                    src_stage_mask  = .NONE,
+                    src_access_mask = .NONE,
+                    dst_stage_mask  = .FRAGMENT_SHADER,
+                    dst_access_mask = .SHADER_SAMPLED_READ,
+                    old_layout      = .UNDEFINED,
+                    new_layout      = .SHADER_READ_ONLY_OPTIMAL,
+                    image           = map.image,
+                    subresource_range = {
+                        aspect_mask      = .DEPTH,
+                        level_count      = 1,
+                        layer_count      = 1,
+                    },
+                },
+            );
+        }
+
+        transition_images_layouts(
+            transient_command_buffer,
+            ..params,
+        );
+
+        error = submit_transient_command_buffer(
+            device,
+            transient_command_pool,
+            queue,
+            transient_command_buffer,
+        );
+        if error {
+            return
+                tprint("Failed to submit trainsient command buffer to transition shadow map: %", error),
+                maps;
+        }
+    }
+
+    { // Write images
+        image_descriptors: [..]VK.Descriptor_Image_Info;
+        image_descriptors.allocator = temp;
+        for map: maps {
+            descriptor := VK.Descriptor_Image_Info.{
+                sampler      = sampler,
+                image_view   = map.image_view,
+                image_layout = .SHADER_READ_ONLY_OPTIMAL,
+            };
+
+            array_add(*image_descriptors, descriptor);
+        }
+        write := VK.Write_Descriptor_Set.{
+            dst_set           = descriptor_set,
+            dst_binding       = binding,
+            dst_array_element = 0,
+            descriptor_type   = .COMBINED_IMAGE_SAMPLER,
+            descriptor_count  = cast(u32, image_descriptors.count),
+            p_image_info      = image_descriptors.data,
+        };
+
+        VK.update_descriptor_sets(device, .[write], .[]);
+    }
+
+    return "", maps;
+}
 
 Shadow_Pass_Pipeline_Info :: struct {
     layout:   VK.Pipeline_Layout;
@@ -349,7 +502,7 @@ create_shadow_pass_descriptor :: (device: VK.Device) -> error: string,
     { // Pool
         descriptor_pool_size := VK.Descriptor_Pool_Size.{
             type             = .COMBINED_IMAGE_SAMPLER,
-            descriptor_count = 1,
+            descriptor_count = MAX_DIRECTIONAL_LIGHT_SHADOW_MAP_COUNT + MAX_SPOT_LIGHT_SHADOW_MAP_COUNT,
         };
 
         descriptor_pool_create_info := VK.Descriptor_Pool_Create_Info.{
@@ -368,16 +521,24 @@ create_shadow_pass_descriptor :: (device: VK.Device) -> error: string,
     }
 
     { // Layout
-        binding := VK.Descriptor_Set_Layout_Binding.{
-            binding          = 0,
-            descriptor_type  = .COMBINED_IMAGE_SAMPLER,
-            descriptor_count = 1,
-            stage_flags      = .FRAGMENT,
-        };
+        bindings := VK.Descriptor_Set_Layout_Binding.[
+            {
+                binding          = 0,
+                descriptor_type  = .COMBINED_IMAGE_SAMPLER,
+                descriptor_count = MAX_DIRECTIONAL_LIGHT_SHADOW_MAP_COUNT,
+                stage_flags      = .FRAGMENT,
+            },
+            {
+                binding          = 1,
+                descriptor_type  = .COMBINED_IMAGE_SAMPLER,
+                descriptor_count = MAX_SPOT_LIGHT_SHADOW_MAP_COUNT,
+                stage_flags      = .FRAGMENT,
+            }
+        ];
 
         descriptor_set_layout_create_info := VK.Descriptor_Set_Layout_Create_Info.{
-            binding_count = 1,
-            p_bindings    = *binding,
+            binding_count = bindings.count,
+            p_bindings    = bindings.data,
         };
 
         result:, descriptor_set_layout = VK.create_descriptor_set_layout(

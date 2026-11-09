@@ -15,24 +15,24 @@ const uint ALPHA_MODE_BLEND  = 2;
 
 const uint MAX_DIRECTIONAL_LIGHT_COUNT = 1;
 const uint MAX_SPOT_LIGHT_COUNT = 16;
+const uint MAX_SHADOWED_SPOT_LIGHT_COUNT = 16;
 
 float calculate_shadow(
     sampler2DShadow shadow_map,
     vec3 fragment_world_position,
     mat4x4 light_view_projection_transform,
     vec3 world_space_normal,
-    float radius
+    vec2 shadow_map_size,
+    float texel_world_size
 ) {
-    // Normal offset
-    vec2 shadow_map_size = vec2(textureSize(shadow_map, 0));
-    float texel_world = (2.0 * radius) / shadow_map_size.x;
     // Fix offset for double sided materials
     vec3 geometric_normal = normalize(world_space_normal);
     if (!gl_FrontFacing) {
         geometric_normal = -geometric_normal;
     }
 
-    vec3 offset_position = fragment_world_position + geometric_normal * texel_world * 1.5;
+    // Normal offset
+    vec3 offset_position = fragment_world_position + geometric_normal * texel_world_size * 1.5;
 
     vec4 light_space_position = light_view_projection_transform * vec4(offset_position, 1.0);
     vec3 ndc_position = light_space_position.xyz / light_space_position.w;
@@ -158,11 +158,16 @@ layout(scalar, set = 1, binding = 0, row_major) uniform Scene_Data {
     uint directional_light_count;
     vec3 camera_world_position;
     vec3 ambient_color;
+
     Spot_Light spot_lights[MAX_SPOT_LIGHT_COUNT];
     uint spot_light_count;
+
+    Shadowed_Spot_Light shadowed_spot_lights[MAX_SHADOWED_SPOT_LIGHT_COUNT];
+    uint shadowed_spot_light_count;
 } scene_data;
 
-layout(set = 2, binding = 0) uniform sampler2DShadow shadow_map;
+layout(set = 2, binding = 0) uniform sampler2DShadow directional_shadow_maps[MAX_DIRECTIONAL_LIGHT_COUNT];
+layout(set = 2, binding = 1) uniform sampler2DShadow spot_shadow_maps[MAX_SHADOWED_SPOT_LIGHT_COUNT];
 
 layout(location = 0) in Vertex_Input {
          vec4 color;
@@ -234,12 +239,15 @@ void main() {
             metallic
         );
 
+        vec2 shadow_map_size = vec2(textureSize(directional_shadow_maps[i], 0));
+        float texel_world_size = (2.0 * directional_light.radius) / shadow_map_size.x;
         float shadow = calculate_shadow(
-            shadow_map,
+            directional_shadow_maps[i],
             vertex_input.fragment_world_position,
             directional_light.view_projection_transform,
             vertex_input.world_space_normal,
-            directional_light.radius
+            shadow_map_size,
+            texel_world_size
         );
 
         Lo += (1 - shadow) * light;
@@ -275,6 +283,9 @@ void main() {
             angular_attenuation = clamp(cd * light_angle_scale + light_angle_offset, 0.0, 1.0);
             angular_attenuation *= angular_attenuation;
         }
+        if (angular_attenuation == 0.0) {
+            continue;
+        }
 
         vec3 radiance = spot_light.color * spot_light.intensity * angular_attenuation * attenuation;
 
@@ -286,6 +297,71 @@ void main() {
             roughness_clamped,
             metallic
         );
+    }
+
+    // Shadowed spot lights
+    for (uint i = 0; i < min(scene_data.shadowed_spot_light_count, MAX_SHADOWED_SPOT_LIGHT_COUNT); i++) {
+        Shadowed_Spot_Light shadowed_spot_light = scene_data.shadowed_spot_lights[i];
+
+        vec3 vector_to_light = shadowed_spot_light.position - vertex_input.fragment_world_position;
+        float distance_to_light = length(vector_to_light);
+        if (distance_to_light >= shadowed_spot_light.range) {
+            continue;
+        }
+
+        vec3 L = vector_to_light / distance_to_light;
+
+        float attenuation = max(
+            min(
+                1.0 - pow(distance_to_light / shadowed_spot_light.range, 4.0),
+                1.0
+            ),
+            0.0
+        ) / max(pow(distance_to_light, 2.0), 0.0001);
+
+        // https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md
+        float angular_attenuation = 0.0;
+        {
+            // @Todo: move this to CPU
+            float light_angle_scale = 1.0 / max(
+                0.001,
+                shadowed_spot_light.inner_cutoff_half_angle_cos - shadowed_spot_light.outer_cutoff_half_angle_cos
+            );
+            float light_angle_offset = -shadowed_spot_light.outer_cutoff_half_angle_cos * light_angle_scale;
+
+            float cd = dot(normalize(shadowed_spot_light.direction), -L); // In the reference the light direction is inversed
+            angular_attenuation = clamp(cd * light_angle_scale + light_angle_offset, 0.0, 1.0);
+            angular_attenuation *= angular_attenuation;
+        }
+        if (angular_attenuation == 0.0) {
+            continue;
+        }
+
+        vec3 radiance = shadowed_spot_light.color * shadowed_spot_light.intensity * angular_attenuation * attenuation;
+
+        float tan_half_fov = sqrt(1 - shadowed_spot_light.outer_cutoff_half_angle_cos * shadowed_spot_light.outer_cutoff_half_angle_cos)
+            / shadowed_spot_light.outer_cutoff_half_angle_cos;
+        vec2 shadow_map_size = vec2(textureSize(spot_shadow_maps[i], 0));
+        float texel_world_size = 2.0 * distance_to_light * tan_half_fov / shadow_map_size.x;
+        float shadow = calculate_shadow(
+            spot_shadow_maps[i],
+            vertex_input.fragment_world_position,
+            shadowed_spot_light.view_projection_transform,
+            vertex_input.world_space_normal,
+            shadow_map_size,
+            texel_world_size
+        );
+
+        vec3 light = do_light(
+            V, L, N, F0,
+            radiance,
+            albedo.xyz,
+            roughness_squared,
+            roughness_clamped,
+            metallic
+        );
+
+        Lo += (1 -shadow) * light;
     }
 
     vec3 ambient = scene_data.ambient_color * albedo.rgb * occlusion;

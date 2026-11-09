@@ -4,7 +4,7 @@
 #extension GL_EXT_buffer_reference                       : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
-#include "types.glsl";
+#include "types.glsl"
 
 layout(push_constant, scalar, row_major) uniform Constants {
     uint64_t line_buffer_address;

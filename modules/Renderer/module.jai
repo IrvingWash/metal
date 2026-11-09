@@ -299,6 +299,8 @@ init :: (
     error, renderer.shadow_pass = create_shadow_pass(
         renderer.device,
         renderer.allocator,
+        renderer.transient_command_pool,
+        renderer.graphics_queue_info.queue,
         get_compiled_shader,
         renderer.materials_info.texture_descriptor_set_layout,
     );
@@ -428,10 +430,13 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
         exposure     = camera.exposure,
     };
 
+    // @Todo: reset_scene_data
     renderer.scene_info.scene_data.camera_world_position = renderer.camera.position;
     renderer.scene_info.scene_data.directional_light_count = 0;
     renderer.scene_info.scene_data.spot_light_count = 0;
+    renderer.scene_info.scene_data.shadowed_spot_light_count = 0;
 
+    reset_shadow_pass(*renderer.shadow_pass);
     reset_model_pass(*renderer.model_pass);
     reset_primitive_pass(*renderer.primitive_pass);
 
@@ -567,6 +572,20 @@ draw_directional_light :: (renderer: *Renderer, params: Directional_Light_Params
 }
 
 draw_spot_light :: (renderer: *Renderer, params: Spot_Light_Params) -> error: string {
+    if params.shadowed {
+        if renderer.scene_info.scene_data.shadowed_spot_light_count >= MAX_SHADOWED_SPOT_LIGHT_COUNT {
+            return tprint("Reached the maximum of % shadowed spot lights", MAX_SHADOWED_SPOT_LIGHT_COUNT);
+        }
+
+        renderer.scene_info.scene_data.shadowed_spot_lights[
+            renderer.scene_info.scene_data.shadowed_spot_light_count
+        ] = create_shadowed_spot_light(params);
+
+        renderer.scene_info.scene_data.shadowed_spot_light_count += 1;
+
+        return "";
+    }
+
     if renderer.scene_info.scene_data.spot_light_count >= MAX_SPOT_LIGHT_COUNT {
         return tprint("Reached the maximum of % spot lights", MAX_SPOT_LIGHT_COUNT);
     }
@@ -662,6 +681,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // =============================================================================
     frustums_for_culling: [..]Frustum;
     frustums_for_culling.allocator = temp;
+
     array_add(
         *frustums_for_culling,
         make_frustum_from_matrix(
@@ -686,6 +706,21 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
         }
     }
 
+    if renderer.scene_info.scene_data.shadowed_spot_light_count > 0 {
+        for 0 .. renderer.scene_info.scene_data.shadowed_spot_light_count - 1 {
+            shadowed_spot_light := renderer.scene_info.scene_data.shadowed_spot_lights[it];
+
+            array_add(
+                *frustums_for_culling,
+                make_frustum_from_matrix(
+                    shadowed_spot_light.view_projection_transform,
+                    should_normalize = true,
+                    depth_range_01 = true,
+                ),
+            );
+        }
+    }
+
     prepare_model_pass(
         *renderer.model_pass,
         renderer.materials_info,
@@ -699,18 +734,34 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
     // Shadow pass start
     // =========================================================================
     if renderer.scene_info.scene_data.directional_light_count > 0 {
-        light: Light;
-        light.kind = .DIRECTIONAL;
-        light.directional = renderer.scene_info.scene_data.directional_lights[0];
-        directional_light_shadow_pass_result := do_shadow_pass(
+        assert(MAX_DIRECTIONAL_LIGHT_COUNT == 1); // Hardoced here for only one directional light
+        do_shadow_pass(
             *renderer.shadow_pass,
-            light,
+            .DIRECTIONAL,
+            renderer.scene_info.scene_data.directional_lights[0].view_projection_transform,
             frame_resources.command_buffer,
             renderer.mesh_geometry_info,
             renderer.materials_info,
             renderer.model_pass,
             frame_resources_index,
         );
+    }
+
+    if renderer.scene_info.scene_data.shadowed_spot_light_count > 0 {
+        for 0 .. renderer.scene_info.scene_data.shadowed_spot_light_count -  1 {
+            shadowed_spot_light := renderer.scene_info.scene_data.shadowed_spot_lights[it];
+
+            do_shadow_pass(
+                *renderer.shadow_pass,
+                .SPOT,
+                shadowed_spot_light.view_projection_transform,
+                frame_resources.command_buffer,
+                renderer.mesh_geometry_info,
+                renderer.materials_info,
+                renderer.model_pass,
+                frame_resources_index,
+            );
+        }
     }
 
     // =========================================================================
@@ -1317,11 +1368,12 @@ set_overlay_callback :: (renderer: *Renderer, proc: Overlay_Callback, user_data:
 VK  :: #import "Jai_Vulkan";
 VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
-MAX_TEXTURE_COUNT           :: 256;
-MAX_SAMPLER_COUNT           :: 256;
-MAX_MATERIAL_COUNT          :: 256;
-MAX_DIRECTIONAL_LIGHT_COUNT :: 1;  @Gpu
-MAX_SPOT_LIGHT_COUNT        :: 16; @Gpu
+MAX_TEXTURE_COUNT             :: 256;
+MAX_SAMPLER_COUNT             :: 256;
+MAX_MATERIAL_COUNT            :: 256;
+MAX_DIRECTIONAL_LIGHT_COUNT   :: 1;  @Gpu
+MAX_SPOT_LIGHT_COUNT          :: 16; @Gpu
+MAX_SHADOWED_SPOT_LIGHT_COUNT :: 16; @Gpu
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
@@ -1394,6 +1446,64 @@ Materials_Info :: struct {
     texture_descriptor_pool: VK.Descriptor_Pool;
     texture_descriptor_set_layout: VK.Descriptor_Set_Layout;
     texture_descriptor_set: VK.Descriptor_Set;
+}
+
+submit_transient_command_buffer :: (
+    device:         VK.Device,
+    command_pool:   VK.Command_Pool,
+    queue:          VK.Queue,
+    command_buffer: VK.Command_Buffer,
+) -> error: string {
+    result := VK.end_command_buffer(command_buffer);
+    if result != .SUCCESS {
+        return tprint("Failed to end transient command buffer: %", result);
+    }
+
+    submit_info := VK.Submit_Info.{
+        command_buffer_count = 1,
+        p_command_buffers    = *command_buffer,
+    };
+
+    result = VK.queue_submit(queue, .[submit_info], null);
+    if result != .SUCCESS {
+        return tprint("Failed to submit transient command buffer: %", result);
+    }
+
+    result = VK.queue_wait_idle(queue);
+    if result != .SUCCESS {
+        return tprint("Failed to wait for transient command buffer submission: %", result);
+    }
+
+    VK.free_command_buffers(device, command_pool, .[command_buffer]);
+
+    return "";
+}
+
+start_transient_command_buffer :: (device: VK.Device, command_pool: VK.Command_Pool) -> error: string, VK.Command_Buffer {
+    command_buffer_allocate_info := VK.Command_Buffer_Allocate_Info.{
+        command_pool         = command_pool,
+        level                = .PRIMARY,
+        command_buffer_count = 1,
+    };
+
+    result, command_buffer := VK.allocate_command_buffer(device, *command_buffer_allocate_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to allocate transient command buffer: %", result),
+            command_buffer;
+    }
+
+    command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
+        flags = .ONE_TIME_SUBMIT,
+    };
+    result = VK.begin_command_buffer(command_buffer, *command_buffer_begin_info);
+    if result != .SUCCESS {
+        return
+            tprint("Failed to begin transient command buffer: %", result),
+            command_buffer;
+    }
+
+    return "", command_buffer;
 }
 
 calculate_reference_up_vector :: (front: Vector3) -> Vector3 {
@@ -1668,8 +1778,12 @@ Scene_Data :: struct @Gpu {
     directional_light_count: u32;
     camera_world_position:   Vector3;
     ambient_color:           Vector3 = { 0.03, 0.03, 0.03 };
-    spot_lights:             [MAX_SPOT_LIGHT_COUNT]Spot_Light;
-    spot_light_count:        u32;
+
+    spot_lights:      [MAX_SPOT_LIGHT_COUNT]Spot_Light;
+    spot_light_count: u32;
+
+    shadowed_spot_lights:      [MAX_SHADOWED_SPOT_LIGHT_COUNT]Shadowed_Spot_Light;
+    shadowed_spot_light_count: u32;
 }
 
 create_color_hdr_target :: (
@@ -2026,37 +2140,6 @@ create_fallbacks :: (renderer: *Renderer) -> error: string {
     if material_ids.count != 1 || material_ids[0] != 0 {
         return "Fallback material should be the very first and very only";
     }
-
-    return "";
-}
-
-submit_transient_command_buffer :: (
-    device:         VK.Device,
-    command_pool:   VK.Command_Pool,
-    queue:          VK.Queue,
-    command_buffer: VK.Command_Buffer,
-) -> error: string {
-    result := VK.end_command_buffer(command_buffer);
-    if result != .SUCCESS {
-        return tprint("Failed to end transient command buffer: %", result);
-    }
-
-    submit_info := VK.Submit_Info.{
-        command_buffer_count = 1,
-        p_command_buffers    = *command_buffer,
-    };
-
-    result = VK.queue_submit(queue, .[submit_info], null);
-    if result != .SUCCESS {
-        return tprint("Failed to submit transient command buffer: %", result);
-    }
-
-    result = VK.queue_wait_idle(queue);
-    if result != .SUCCESS {
-        return tprint("Failed to wait for transient command buffer submission: %", result);
-    }
-
-    VK.free_command_buffers(device, command_pool, .[command_buffer]);
 
     return "";
 }
@@ -2671,33 +2754,6 @@ create_frame_resources :: (
     }
 
     return "", frame_resources;
-}
-
-start_transient_command_buffer :: (device: VK.Device, command_pool: VK.Command_Pool) -> error: string, VK.Command_Buffer {
-    command_buffer_allocate_info := VK.Command_Buffer_Allocate_Info.{
-        command_pool         = command_pool,
-        level                = .PRIMARY,
-        command_buffer_count = 1,
-    };
-
-    result, command_buffer := VK.allocate_command_buffer(device, *command_buffer_allocate_info);
-    if result != .SUCCESS {
-        return
-            tprint("Failed to allocate transient command buffer: %", result),
-            command_buffer;
-    }
-
-    command_buffer_begin_info := VK.Command_Buffer_Begin_Info.{
-        flags = .ONE_TIME_SUBMIT,
-    };
-    result = VK.begin_command_buffer(command_buffer, *command_buffer_begin_info);
-    if result != .SUCCESS {
-        return
-            tprint("Failed to begin transient command buffer: %", result),
-            command_buffer;
-    }
-
-    return "", command_buffer;
 }
 
 create_transient_command_pool :: (device: VK.Device, queue_family_index: u32) -> error: string, VK.Command_Pool {

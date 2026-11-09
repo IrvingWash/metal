@@ -41,6 +41,17 @@ struct Spot_Light {
     float inner_cutoff_half_angle_cos;
 };
 
+struct Shadowed_Spot_Light {
+    vec3 position;
+    vec3 direction;
+    float intensity;
+    vec3 color;
+    float range;
+    float outer_cutoff_half_angle_cos;
+    float inner_cutoff_half_angle_cos;
+    mat4x4 view_projection_transform;
+};
+
 struct Vertex {
     vec3 position;
     vec4 color;
