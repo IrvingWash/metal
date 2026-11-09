@@ -136,6 +136,8 @@ do_shadow_pass :: (
     if #complete light.kind == {
         case .DIRECTIONAL;
             light_view_projection_transform = light.directional.view_projection_transform;
+        case .SPOT;
+            // @Todo
     }
 
     // Transition to depth attachment

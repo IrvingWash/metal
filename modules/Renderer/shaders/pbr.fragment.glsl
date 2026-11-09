@@ -13,6 +13,8 @@ const uint ALPHA_MODE_OPAQUE = 0;
 const uint ALPHA_MODE_MASK   = 1;
 const uint ALPHA_MODE_BLEND  = 2;
 
+const uint MAX_SPOT_LIGHT_COUNT = 16;
+
 float calculate_shadow(
     sampler2DShadow shadow_map,
     vec3 fragment_world_position,
@@ -31,52 +33,52 @@ float calculate_shadow(
 
     vec3 offset_position = fragment_world_position + geometric_normal * texel_world * 1.5;
 
-    vec4 light_space_position = light_view_projection_transform * vec4(offset_position, 1);
+    vec4 light_space_position = light_view_projection_transform * vec4(offset_position, 1.0);
     vec3 ndc_position = light_space_position.xyz / light_space_position.w;
 
-    if (ndc_position.z < 0 || ndc_position.z > 1) {
-        return 0; // Beyond far plane
+    if (ndc_position.z < 0.0 || ndc_position.z > 1.0) {
+        return 0.0; // Beyond far plane
     }
 
     // Shadow pass viewport is y-flipped, so flipping here
     vec2 uv = vec2(ndc_position.x * 0.5 + 0.5, 0.5 - ndc_position.y * 0.5);
 
     // PCF
-    vec2 texel = 1 / shadow_map_size;
-    float lit = 0;
+    vec2 texel = 1.0 / shadow_map_size;
+    float lit = 0.0;
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
             lit += texture(shadow_map, vec3(uv + vec2(x, y) * texel, ndc_position.z));
         }
     }
-    lit /= 9;
+    lit /= 9.0;
 
-    return 1 - lit;
+    return 1.0 - lit;
 }
 
 // Normal distribution function (Trowbridge-Reitz) - D
 float ndf_ggx(float alpha, vec3 N, vec3 H) {
     float alpha_squared = alpha * alpha;
 
-    float NdotH = max(dot(N, H), 0);
+    float NdotH = max(dot(N, H), 0.0);
     float NdotH_squared = NdotH * NdotH;
 
-    float denominator = (NdotH_squared * (alpha_squared - 1) + 1);
+    float denominator = (NdotH_squared * (alpha_squared - 1.0) + 1.0);
     denominator = PI * denominator * denominator;
 
     return alpha_squared / denominator;
 }
 
 float geometry_schlick(float NdotX, float k) {
-    return NdotX / (NdotX * (1 - k) + k);
+    return NdotX / (NdotX * (1.0 - k) + k);
 }
 
 // Smith joint masking-shadowing function - G
 float geometry_smith(float roughness, vec3 N, vec3 V, vec3 L) {
-    float k = pow(roughness + 1, 2) / 8;
+    float k = pow(roughness + 1.0, 2.0) / 8.0;
 
-    float NdotV = max(dot(N, V), 0);
-    float NdotL = max(dot(N, L), 0);
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
 
     float G_sub1 = geometry_schlick(NdotV, k);
     float G_sub2 = geometry_schlick(NdotL, k);
@@ -86,14 +88,14 @@ float geometry_smith(float roughness, vec3 N, vec3 V, vec3 L) {
 
 // Fresnel-Schlick approximation - F
 vec3 fresnel_schlick(vec3 F0, float HdotV) {
-    float smth = pow(clamp(1.0 - HdotV, 0.0, 1.0), 5);
-    return F0 + (1 - F0) * smth;
+    float smth = pow(clamp(1.0 - HdotV, 0.0, 1.0), 5.0);
+    return F0 + (1.0 - F0) * smth;
 }
 
 // Cook-Torrance specular BRDF
 vec3 specular_brdf(float D, float G, vec3 F, vec3 N, vec3 V, vec3 L) {
     vec3 numerator = D * G * F;
-    float denominator = 4 * max(dot(N, V), 0) * max(dot(N, L), 0) + 0.0001;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
 
     return numerator / denominator;
 }
@@ -104,7 +106,7 @@ vec3 get_normal_from_texel(vec3 world_space_vertex_normal, vec4 vertex_tangent, 
     T = normalize(T - dot(T, N) * N);
     vec3 B = cross(N, T) * vertex_tangent.w;
 
-    vec3 normal_tangent_space = normal_texel * 2 - 1; // Range is [-1;1]
+    vec3 normal_tangent_space = normal_texel * 2.0 - 1.0; // Range is [-1;1]
     normal_tangent_space.xy *= normal_scale;
 
     N = normalize(mat3(T, B, N) * normal_tangent_space);
@@ -127,14 +129,14 @@ vec3 do_light(
 
     float D = ndf_ggx(roughness_squared, N, H);
     float G = geometry_smith(roughness_clamped, N, V, L);
-    vec3 F = fresnel_schlick(F0, max(dot(H, V), 0));
+    vec3 F = fresnel_schlick(F0, max(dot(H, V), 0.0));
 
     vec3 specular = specular_brdf(D, G, F, N, V, L);
 
     vec3  kS = F; // "Energy consevration"
-    vec3  kD = (vec3(1) - kS) * (1 - metallic); // Diffuse contribution coeff (nothing for metalls)
+    vec3  kD = (vec3(1.0) - kS) * (1.0 - metallic); // Diffuse contribution coeff (nothing for metalls)
 
-    return (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0);
+    return (kD * albedo.rgb / PI + specular) * radiance * max(dot(N, L), 0.0);
 }
 
 layout(constant_id = 0) const uint ALPHA_MODE                            = 0;
@@ -154,6 +156,8 @@ layout(scalar, set = 1, binding = 0, row_major) uniform Scene_Data {
     Directional_Light directional_light;
     vec3 camera_world_position;
     vec3 ambient_color;
+    Spot_Light spot_lights[MAX_SPOT_LIGHT_COUNT];
+    uint spot_light_count;
 } scene_data;
 
 layout(set = 2, binding = 0) uniform sampler2DShadow shadow_map;
@@ -222,14 +226,10 @@ void main() {
     vec3 Lo = vec3(0);
     { // Directional light
         vec3 radiance = scene_data.directional_light.color * scene_data.directional_light.intensity;
-
         vec3 L = normalize(-scene_data.directional_light.direction);
 
         vec3 light = do_light(
-            V,
-            L,
-            N,
-            F0,
+            V, L, N, F0,
             radiance,
             albedo.rgb,
             roughness_squared,
@@ -239,6 +239,49 @@ void main() {
 
         Lo += (1 - shadow) * light;
     }
+    // Spot lights
+    for (uint i = 0; i < min(scene_data.spot_light_count, MAX_SPOT_LIGHT_COUNT); i++) {
+        Spot_Light spot_light = scene_data.spot_lights[i];
+
+        vec3 vector_to_light = spot_light.position - vertex_input.fragment_world_position;
+        float distance_to_light = length(vector_to_light);
+        if (distance_to_light >= spot_light.range) {
+            continue;
+        }
+
+        vec3 L = vector_to_light / distance_to_light;
+
+        float attenuation = max(
+            min(
+                1.0 - pow(distance_to_light / spot_light.range, 4.0),
+                1.0
+            ),
+            0.0
+        ) / max(pow(distance_to_light, 2.0), 0.0001);
+
+        // https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md
+        float angular_attenuation = 0.0;
+        {
+            // @Todo: move this to CPU
+            float light_angle_scale = 1.0 / max(0.001, spot_light.inner_cutoff_half_angle_cos - spot_light.outer_cutoff_half_angle_cos);
+            float light_angle_offset = -spot_light.outer_cutoff_half_angle_cos * light_angle_scale;
+
+            float cd = dot(normalize(spot_light.direction), -L); // In the reference the light direction is inversed
+            angular_attenuation = clamp(cd * light_angle_scale + light_angle_offset, 0.0, 1.0);
+            angular_attenuation *= angular_attenuation;
+        }
+
+        vec3 radiance = spot_light.color * spot_light.intensity * angular_attenuation * attenuation;
+
+        Lo += do_light(
+            V, L, N, F0,
+            radiance,
+            albedo.xyz,
+            roughness_squared,
+            roughness_clamped,
+            metallic
+        );
+    }
 
     vec3 ambient = scene_data.ambient_color * albedo.rgb * occlusion;
 
@@ -246,6 +289,6 @@ void main() {
 
     fragment_color = vec4(
         final_color,
-        ALPHA_MODE == ALPHA_MODE_BLEND ? albedo.a : 1
+        ALPHA_MODE == ALPHA_MODE_BLEND ? albedo.a : 1.0
     );
 }

@@ -13,6 +13,8 @@ Game :: struct {
 
     entities: [..]Entity;
 
+    spot_light: Renderer.Spot_Light_Params;
+
     #if DEVELOPER {
         is_in_editor_mode: bool = false;
     }
@@ -181,6 +183,12 @@ render :: () {
             make_world_transform(entity),
         );
     }
+
+    error = Renderer.draw_spot_light(
+        *game.renderer,
+        game.spot_light,
+    );
+    assert(!error, error);
 
     error = Renderer.finish_drawing(*game.renderer);
     assert(!error, error);

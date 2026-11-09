@@ -90,12 +90,6 @@ Image_Params :: struct {
     }
 }
 
-Directional_Light_Params :: struct {
-    color:     Vector3;
-    direction: Vector3;
-    intensity: float;
-}
-
 Camera :: struct {
     position: Vector3;
 
@@ -425,6 +419,7 @@ deinit :: (renderer: *Renderer) {
 
 start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: string {
     renderer.scene_info.scene_data.camera_world_position = camera.position;
+    renderer.scene_info.scene_data.spot_light_count = 0;
 
     renderer.tonemap_pass.exposure = camera.exposure;
 
@@ -565,6 +560,20 @@ draw_model :: (
         renderer.materials_info,
         world_transform,
     );
+}
+
+draw_spot_light :: (renderer: *Renderer, params: Spot_Light_Params) -> error: string {
+    if renderer.scene_info.scene_data.spot_light_count >= MAX_SPOT_LIGHT_COUNT {
+        return tprint("Reached the maximum of % spot lights", MAX_SPOT_LIGHT_COUNT);
+    }
+
+    renderer.scene_info.scene_data.spot_lights[
+        renderer.scene_info.scene_data.spot_light_count
+    ] = create_spot_light(params);
+
+    renderer.scene_info.scene_data.spot_light_count += 1;
+
+    return "";
 }
 
 draw_line :: (renderer: *Renderer, line: Line_Primitive) {
@@ -1043,11 +1052,7 @@ get_directional_light :: (renderer: Renderer) -> Directional_Light {
 }
 
 set_directional_light :: (renderer: *Renderer, params: Directional_Light_Params) {
-    light := *renderer.scene_info.scene_data.directional_light;
-    light.color = params.color;
-    light.intensity = params.intensity;
-    light.direction = params.direction;
-    // view_projection_transform is recomputed in start_drawing
+    renderer.scene_info.scene_data.directional_light = create_directional_light(params);
 }
 
 get_clear_color :: (renderer: Renderer) -> Vector4 {
@@ -1286,9 +1291,10 @@ set_overlay_callback :: (renderer: *Renderer, proc: Overlay_Callback, user_data:
 VK  :: #import "Jai_Vulkan";
 VMA :: #import "Vulkan_Memory_Allocator"(DEBUG = DEBUG);
 
-MAX_TEXTURE_COUNT        :: 256;
-MAX_SAMPLER_COUNT        :: 256;
-MAX_MATERIAL_COUNT       :: 256;
+MAX_TEXTURE_COUNT    :: 256;
+MAX_SAMPLER_COUNT    :: 256;
+MAX_MATERIAL_COUNT   :: 256;
+MAX_SPOT_LIGHT_COUNT :: 16; @Gpu
 
 FRAMES_IN_FLIGHT_COUNT :: 2;
 
@@ -1631,9 +1637,11 @@ Frame_Resources :: struct {
 
 // @Todo: give this a better name
 Scene_Data :: struct @Gpu {
-    directional_light:     Directional_Light;
+    directional_light:     Directional_Light; // Persistent
     camera_world_position: Vector3;
     ambient_color:         Vector3 = { 0.03, 0.03, 0.03 };
+    spot_lights:           [MAX_SPOT_LIGHT_COUNT]Spot_Light; // Reset in start drawing
+    spot_light_count:      u32;
 }
 
 create_color_hdr_target :: (
