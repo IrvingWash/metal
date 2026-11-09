@@ -13,6 +13,7 @@ Game :: struct {
 
     entities: [..]Entity;
 
+    directional_light: Renderer.Directional_Light_Params;
     spot_light: Renderer.Spot_Light_Params;
 
     #if DEVELOPER {
@@ -183,6 +184,12 @@ render :: () {
             make_world_transform(entity),
         );
     }
+
+    error = Renderer.draw_directional_light(
+        *game.renderer,
+        game.directional_light,
+    );
+    assert(!error, error);
 
     error = Renderer.draw_spot_light(
         *game.renderer,

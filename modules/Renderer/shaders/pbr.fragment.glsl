@@ -13,6 +13,7 @@ const uint ALPHA_MODE_OPAQUE = 0;
 const uint ALPHA_MODE_MASK   = 1;
 const uint ALPHA_MODE_BLEND  = 2;
 
+const uint MAX_DIRECTIONAL_LIGHT_COUNT = 1;
 const uint MAX_SPOT_LIGHT_COUNT = 16;
 
 float calculate_shadow(
@@ -153,7 +154,8 @@ layout(buffer_reference, scalar) readonly buffer Material_Buffer {
 layout(set = 0, binding = 0) uniform sampler2D textures[];
 
 layout(scalar, set = 1, binding = 0, row_major) uniform Scene_Data {
-    Directional_Light directional_light;
+    Directional_Light directional_lights[MAX_DIRECTIONAL_LIGHT_COUNT];
+    uint directional_light_count;
     vec3 camera_world_position;
     vec3 ambient_color;
     Spot_Light spot_lights[MAX_SPOT_LIGHT_COUNT];
@@ -187,14 +189,6 @@ void main() {
     vec4 occlusion_texel          = texture(textures[material.occlusion_texture_index], vertex_input.uv);
     vec4 emissive_texel           = texture(textures[material.emissive_texture_index], vertex_input.uv);
 
-    float shadow = calculate_shadow(
-        shadow_map,
-        vertex_input.fragment_world_position,
-        scene_data.directional_light.view_projection_transform,
-        vertex_input.world_space_normal,
-        scene_data.directional_light.radius
-    );
-
     vec4 albedo = base_color_texel * material.base_color_factor * vertex_input.color;
 
     if (ALPHA_MODE == ALPHA_MODE_MASK && albedo.a < material.alpha_cutoff) {
@@ -224,9 +218,12 @@ void main() {
     vec3 V = normalize(scene_data.camera_world_position - vertex_input.fragment_world_position);
 
     vec3 Lo = vec3(0);
-    { // Directional light
-        vec3 radiance = scene_data.directional_light.color * scene_data.directional_light.intensity;
-        vec3 L = normalize(-scene_data.directional_light.direction);
+    // Directional lights
+    for (uint i = 0; i < min(scene_data.directional_light_count, MAX_DIRECTIONAL_LIGHT_COUNT); i++) {
+        Directional_Light directional_light = scene_data.directional_lights[i];
+
+        vec3 radiance = directional_light.color * directional_light.intensity;
+        vec3 L = normalize(-directional_light.direction);
 
         vec3 light = do_light(
             V, L, N, F0,
@@ -235,6 +232,14 @@ void main() {
             roughness_squared,
             roughness_clamped,
             metallic
+        );
+
+        float shadow = calculate_shadow(
+            shadow_map,
+            vertex_input.fragment_world_position,
+            directional_light.view_projection_transform,
+            vertex_input.world_space_normal,
+            directional_light.radius
         );
 
         Lo += (1 - shadow) * light;

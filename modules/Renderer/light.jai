@@ -86,24 +86,18 @@ create_shadowed_spot_light :: (params: Spot_Light_Params) -> Shadowed_Spot_Light
 }
 */
 
-create_directional_light :: (params: Directional_Light_Params) -> Directional_Light {
+create_directional_light :: (
+    params:          Directional_Light_Params,
+    camera:          $T/interface Camera,
+    shadow_distance: float,
+    aspect_ratio:    float,
+    view_transform:  Matrix4,
+) -> Directional_Light {
     light: Directional_Light;
     light.color = params.color;
     light.intensity = params.intensity;
     light.direction = normalize(params.direction);
 
-    return light;
-
-    // View-projection and radius is updated in update_directional_light
-}
-
-update_directional_light :: (
-    directional_light: *Directional_Light,
-    camera:            $T/interface Camera,
-    shadow_distance:   float,
-    aspect_ratio:      float,
-    view_transform:   Matrix4,
-) {
     shadow_far := min(camera.z_far, shadow_distance);
     projection_transform_with_shadow_far := make_projection_matrix(
         camera.fov_vertical,
@@ -119,11 +113,13 @@ update_directional_light :: (
         depth_range_01 = true,
     );
 
-    directional_light.view_projection_transform,
-        directional_light.radius = create_fitted_view_projection_transform_for_directional_light(
-        directional_light.direction,
+    light.view_projection_transform,
+    light.radius = create_fitted_view_projection_transform_for_directional_light(
+        light.direction,
         frustum_corners,
     );
+
+    return light;
 }
 
 

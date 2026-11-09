@@ -138,14 +138,36 @@ draw_editor_window :: () {
     IM.show_demo_window();
     draw_camera_section();
     draw_entity_section();
+    draw_directional_light_section();
     draw_spot_light_section();
     draw_renderer_section();
 
     IM.end();
 }
 
-//    outer_cutoff_half_angle: float = #run deg_to_rad(20);
- //   inner_cutoff_half_angle: float = #run deg_to_rad(10);
+draw_directional_light_section :: () {
+    if !IM.collapsing_header("Directional light") {
+        return;
+    }
+
+    IM.push_item_width(200);
+    is_changed := IM.color_picker3(
+        "Color##DirectionalLight",
+        *editor.game.directional_light.color.component,
+        flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
+    );
+    is_changed |= IM.drag_float(
+        "Intensity##DirectionalLight",
+        *editor.game.directional_light.intensity,
+        v_speed = 0.1,
+    );
+    is_changed |= IM.drag_float3(
+        "Direction##DirectionalLight",
+        *editor.game.directional_light.direction.component,
+        v_speed = 0.1,
+    );
+}
+
 draw_spot_light_section :: () {
     if !IM.collapsing_header("Spot light") {
         return;
@@ -246,39 +268,6 @@ draw_renderer_section :: () {
         *editor.game.renderer.shadow_distance,
         v_speed = 0.5,
     );
-
-    IM.separator_text("Directional light##Renderer");
-    {
-        directional_light := Renderer.get_directional_light(editor.game.renderer);
-
-        IM.push_item_width(200);
-        is_changed := IM.color_picker3(
-            "Color##DirectionalLight",
-            *directional_light.color.component,
-            flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
-        );
-        is_changed |= IM.drag_float(
-            "Intensity##DirectionalLight",
-            *directional_light.intensity,
-            v_speed = 0.1,
-        );
-        is_changed |= IM.drag_float3(
-            "Direction##DirectionalLight",
-            *directional_light.direction.component,
-            v_speed = 0.1,
-        );
-
-        if is_changed {
-            Renderer.set_directional_light(
-                *editor.game.renderer,
-                {
-                    color     = directional_light.color,
-                    intensity = directional_light.intensity,
-                    direction = directional_light.direction,
-                }
-            );
-        }
-    }
 
     IM.separator_text("Ambient color##Renderer");
     { // Ambient
