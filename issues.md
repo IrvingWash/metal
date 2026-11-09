@@ -6,8 +6,6 @@
 
 - Identify duplicated VK code and refactor, so later we can add other backends
 
-- Group instances so instance_count is not hardoced to 1 in Draw_Indexed_Indirect_Command
-
 - Add logs everywhere
 
 - Generate tangents
