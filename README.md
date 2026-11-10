@@ -22,7 +22,6 @@ The most interesting code lives in `modules`:
 ## Showcase
 
 [![Video Title](https://img.youtube.com/vi/HzTERWgZcb4/0.jpg)](https://www.youtube.com/watch?v=HzTERWgZcb4)
-https://youtu.be/HzTERWgZcb4?si=HZiGxy04G38aV5Ar
 
 The showcase contains sample models from Khronos' gltf assets.
 
