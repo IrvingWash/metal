@@ -5,6 +5,7 @@ Model_Accessor :: struct {
 }
 
 Node :: struct {
+    // @Todo: maybe store model space transform too
     local_transform: Matrix4 = Matrix4_Identity;
 
     first_mesh_index: u32;

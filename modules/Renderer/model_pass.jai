@@ -5,7 +5,7 @@
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
 
-    model_draw_requests:  [..]struct { accessor: Model_Accessor; transform: Matrix4; tint: Vector4; };
+    model_draw_requests:  [..]Model_Draw_Request;
     ordered_draw_buckets: [5]Model_Draw_Bucket;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
@@ -432,6 +432,12 @@ Geometry_Accessor :: struct {
     index_count:  u32;
     index_start:  u32;
     vertex_start: u32;
+}
+
+Model_Draw_Request :: struct {
+    accessor: Model_Accessor;
+    transform: Matrix4;
+    tint: Vector4;
 }
 
 init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [5]Model_Draw_Bucket {
