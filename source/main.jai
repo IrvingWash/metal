@@ -13,13 +13,45 @@ Game :: struct {
 
     entities: [..]Entity;
 
-    directional_light: Renderer.Directional_Light_Params = { color = { 0, 0, 0 } };
-    spot_light: Renderer.Spot_Light_Params = {
-        intensity = 17,
-        range = 14,
-        inner_cutoff_half_angle = #run deg_to_rad(30),
-        outer_cutoff_half_angle = #run deg_to_rad(35),
+    directional_light: Renderer.Directional_Light_Params = {
+        color = { 0.1, 0.1, 0.1 },
+        direction = { 0.3, -1, 0 },
     };
+    spot_lights := Renderer.Spot_Light_Params.[
+        {
+            position = { -4.5, 1.8, -3.5 },
+            direction = { 2.5, -1, 0 },
+            intensity = 45,
+            range = 35,
+            inner_cutoff_half_angle = #run deg_to_rad(10),
+            outer_cutoff_half_angle = #run deg_to_rad(30),
+        },
+        {
+            position = { -4.5, 1.8, 3.5 },
+            direction = { 2.5, -1, 0 },
+            intensity = 45,
+            range = 35,
+            inner_cutoff_half_angle = #run deg_to_rad(10),
+            outer_cutoff_half_angle = #run deg_to_rad(30),
+        },
+        {
+            position = { 0, 2.9, 0 },
+            direction = { 0, -1, -0.7 },
+            intensity = 30,
+            color = { 1, 0, 0 },
+            range = 18,
+            inner_cutoff_half_angle = #run deg_to_rad(30),
+            outer_cutoff_half_angle = #run deg_to_rad(55),
+        },
+        {
+            position = { 0, 5, 0 },
+            direction  = { 1, -0.2, 0 },
+            intensity = 15,
+            range = 35,
+            inner_cutoff_half_angle = #run deg_to_rad(14),
+            outer_cutoff_half_angle = #run deg_to_rad(18),
+        },
+    ];
 
     #if DEVELOPER {
         is_in_editor_mode: bool = false;
@@ -49,39 +81,24 @@ main :: () {
         cast(u32, display_info.width * display_info.dpi),
         cast(u32, display_info.height * display_info.dpi),
     );
-    game.renderer.normalized_clear_color = { 0, 0, 0, 1 };
+    game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
+    game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
 
     add_entity(
         name       = "Damaged Helmet",
         model_path = "../../Models/damaged_helmet/scene.glb",
-        position   = { -1, -4.5 ,0 },
-    );
-    add_entity(
-        name       = "Damaged Helmet II",
-        model_path = "../../Models/damaged_helmet/scene.glb",
-        position   = { -1, -2.5 ,0 },
-        tint = { 1, 0, 0, 1 },
-    );
-    add_entity(
-        name       = "Damaged Helmet III",
-        model_path = "../../Models/damaged_helmet/scene.glb",
-        position   = { -1, -0.5 ,0 },
-        tint = { 0, 1, 0, 1 },
+        position = { -1,  0.5, -3.4 },
+        scale    = { 0.4, 0.4, 0.4  },
     );
     add_entity(
         name       = "SciFiHelmet",
         model_path = "../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf",
-        position   = {1, -4.5, 0 },
+        position = { -1,  0.5, 3.4 },
+        scale    = { 0.4, 0.4, 0.4  },
     );
     add_entity(
-        name       = "Mountains",
-        model_path = "../../Models/death_valley.glb",
-        scale      = { 100, 100, 100 },
-    );
-    add_entity(
-        name       = "Gundam",
-        model_path = "../../Models/gundam1/gundam.glb",
-        scale      = { 1, 1, 1 },
+        name       = "Sponza",
+        model_path = "../../Models/Sponza/Sponza.gltf",
     );
 
     while !game.should_quit {
@@ -184,9 +201,6 @@ update :: (dt: float) {
         case .FLY;
             fly_camera(*game.camera, dt, get_fly_camera_input());
     }
-
-    game.spot_light.position = game.camera.position;
-    game.spot_light.direction = game.camera.front;
 }
 
 render :: () {
@@ -206,15 +220,16 @@ render :: () {
         );
     }
 
+    for spot_light: game.spot_lights {
+        Renderer.draw_spot_light(
+            *game.renderer,
+            spot_light,
+        );
+    }
+
     error = Renderer.draw_directional_light(
         *game.renderer,
         game.directional_light,
-    );
-    assert(!error, error);
-
-    error = Renderer.draw_spot_light(
-        *game.renderer,
-        game.spot_light,
     );
     assert(!error, error);
 
