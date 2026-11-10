@@ -329,6 +329,20 @@ make_frustum_corners :: (view_matrix: Matrix4, projection_matrix: Matrix4, depth
     return corners;
 }
 
+calculate_reference_up_vector :: (front: Vector3) -> Vector3 {
+    WORLD_UP :: Vector3.{ 0, 1, 0 };
+
+    normalized_front := normalize(front);
+
+    right := cross(normalized_front, WORLD_UP);
+    if length_squared(right) < 0.000001 {
+        right = cross(normalized_front, .{ 1, 0, 0 });
+    }
+    right = normalize(right);
+
+    return cross(right, normalized_front);
+}
+
 
 
 #scope_file

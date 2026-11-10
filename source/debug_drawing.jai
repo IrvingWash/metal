@@ -8,6 +8,31 @@ init_debug_drawing :: (renderer: *Renderer.Renderer) {
 
 deinit_debug_drawing :: () {};
 
+draw_cone :: (
+    position:         Vector3,
+    direction:        Vector3,
+    range:            float,
+    outer_half_angle: float,
+    color:            Vector4 = DEFAULT_LINE_COLOR,
+    segment_count:    u32     = 32,
+) {
+    forward := normalize(direction);
+    up      := calculate_reference_up_vector(forward);
+    right   := cross(forward, up);
+
+    rim_center := position + forward * (range * cos(outer_half_angle));
+    rim_radius := range * sin(outer_half_angle);
+
+    draw_circle(rim_center, right, up, rim_radius, segment_count, color);
+
+    SIDE_LINE_COUNT :: 8;
+    for 0 .. SIDE_LINE_COUNT - 1 {
+        angle := (cast(float, it) / SIDE_LINE_COUNT) * TAU;
+        rim_point := rim_center + (right * cos(angle) + up * sin(angle)) * rim_radius;
+        draw_line(position, rim_point, color);
+    }
+}
+
 draw_model_obb :: (
     model:     Renderer.Model_Accessor,
     transform: Matrix4,

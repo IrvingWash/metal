@@ -76,9 +76,7 @@ draw_editor :: (draw_editing_stuff: bool) {
     if draw_editing_stuff {
         draw_editor_window();
 
-        if editor.is_entity_header_open {
-            draw_gizmos();
-        }
+        draw_gizmos();
     }
 
     IM.render();
@@ -118,6 +116,7 @@ Editor :: struct {
     should_draw_model_bounds: bool;
 
     selected_spot_light_id: s32;
+    should_draw_spot_light_cone: bool;
 }
 
 Gizmo_Mode :: enum {
@@ -188,6 +187,20 @@ draw_spot_light_section :: () {
 
     selected_spot_light := *editor.game.spot_lights[editor.selected_spot_light_id];
 
+
+    IM.checkbox(
+        "Draw cone",
+        *editor.should_draw_spot_light_cone,
+    );
+    if editor.should_draw_spot_light_cone {
+        draw_cone(
+            selected_spot_light.position,
+            selected_spot_light.direction,
+            selected_spot_light.range,
+            selected_spot_light.outer_cutoff_half_angle,
+        );
+    }
+
     IM.drag_float3(
         "Position##SpotLight",
         *selected_spot_light.position.component,
@@ -254,26 +267,50 @@ draw_gizmos :: () {
         view_rect_max.y - view_rect_min.y,
     );
 
-    selected_entity := *editor.game.entities[editor.selected_entity_id];
+     // Entity
+    if editor.is_entity_header_open {
+        selected_entity := *editor.game.entities[editor.selected_entity_id];
 
-    column_major_matrix := transpose(make_world_transform(selected_entity));
+        column_major_matrix := transpose(make_world_transform(selected_entity));
 
-    if IM.Zmo.manipulate(
-        view = transpose(editor.game.renderer.transforms.view).floats.data,
-        projection = transpose(editor.game.renderer.transforms.projection).floats.data,
-        operation = gizmo_operation_to_imguizmo(editor.gizmo_operation),
-        mode = gizmo_mode_to_imguizmo(editor.gizmo_mode),
-        matrix = column_major_matrix.floats.data,
-    ) {
-        matrix := transpose(column_major_matrix);
+        if IM.Zmo.manipulate(
+            view = transpose(editor.game.renderer.transforms.view).floats.data,
+            projection = transpose(editor.game.renderer.transforms.projection).floats.data,
+            operation = gizmo_operation_to_imguizmo(editor.gizmo_operation),
+            mode = gizmo_mode_to_imguizmo(editor.gizmo_mode),
+            matrix = column_major_matrix.floats.data,
+        ) {
+            matrix := transpose(column_major_matrix);
 
-        if #complete editor.gizmo_operation == {
-            case .TRANSLATE;
-                selected_entity.position = calculate_translation_from_transform(matrix);
-            case .SCALE;
-                selected_entity.scale    = calculate_scale_from_transform(matrix);
-            case .ROTATE;
-                selected_entity.rotation = calculate_rotation_from_transform(matrix);
+            if #complete editor.gizmo_operation == {
+                case .TRANSLATE;
+                    selected_entity.position = calculate_translation_from_transform(matrix);
+                case .SCALE;
+                    selected_entity.scale    = calculate_scale_from_transform(matrix);
+                case .ROTATE;
+                    selected_entity.rotation = calculate_rotation_from_transform(matrix);
+            }
+        }
+    }
+
+    { // Spot light
+        selected_spot_light := *editor.game.spot_lights[editor.selected_spot_light_id];
+
+        column_major_matrix := transpose(make_translation_matrix4(selected_spot_light.position));
+
+        if IM.Zmo.manipulate(
+            view = transpose(editor.game.renderer.transforms.view).floats.data,
+            projection = transpose(editor.game.renderer.transforms.projection).floats.data,
+            operation = gizmo_operation_to_imguizmo(editor.gizmo_operation),
+            mode = gizmo_mode_to_imguizmo(editor.gizmo_mode),
+            matrix = column_major_matrix.floats.data,
+        ) {
+            matrix := transpose(column_major_matrix);
+
+            if editor.gizmo_operation == {
+                case .TRANSLATE;
+                    selected_spot_light.position = calculate_translation_from_transform(matrix);
+            }
         }
     }
 }

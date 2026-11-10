@@ -1508,21 +1508,6 @@ start_transient_command_buffer :: (device: VK.Device, command_pool: VK.Command_P
     return "", command_buffer;
 }
 
-calculate_reference_up_vector :: (front: Vector3) -> Vector3 {
-    WORLD_UP :: Vector3.{ 0, 1, 0 };
-
-    normalized_front := normalize(front);
-
-    right := cross(normalized_front, WORLD_UP);
-    if length_squared(right) < 0.000001 {
-        right = cross(normalized_front, .{ 1, 0, 0 });
-    }
-    right = normalize(right);
-
-    return cross(right, normalized_front);
-}
-
-
 transition_images_layouts :: (
     command_buffer: VK.Command_Buffer,
     transitions: ..Transition_Image_Layout_Params,
