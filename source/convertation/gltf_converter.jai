@@ -110,6 +110,8 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
 
     name: string,
 ) -> Node_Dto {
+    assert(gltf_node._skin != Gltf.SENTINEL, "Got a skinned node. Unsupported");
+
     node_dto: Node_Dto;
 
     node_dto.name = name;

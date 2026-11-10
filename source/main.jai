@@ -102,6 +102,11 @@ main :: () {
         name       = "Sponza",
         model_path = "../../Models/Sponza/Sponza.gltf",
     );
+    add_entity(
+        name       = "AnimatedCube",
+        model_path = "../../Models/AnimatedCube/glTF/AnimatedCube.gltf",
+        position = { 0, 10, 0 },
+    );
 
     while !game.should_quit {
         dt := calculate_delta_time();
