@@ -211,11 +211,9 @@ asset_manager_upload_model :: (
         array_add(*uploaded_renderer_material_ids, ..material_ids);
     }
 
-    mesh_accessors: [..]Renderer.Mesh_Accessor;
-    mesh_accessors.allocator = temp;
     for mesh_dto: model_dto.meshes {
         mesh_accessor: Renderer.Mesh_Accessor;
-        defer array_add(*mesh_accessors, mesh_accessor);
+        defer array_add(*model_accessor.meshes, mesh_accessor);
 
         mesh_accessor.aabb = make_aabb(mesh_dto.min, mesh_dto.max);
 
@@ -265,10 +263,8 @@ asset_manager_upload_model :: (
         renderer_node.parent_index = node_dto.parent_index;
 
         if node_dto.first_mesh_index.kind == .SOME && node_dto.mesh_count > 0 {
-            first := node_dto.first_mesh_index.some;
-            for first .. first + node_dto.mesh_count - 1 {
-                array_add(*renderer_node.meshes, mesh_accessors[it]);
-            }
+            renderer_node.first_mesh_index = node_dto.first_mesh_index.some;
+            renderer_node.mesh_count       = node_dto.mesh_count;
         }
 
         array_resize(*renderer_node.children_ids, node_dto.children_indices.count);
@@ -310,14 +306,18 @@ make_model_aabb :: (model: Renderer.Model_Accessor) -> AABB {
     ) {
         transform := parent_transform * node.local_transform;
 
-        for mesh: node.meshes {
-            transformed_mesh_aabb := transform_aabb(
-                mesh.aabb,
-                transform,
-            );
+        if node.mesh_count > 0 {
+            for mesh_index: node.first_mesh_index .. (node.first_mesh_index + node.mesh_count - 1) {
+                mesh := model.meshes[mesh_index];
 
-            model_min.* = min(model_min, transformed_mesh_aabb.min);
-            model_max.* = max(model_max, transformed_mesh_aabb.max);
+                transformed_mesh_aabb := transform_aabb(
+                    mesh.aabb,
+                    transform,
+                );
+
+                model_min.* = min(model_min, transformed_mesh_aabb.min);
+                model_max.* = max(model_max, transformed_mesh_aabb.max);
+            }
         }
 
         for child_id: node.children_ids {

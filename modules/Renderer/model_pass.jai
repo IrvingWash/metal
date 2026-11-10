@@ -5,7 +5,7 @@
 Model_Pass :: struct {
     pipeline_info: Pbr_Pipeline_Info;
 
-    models_to_draw:       [..]struct { accessor: Model_Accessor; transform: Matrix4; tint: Vector4; };
+    model_draw_requests:  [..]struct { accessor: Model_Accessor; transform: Matrix4; tint: Vector4; };
     ordered_draw_buckets: [5]Model_Draw_Bucket;
 
     instance_buffer_infos:    [FRAMES_IN_FLIGHT_COUNT]Buffer_Info;
@@ -103,7 +103,7 @@ create_model_pass :: (
 }
 
 destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VMA.Allocator) {
-    array_free(model_pass.models_to_draw);
+    array_free(model_pass.model_draw_requests);
 
     for instance_buffer_info: model_pass.instance_buffer_infos {
         VMA.unmap_memory(
@@ -137,7 +137,7 @@ destroy_model_pass :: (model_pass: *Model_Pass, device: VK.Device, allocator: VM
 }
 
 reset_model_pass :: (model_pass: *Model_Pass) {
-    array_reset_keeping_memory(*model_pass.models_to_draw);
+    array_reset_keeping_memory(*model_pass.model_draw_requests);
     reset_draw_buckets_entries_keeping_order(model_pass.ordered_draw_buckets);
 }
 
@@ -148,7 +148,7 @@ add_model_to_model_pass :: (
     tint:            Vector4,
 ) {
     array_add(
-        *model_pass.models_to_draw,
+        *model_pass.model_draw_requests,
         {
             model_accessor,
             world_transform,
@@ -166,7 +166,7 @@ prepare_model_pass :: (
     frustums_for_culling: []Frustum,
 ) {
     // Adding to buckets
-    for model_to_draw: model_pass.models_to_draw {
+    for model_to_draw: model_pass.model_draw_requests {
         { // Frustum culling
             transformed_aabb := transform_aabb(model_to_draw.accessor.aabb, model_to_draw.transform);
             is_inside_one_of_the_frustums: bool;
@@ -187,10 +187,11 @@ prepare_model_pass :: (
             }
 
             add_model_node_to_draw_bucket(
-                materials_info,
-                model_pass.ordered_draw_buckets,
                 node,
+                model_pass.ordered_draw_buckets,
                 model_to_draw.accessor.nodes,
+                model_to_draw.accessor.meshes,
+                materials_info,
                 model_to_draw.transform,
                 model_to_draw.tint,
                 view_point_for_sorting,
@@ -464,22 +465,24 @@ init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [5]Model_Draw
 }
 
 add_model_node_to_draw_bucket :: (
-    materials_info:        Materials_Info,
-    draw_buckets:          []Model_Draw_Bucket,
     node:                  Node,
+    draw_buckets:          []Model_Draw_Bucket,
     nodes:                 []Node,
+    all_meshes:            []Mesh_Accessor,
+    materials_info:        Materials_Info,
     parent_transform:      Matrix4,
     tint:                  Vector4,
     camera_world_position: Vector3,
 ) {
     world_transform := parent_transform * node.local_transform;
 
-    if node.meshes.count > 0 {
+    if node.mesh_count > 0 {
         inversed_ok, inversed_world_matrix := inverse(world_transform);
         if inversed_ok {
             inverse_transpose_world_transform := transpose(inversed_world_matrix);
 
-            for mesh: node.meshes {
+            for mesh_index: node.first_mesh_index .. (node.first_mesh_index + node.mesh_count - 1) {
+                mesh := all_meshes[mesh_index];
                 material := materials_info.materials[mesh.material_index];
 
                 bucket := get_draw_bucket_by_material(draw_buckets, material);
@@ -512,10 +515,11 @@ add_model_node_to_draw_bucket :: (
         child_node := nodes[child_node_index];
 
         add_model_node_to_draw_bucket(
-            materials_info,
-            draw_buckets,
             child_node,
+            draw_buckets,
             nodes,
+            all_meshes,
+            materials_info,
             world_transform,
             tint,
             camera_world_position,

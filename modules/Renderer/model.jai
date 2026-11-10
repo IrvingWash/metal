@@ -1,14 +1,17 @@
 Model_Accessor :: struct {
-    nodes: [..]Node;
-    aabb:  AABB;
+    nodes:  [..]Node;
+    meshes: [..]Mesh_Accessor;
+    aabb:   AABB;
 }
 
 Node :: struct {
     local_transform: Matrix4 = Matrix4_Identity;
 
-    meshes:       [..]Mesh_Accessor; // @Todo: Refactor so Model_Accessor holds all the meshes
-    parent_index: Option(u32);
-    children_ids: [..]u32;
+    first_mesh_index: u32;
+    mesh_count:       u32;
+
+    parent_index:     Option(u32);
+    children_ids:     [..]u32;
 }
 
 Mesh_Accessor :: struct {
@@ -65,10 +68,10 @@ Alpha_Mode :: enum u32 #specified {
 
 destroy_model_accessor :: (model_accessor: *Model_Accessor) {
     for node: model_accessor.nodes {
-        array_free(node.meshes);
         array_free(node.children_ids);
     }
 
+    array_free(model_accessor.meshes);
     array_free(model_accessor.nodes);
 
     model_accessor.* = {};
