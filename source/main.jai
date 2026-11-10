@@ -7,7 +7,9 @@ Game :: struct {
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
 
-    camera: Camera;
+    camera: Camera = {
+        position = {}
+    };
 
     camera_controller_kind: Camera_Controller_Kind = .FLY;
 
