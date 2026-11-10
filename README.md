@@ -19,9 +19,10 @@ The most interesting code lives in `modules`:
 - `More_Math` - additional math procedures on top of Jai's built in math module
 - `Gltf` - GLTF loading
 
-## Showcase
+## Very quick showcase with bad quality (thank you OBS + Wayland)
 
-[![Video Title](https://img.youtube.com/vi/HzTERWgZcb4/0.jpg)](https://www.youtube.com/watch?v=HzTERWgZcb4)
+(Click for video)<br>
+[![Showcase](https://img.youtube.com/vi/HzTERWgZcb4/0.jpg)](https://www.youtube.com/watch?v=HzTERWgZcb4)
 
 The showcase contains sample models from Khronos' gltf assets.
 
