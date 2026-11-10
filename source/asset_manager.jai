@@ -77,7 +77,7 @@ asset_manager_upload_model :: (
 
     normalized_path = copy_string(normalized_path);
 
-    log("Asset Manager: Uploading model at %", normalized_path);
+    log("Asset Manager: Uploading model at %", path);
 
     model_accessor: Renderer.Model_Accessor;
 
@@ -91,7 +91,7 @@ asset_manager_upload_model :: (
     }
 
     if maybe_model_dto.kind != .SOME {
-        assert(false, "Failed to load model from %", normalized_path);
+        assert(false, "Failed to load model from %", path);
     }
 
     model_dto := maybe_model_dto.some;

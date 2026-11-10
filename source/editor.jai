@@ -115,7 +115,8 @@ Editor :: struct {
     gizmo_operation:          Gizmo_Operation;
     should_draw_model_bounds: bool;
 
-    selected_spot_light_id: s32;
+    is_spot_lights_header_open:  bool;
+    selected_spot_light_id:      s32;
     should_draw_spot_light_cone: bool;
 }
 
@@ -169,7 +170,10 @@ draw_directional_light_section :: () {
 }
 
 draw_spot_light_section :: () {
-    if !IM.collapsing_header("Spot light") {
+
+    IM.set_next_item_open(editor.is_spot_lights_header_open);
+    editor.is_spot_lights_header_open = IM.collapsing_header("Spot light");
+    if !editor.is_spot_lights_header_open {
         return;
     }
 
@@ -293,7 +297,8 @@ draw_gizmos :: () {
         }
     }
 
-    { // Spot light
+     // Spot light
+    if editor.is_spot_lights_header_open {
         selected_spot_light := *editor.game.spot_lights[editor.selected_spot_light_id];
 
         column_major_matrix := transpose(make_translation_matrix4(selected_spot_light.position));
