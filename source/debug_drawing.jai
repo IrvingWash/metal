@@ -25,7 +25,7 @@ draw_cone :: (
 
     draw_circle(rim_center, right, up, rim_radius, segment_count, color);
 
-    SIDE_LINE_COUNT :: 8;
+    SIDE_LINE_COUNT :: 6;
     for 0 .. SIDE_LINE_COUNT - 1 {
         angle := (cast(float, it) / SIDE_LINE_COUNT) * TAU;
         rim_point := rim_center + (right * cos(angle) + up * sin(angle)) * rim_radius;

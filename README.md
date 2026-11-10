@@ -58,6 +58,42 @@ The build artefacts are placed into `./bin/<OPTIMIZATION_TYPE>` directory
 
 ## Structure
 
-`source`           - The game
-`modules`          - Subprojects and bindings
+`source`           - The "game". It is a high-level app, I didn't think a lot on the code here, because it's just a demo.
+
+`modules\Renderer`  - the renderer. Has a very small api:
+- `init`
+- `deinit`
+- `start_drawing`
+- `finish_drawing`
+- `draw_model`
+- `draw_line`
+- `draw_xxx_light`
+- Texture and geometry uploaders
+- A couple of unnecessary setters (`set_directional_light`, etc)
+`start_drawing` resets the per-frame state
+`draw_xxx` adds models, lights, etc into lists to be drawn this frame
+`finish_drawing` executes this frame's command buffer and presents.
+
+Currently there are 4 "passes":
+- Model Pass
+- Shadow Pass
+- Tonemap Pass
+- Primitive Pass
+
+Flow:
+1. Model Pass records indirect commands which can later be used by other passes.
+1. Shadow Pass draws all the geometry it needs and creates shadow maps for each light which needs shadows
+1. Model Pass draws all the geometry and samples shadow maps
+1. Optionally, Primitive Pass draws lines
+1. Tonemap Pass does it's tonemapping job (hdr -> normalized and very subtle tonemapping)
+
+`modules\Gltf`      - Gltf loader written from scratch. Can load both `.gltf` and `.glb` files. Almost doesn't copy anything, so is quite fast and efficient. I didn't test it properly, but it should cover the whole GLTF2 spec (no extensions, though).
+`modules\More_Math` - Math functions which are absent from Jai's standard module - frustums, raycasting, bounding boxes, etc.
+`modules\Input`     - "OS layer" for input. Currently uses SDL, but completetly hides it. In the future will be rewritten to use native APIs.
+`modules\Option`    - Rust-like `Option(T)` type. Used only when absolutely needed. Jai zero-initializes everything, so sometimes you either have this, or a sentinel value like `-1`, which is easy to forget about.
+
+`modules\Jai_Vulkan`    - hand written bindings for Vulkan.
+`modules\Glsl_Compiler` - a metaprogram which uses Shaderc to precompile `.glsl` shaders. Nothing fancy.
+`modules\Dear_ImGui`    - hand written bindings for imgui. Used only in the demo
+
 `modules/vendored` - External dependencies
