@@ -8,6 +8,7 @@ Entity :: struct {
     tint: Vector4 = { 1, 1, 1, 1 };
 
     model_asset_handle: Model_Asset_Handle;
+    animation_player:   Animation_Player;
 }
 
 make_world_transform :: (entity: Entity) -> Matrix4 {

@@ -5,15 +5,20 @@ Model_Accessor :: struct {
 }
 
 Node :: struct {
-    local_translation: Vector3;
-    local_rotation:    Quaternion = { 0, 0, 0, 1 };
-    local_scale:       Vector3 = { 1, 1, 1 };
+    local_transform: Node_Transform;
 
     first_mesh_index: u32;
     mesh_count:       u32;
 
     parent_index:     Option(u32);
     children_ids:     [..]u32;
+}
+
+// @Todo: store the matrix
+Node_Transform :: struct {
+    translation: Vector3;
+    rotation:    Quaternion = { 0, 0, 0, 1 };
+    scale:       Vector3    = { 1, 1, 1 };
 }
 
 Mesh_Accessor :: struct {

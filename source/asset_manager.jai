@@ -66,6 +66,10 @@ asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Asset_Ha
     return bucket_array_find(*asset_manager.model_assets, cast(Bucket_Locator, handle));
 }
 
+asset_manager_get_model_pointer :: (asset_manager: *Asset_Manager, handle: Model_Asset_Handle) -> *Model_Asset {
+    return bucket_array_find_pointer(*asset_manager.model_assets, cast(Bucket_Locator, handle));
+}
+
 // @Todo: In the future, this will just upload our own binaries.
 // The convertation would be run via a script, like shader compilation
 asset_manager_upload_model :: (
@@ -262,9 +266,9 @@ asset_manager_upload_model :: (
 
     for node_dto: model_dto.nodes {
         renderer_node: Renderer.Node;
-        renderer_node.local_translation = node_dto.local_translation;
-        renderer_node.local_rotation = node_dto.local_rotation;
-        renderer_node.local_scale = node_dto.local_scale;
+        renderer_node.local_transform.translation = node_dto.local_translation;
+        renderer_node.local_transform.rotation = node_dto.local_rotation;
+        renderer_node.local_transform.scale = node_dto.local_scale;
         renderer_node.parent_index = node_dto.parent_index;
 
         if node_dto.first_mesh_index.kind == .SOME && node_dto.mesh_count > 0 {
@@ -389,9 +393,9 @@ make_model_aabb :: (model: Renderer.Model_Accessor) -> AABB {
         model_max: *Vector3,
     ) {
         transform := parent_transform * make_world_transform(
-            node.local_translation,
-            node.local_rotation,
-            node.local_scale,
+            node.local_transform.translation,
+            node.local_transform.rotation,
+            node.local_transform.scale,
         );
 
         if node.mesh_count > 0 {

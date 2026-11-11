@@ -108,6 +108,19 @@ main :: () {
         position = { 0, 10, 0 },
     );
 
+    // start AnimatedCube
+    {
+        animated_cube := *game.entities[3];
+
+        play_animation(
+            animated_cube,
+            "animation_AnimatedCube",
+            *game.asset_manager,
+            true,
+        );
+    }
+
+
     while !game.should_quit {
         dt := calculate_delta_time();
 
@@ -164,7 +177,7 @@ Renderer      :: #import "Renderer"()(
 #import "More_Math";
 
 #load "asset_manager.jai";
-#load "animation_manager.jai";
+#load "animation.jai";
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity.jai";
@@ -208,6 +221,10 @@ update :: (dt: float) {
     if #complete game.camera_controller_kind == {
         case .FLY;
             fly_camera(*game.camera, dt, get_fly_camera_input());
+    }
+
+    for *entity: game.entities {
+        update_animation(entity, dt, game.asset_manager);
     }
 }
 
