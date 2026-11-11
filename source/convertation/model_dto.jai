@@ -112,7 +112,30 @@ Image_Dto :: struct {
     channel_count: u8;
 };
 
-Animation_Dto :: struct {}
+Animation_Dto :: struct {
+    name: string;
+    duration: float;
+    tracks: [..]Animation_Track_Dto;
+}
+
+Animation_Track_Dto :: struct {
+    node_index:      u32;
+    path:            Animation_Path_Dto;
+    interpolation:   Animation_Interpolation_Dto;
+    keyframe_times:  [..]float;
+    keyframe_values: [..]float;
+}
+
+Animation_Interpolation_Dto :: enum {
+    LINEAR;
+    STEP;
+}
+
+Animation_Path_Dto :: enum {
+    TRANSLATION;
+    ROTATION;
+    SCALE;
+}
 
 Alpha_Mode_Dto :: enum {
     OPAQUE;
@@ -156,6 +179,16 @@ destroy :: (model_dto: *Model_Dto) {
     log("Model_Dto: Destroying %", model_dto.name);
 
     free(model_dto.name);
+
+    for animation_dto: model_dto.animations {
+        free(animation_dto.name);
+        for track: animation_dto.tracks {
+            array_free(track.keyframe_times);
+            array_free(track.keyframe_values);
+        }
+        array_free(animation_dto.tracks);
+    }
+    array_free(model_dto.animations);
 
     for node: model_dto.nodes {
         free(node.name);

@@ -1,1 +1,2 @@
-Animation :: struct {}
+Animation :: struct {
+}

@@ -35,6 +35,7 @@ deinit_asset_manager :: (asset_manager: *Asset_Manager) {
 
     for *model_asset: asset_manager.model_assets {
         Renderer.destroy_model_accessor(*model_asset.model_accessor);
+        array_free(model_asset.animations);
     }
     bucket_array_reset(*asset_manager.model_assets);
 
@@ -88,20 +89,16 @@ asset_manager_upload_model :: (
     model_asset: Model_Asset;
 
     maybe_model_dto: Option(Model_Dto);
-
     extension := path_extension(normalized_path);
     if array_find(GLTF_FILE_EXTENSIONS, extension) {
-        result := convert_gltf(normalized_path, DEBUG);
+        result := load_and_convert_gltf(normalized_path, DEBUG,, temp);
 
         set(*maybe_model_dto, result);
     }
-
     if maybe_model_dto.kind != .SOME {
         assert(false, "Failed to load model from %", path);
     }
-
     model_dto := maybe_model_dto.some;
-    defer destroy(*model_dto);
 
     for mesh_dto: model_dto.meshes {
         assert(
@@ -289,6 +286,10 @@ asset_manager_upload_model :: (
     }
 
     model_asset.model_accessor.aabb = make_model_aabb(model_asset.model_accessor);
+
+    array_resize(*model_asset.animations, model_dto.animations.count);
+    for *animation: model_asset.animations {
+    }
 
     handle := bucket_array_add(*asset_manager.model_assets, model_asset);
 

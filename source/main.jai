@@ -86,7 +86,6 @@ main :: () {
     game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
     game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
 
-    /*
     add_entity(
         name       = "Damaged Helmet",
         model_path = "../../Models/damaged_helmet/scene.glb",
@@ -103,7 +102,6 @@ main :: () {
         name       = "Sponza",
         model_path = "../../Models/Sponza/Sponza.gltf",
     );
-    */
     add_entity(
         name       = "AnimatedCube",
         model_path = "../../Models/AnimatedCube/glTF/AnimatedCube.gltf",
