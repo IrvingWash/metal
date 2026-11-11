@@ -8,7 +8,7 @@ Game :: struct {
     renderer:      Renderer.Renderer;
 
     camera: Camera = {
-        position = {}
+        position = { -5, 15, -1 }
     };
 
     camera_controller_kind: Camera_Controller_Kind = .FLY;
@@ -244,6 +244,7 @@ render :: () {
             model_asset.model_accessor,
             make_world_transform(entity),
             entity.tint,
+            entity.animation_player.pose,
         );
     }
 

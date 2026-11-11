@@ -543,12 +543,14 @@ draw_model :: (
     model_accessor:  Model_Accessor,
     world_transform: Matrix4,
     tint:            Vector4 = { 1, 1, 1, 1 },
+    pose:            []Node_Transform = .[],
 ) {
     add_model_to_model_pass(
         *renderer.model_pass,
         model_accessor,
         world_transform,
         tint,
+        pose,
     );
 }
 
