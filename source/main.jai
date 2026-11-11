@@ -7,9 +7,7 @@ Game :: struct {
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
 
-    camera: Camera = {
-        position = { -5, 15, -1 }
-    };
+    camera: Camera;
 
     camera_controller_kind: Camera_Controller_Kind = .FLY;
 
@@ -105,10 +103,9 @@ main :: () {
     add_entity(
         name       = "AnimatedCube",
         model_path = "../../Models/AnimatedCube/glTF/AnimatedCube.gltf",
-        position = { 0, 10, 0 },
+        position = { 0, 0, 0 },
     );
-
-    // start AnimatedCube
+    // start entities
     {
         animated_cube := *game.entities[3];
 
@@ -119,7 +116,6 @@ main :: () {
             true,
         );
     }
-
 
     while !game.should_quit {
         dt := calculate_delta_time();
