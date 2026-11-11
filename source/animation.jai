@@ -78,9 +78,17 @@ update_animation :: (entity: *Entity, dt: float, asset_manager: Asset_Manager) {
     animation := asset_manager_get_model(asset_manager, entity.model_asset_handle)
         .animations[entity.animation_player.animation_index.some];
 
-    // @Todo: looping
     player := *entity.animation_player;
+
     player.playback_time += dt;
+
+    if animation.duration > 0 {
+        if player.should_loop {
+            player.playback_time = fmod_cycling(player.playback_time, animation.duration);
+        } else {
+            player.playback_time = min(player.playback_time, animation.duration);
+        }
+    }
 
     for track: animation.tracks {
         sample_track_into_pose(track, player.playback_time, player.pose);
