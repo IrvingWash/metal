@@ -5,9 +5,9 @@ Model_Accessor :: struct {
 }
 
 Node :: struct {
-    translation: Vector3;
-    rotation:    Quaternion = { 0, 0, 0, 1 };
-    scale:       Vector3 = { 1, 1, 1 };
+    local_translation: Vector3;
+    local_rotation:    Quaternion = { 0, 0, 0, 1 };
+    local_scale:       Vector3 = { 1, 1, 1 };
 
     first_mesh_index: u32;
     mesh_count:       u32;

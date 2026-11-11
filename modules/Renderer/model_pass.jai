@@ -481,9 +481,9 @@ add_model_node_to_draw_bucket :: (
     camera_world_position: Vector3,
 ) {
     world_transform := parent_transform * make_world_transform(
-        node.translation,
-        node.rotation,
-        node.scale,
+        node.local_translation,
+        node.local_rotation,
+        node.local_scale,
     );
 
     if node.mesh_count > 0 {

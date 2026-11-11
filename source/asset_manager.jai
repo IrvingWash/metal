@@ -259,9 +259,9 @@ asset_manager_upload_model :: (
 
     for node_dto: model_dto.nodes {
         renderer_node: Renderer.Node;
-        renderer_node.translation = node_dto.translation;
-        renderer_node.rotation = node_dto.rotation;
-        renderer_node.scale = node_dto.scale;
+        renderer_node.local_translation = node_dto.local_translation;
+        renderer_node.local_rotation = node_dto.local_rotation;
+        renderer_node.local_scale = node_dto.local_scale;
         renderer_node.parent_index = node_dto.parent_index;
 
         if node_dto.first_mesh_index.kind == .SOME && node_dto.mesh_count > 0 {
@@ -307,9 +307,9 @@ make_model_aabb :: (model: Renderer.Model_Accessor) -> AABB {
         model_max: *Vector3,
     ) {
         transform := parent_transform * make_world_transform(
-            node.translation,
-            node.rotation,
-            node.scale,
+            node.local_translation,
+            node.local_rotation,
+            node.local_scale,
         );
 
         if node.mesh_count > 0 {

@@ -142,13 +142,13 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
 
         if gltf_matrix != Matrix4_Identity {
             gltf_matrix = transpose(gltf_matrix);
-            node_dto.translation = calculate_translation_from_transform(gltf_matrix);
-            node_dto.rotation    = calculate_rotation_from_transform(gltf_matrix);
-            node_dto.scale       = calculate_scale_from_transform(gltf_matrix);
+            node_dto.local_translation = calculate_translation_from_transform(gltf_matrix);
+            node_dto.local_rotation    = calculate_rotation_from_transform(gltf_matrix);
+            node_dto.local_scale       = calculate_scale_from_transform(gltf_matrix);
         } else {
-            node_dto.translation.component = gltf_node.translation;
-            node_dto.scale.component       = gltf_node.scale;
-            node_dto.rotation.component    = gltf_node.rotation;
+            node_dto.local_translation.component = gltf_node.translation;
+            node_dto.local_scale.component       = gltf_node.scale;
+            node_dto.local_rotation.component    = gltf_node.rotation;
         }
     }
 
