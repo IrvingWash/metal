@@ -7,7 +7,7 @@ Entity :: struct {
 
     tint: Vector4 = { 1, 1, 1, 1 };
 
-    model_handle: Model_Handle;
+    model_asset_handle: Model_Asset_Handle;
 }
 
 make_world_transform :: (entity: Entity) -> Matrix4 {

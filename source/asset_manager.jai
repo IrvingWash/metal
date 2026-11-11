@@ -2,11 +2,17 @@ Asset_Manager :: struct {
     root_path:    string;
     shaders_path: string;
 
-    model_accessor_handles_by_path: Table(string, Model_Handle);
-    model_accessors:                Bucket_Array(Renderer.Model_Accessor, 64);
+    model_accessor_handles_by_path: Table(string, Model_Asset_Handle);
+
+    model_assets: Bucket_Array(Model_Asset, 64);
 }
 
-Model_Handle :: #type,distinct Bucket_Locator;
+Model_Asset_Handle :: #type,distinct Bucket_Locator;
+
+Model_Asset :: struct {
+    model_accessor: Renderer.Model_Accessor;
+    animations:     [..]Animation;
+}
 
 init_asset_manager :: () -> Asset_Manager {
     asset_manager: Asset_Manager;
@@ -27,10 +33,10 @@ deinit_asset_manager :: (asset_manager: *Asset_Manager) {
     }
     deinit(*asset_manager.model_accessor_handles_by_path);
 
-    for *model_accessor: asset_manager.model_accessors {
-        Renderer.destroy_model_accessor(model_accessor);
+    for *model_asset: asset_manager.model_assets {
+        Renderer.destroy_model_accessor(*model_asset.model_accessor);
     }
-    bucket_array_reset(*asset_manager.model_accessors);
+    bucket_array_reset(*asset_manager.model_assets);
 
     free(asset_manager.root_path);
     free(asset_manager.shaders_path);
@@ -51,12 +57,12 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
     return "", content;
 }
 
-asset_manager_get_model_pointer :: (asset_manager: Asset_Manager, handle: Model_Handle) -> *Renderer.Model_Accessor {
+asset_manager_get_model_pointer :: (asset_manager: Asset_Manager, handle: Model_Asset_Handle) -> *Renderer.Model_Accessor {
     return bucket_array_find_pointer(*asset_manager.model_accessors, cast(Bucket_Locator, handle));
 }
 
-asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Handle) -> Renderer.Model_Accessor {
-    return bucket_array_find(*asset_manager.model_accessors, cast(Bucket_Locator, handle));
+asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Asset_Handle) -> Model_Asset {
+    return bucket_array_find(*asset_manager.model_assets, cast(Bucket_Locator, handle));
 }
 
 // @Todo: In the future, this will just upload our own binaries.
@@ -65,7 +71,7 @@ asset_manager_upload_model :: (
     asset_manager: *Asset_Manager,
     path:          string,
     renderer:      *Renderer.Renderer,
-) -> Model_Handle {
+) -> Model_Asset_Handle {
     normalized_path := get_absolute_path(path,, temp);
 
     { // Check cache
@@ -79,7 +85,7 @@ asset_manager_upload_model :: (
 
     log("Asset Manager: Uploading model at %", path);
 
-    model_accessor: Renderer.Model_Accessor;
+    model_asset: Model_Asset;
 
     maybe_model_dto: Option(Model_Dto);
 
@@ -213,7 +219,7 @@ asset_manager_upload_model :: (
 
     for mesh_dto: model_dto.meshes {
         mesh_accessor: Renderer.Mesh_Accessor;
-        defer array_add(*model_accessor.meshes, mesh_accessor);
+        defer array_add(*model_asset.model_accessor.meshes, mesh_accessor);
 
         mesh_accessor.aabb = make_aabb(mesh_dto.min, mesh_dto.max);
 
@@ -277,18 +283,18 @@ asset_manager_upload_model :: (
         );
 
         array_add(
-            *model_accessor.nodes,
+            *model_asset.model_accessor.nodes,
             renderer_node,
         );
     }
 
-    model_accessor.aabb = make_model_aabb(model_accessor);
+    model_asset.model_accessor.aabb = make_model_aabb(model_asset.model_accessor);
 
-    handle := bucket_array_add(*asset_manager.model_accessors, model_accessor);
+    handle := bucket_array_add(*asset_manager.model_assets, model_asset);
 
-    table_add(*asset_manager.model_accessor_handles_by_path, normalized_path, cast(Model_Handle, handle));
+    table_add(*asset_manager.model_accessor_handles_by_path, normalized_path, cast(Model_Asset_Handle, handle));
 
-    return cast(Model_Handle, handle);
+    return cast(Model_Asset_Handle, handle);
 }
 
 

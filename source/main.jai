@@ -86,6 +86,7 @@ main :: () {
     game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
     game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
 
+    /*
     add_entity(
         name       = "Damaged Helmet",
         model_path = "../../Models/damaged_helmet/scene.glb",
@@ -102,6 +103,7 @@ main :: () {
         name       = "Sponza",
         model_path = "../../Models/Sponza/Sponza.gltf",
     );
+    */
     add_entity(
         name       = "AnimatedCube",
         model_path = "../../Models/AnimatedCube/glTF/AnimatedCube.gltf",
@@ -164,6 +166,7 @@ Renderer      :: #import "Renderer"()(
 #import "More_Math";
 
 #load "asset_manager.jai";
+#load "animation.jai";
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity.jai";
@@ -219,9 +222,11 @@ render :: () {
     }
 
     for entity: game.entities {
+        model_asset := asset_manager_get_model(game.asset_manager, entity.model_asset_handle);
+
         Renderer.draw_model(
             *game.renderer,
-            asset_manager_get_model(game.asset_manager, entity.model_handle),
+            model_asset.model_accessor,
             make_world_transform(entity),
             entity.tint,
         );
@@ -299,14 +304,14 @@ add_entity :: (
     tint:     Vector4 = { 1, 1, 1, 1 },
     model_path: string,
 ) {
-    model_handle := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
+    model_asset_handle := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
 
     entity: Entity = {
         name = name,
         position = position,
         rotation = rotation,
         scale = scale,
-        model_handle = model_handle,
+        model_asset_handle = model_asset_handle,
         tint = tint,
     };
 
