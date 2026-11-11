@@ -58,10 +58,6 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
     return "", content;
 }
 
-asset_manager_get_model_pointer :: (asset_manager: Asset_Manager, handle: Model_Asset_Handle) -> *Renderer.Model_Accessor {
-    return bucket_array_find_pointer(*asset_manager.model_accessors, cast(Bucket_Locator, handle));
-}
-
 asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Asset_Handle) -> Model_Asset {
     return bucket_array_find(*asset_manager.model_assets, cast(Bucket_Locator, handle));
 }
@@ -287,8 +283,83 @@ asset_manager_upload_model :: (
 
     model_asset.model_accessor.aabb = make_model_aabb(model_asset.model_accessor);
 
-    array_resize(*model_asset.animations, model_dto.animations.count);
-    for *animation: model_asset.animations {
+    array_resize(
+        *model_asset.animations,
+        model_dto.animations.count,
+        initialize = false,
+    );
+    for animation_dto: model_dto.animations {
+        animation: Animation;
+
+        animation.name = copy_string(animation_dto.name);
+        animation.duration = animation_dto.duration;
+
+        array_resize(
+            *animation.tracks,
+            animation_dto.tracks.count,
+            initialize = false,
+        );
+        for track_dto: animation_dto.tracks {
+            track: Animation_Track;
+            defer animation.tracks[it_index] = track;
+
+            track.node_index = track_dto.node_index;
+
+            if #complete track_dto.interpolation == {
+                case .LINEAR;
+                    track.interpolation = .LINEAR;
+                case .STEP;
+                    track.interpolation = .STEP;
+            }
+
+            array_resize(*track.keyframe_times, track_dto.keyframe_times.count);
+            memcpy(
+                track.keyframe_times.data,
+                track_dto.keyframe_times.data,
+                track.keyframe_times.count * size_of(float),
+            );
+
+            if #complete track_dto.path == {
+                case .TRANSLATION;
+                    track.keyframe_values.path = .TRANSLATION;
+                    array_resize(
+                        *track.keyframe_values.translation,
+                        track_dto.keyframe_values.count / 3,
+                        initialize = false,
+                    );
+                    memcpy(
+                        track.keyframe_values.translation.data,
+                        track_dto.keyframe_values.data,
+                        track_dto.keyframe_values.count * size_of(float),
+                    );
+                case .ROTATION;
+                    track.keyframe_values.path = .ROTATION;
+                    array_resize(
+                        *track.keyframe_values.rotation,
+                        track_dto.keyframe_values.count / 4,
+                        initialize = false,
+                    );
+                    memcpy(
+                        track.keyframe_values.rotation.data,
+                        track_dto.keyframe_values.data,
+                        track_dto.keyframe_values.count * size_of(float),
+                    );
+                case .SCALE;
+                    track.keyframe_values.path = .SCALE;
+                    array_resize(
+                        *track.keyframe_values.scale,
+                        track_dto.keyframe_values.count / 3,
+                        initialize = false,
+                    );
+                    memcpy(
+                        track.keyframe_values.scale.data,
+                        track_dto.keyframe_values.data,
+                        track_dto.keyframe_values.count * size_of(float),
+                    );
+            }
+        }
+
+        model_asset.animations[it_index] = animation;
     }
 
     handle := bucket_array_add(*asset_manager.model_assets, model_asset);

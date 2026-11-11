@@ -8,11 +8,10 @@ Animation :: struct {
 Animation_Track :: struct {
     node_index:    u32;
 
-    path:          Animation_Path;
     interpolation: Animation_Interpolation;
 
     keyframe_times: [..]float;
-    keyframe_values: union kind: Animation_Path {
+    keyframe_values: union path: Animation_Path {
         .TRANSLATION,, translation: [..]Vector3;
         .SCALE,,       scale:       [..]Vector3;
         .ROTATION,,    rotation:    [..]Quaternion;
