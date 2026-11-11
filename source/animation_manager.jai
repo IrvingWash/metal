@@ -28,3 +28,21 @@ Animation_Interpolation :: enum {
     LINEAR;
     STEP;
 }
+
+destroy_animation :: (animation: *Animation) {
+    free(animation.name);
+
+    for track: animation.tracks {
+        if #complete track.keyframe_values.path == {
+            case .TRANSLATION;
+                array_free(track.keyframe_values.translation);
+            case .ROTATION;
+                array_free(track.keyframe_values.rotation);
+            case .SCALE;
+                array_free(track.keyframe_values.scale);
+        }
+
+        array_free(track.keyframe_times);
+    }
+    array_free(animation.tracks);
+}

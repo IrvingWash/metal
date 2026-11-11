@@ -2,7 +2,7 @@ Asset_Manager :: struct {
     root_path:    string;
     shaders_path: string;
 
-    model_accessor_handles_by_path: Table(string, Model_Asset_Handle);
+    model_asset_handles_by_path: Table(string, Model_Asset_Handle);
 
     model_assets: Bucket_Array(Model_Asset, 64);
 }
@@ -28,13 +28,17 @@ init_asset_manager :: () -> Asset_Manager {
 }
 
 deinit_asset_manager :: (asset_manager: *Asset_Manager) {
-    for value, key: asset_manager.model_accessor_handles_by_path {
+    for value, key: asset_manager.model_asset_handles_by_path {
         free(key);
     }
-    deinit(*asset_manager.model_accessor_handles_by_path);
+    deinit(*asset_manager.model_asset_handles_by_path);
 
     for *model_asset: asset_manager.model_assets {
         Renderer.destroy_model_accessor(*model_asset.model_accessor);
+
+        for *animation: model_asset.animations {
+            destroy_animation(animation);
+        }
         array_free(model_asset.animations);
     }
     bucket_array_reset(*asset_manager.model_assets);
@@ -72,7 +76,7 @@ asset_manager_upload_model :: (
     normalized_path := get_absolute_path(path,, temp);
 
     { // Check cache
-        found, handle := table_find(*asset_manager.model_accessor_handles_by_path, normalized_path);
+        found, handle := table_find(*asset_manager.model_asset_handles_by_path, normalized_path);
         if found {
             return handle;
         }
@@ -324,7 +328,7 @@ asset_manager_upload_model :: (
                     track.keyframe_values.path = .TRANSLATION;
                     array_resize(
                         *track.keyframe_values.translation,
-                        track_dto.keyframe_values.count / 3,
+                        track_dto.keyframe_values.count / Vector3.component.count,
                         initialize = false,
                     );
                     memcpy(
@@ -336,7 +340,7 @@ asset_manager_upload_model :: (
                     track.keyframe_values.path = .ROTATION;
                     array_resize(
                         *track.keyframe_values.rotation,
-                        track_dto.keyframe_values.count / 4,
+                        track_dto.keyframe_values.count / Quaternion.component.count,
                         initialize = false,
                     );
                     memcpy(
@@ -348,7 +352,7 @@ asset_manager_upload_model :: (
                     track.keyframe_values.path = .SCALE;
                     array_resize(
                         *track.keyframe_values.scale,
-                        track_dto.keyframe_values.count / 3,
+                        track_dto.keyframe_values.count / Vector3.component.count,
                         initialize = false,
                     );
                     memcpy(
@@ -364,7 +368,7 @@ asset_manager_upload_model :: (
 
     handle := bucket_array_add(*asset_manager.model_assets, model_asset);
 
-    table_add(*asset_manager.model_accessor_handles_by_path, normalized_path, cast(Model_Asset_Handle, handle));
+    table_add(*asset_manager.model_asset_handles_by_path, normalized_path, cast(Model_Asset_Handle, handle));
 
     return cast(Model_Asset_Handle, handle);
 }
