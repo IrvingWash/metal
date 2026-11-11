@@ -164,7 +164,7 @@ Renderer      :: #import "Renderer"()(
 #import "More_Math";
 
 #load "asset_manager.jai";
-#load "animation.jai";
+#load "animation_manager.jai";
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity.jai";
