@@ -20,6 +20,7 @@ Model_Dto :: struct {
     meshes:    [..]Mesh_Dto;
     materials: [..]Material_Dto;
     images:    [..]Image_Dto;
+    animations: [..]Animation_Dto;
 }
 
 Node_Dto :: struct {
@@ -31,7 +32,9 @@ Node_Dto :: struct {
     first_mesh_index: Option(u32);
     mesh_count:       u32;
 
-    local_transform: Matrix4 = Matrix4_Identity;
+    translation: Vector3;
+    rotation:    Quaternion = { 0, 0, 0, 1 };
+    scale:       Vector3 = { 1, 1, 1 };
 }
 
 Mesh_Dto :: struct {
@@ -108,6 +111,8 @@ Image_Dto :: struct {
     height:        u32;
     channel_count: u8;
 };
+
+Animation_Dto :: struct {}
 
 Alpha_Mode_Dto :: enum {
     OPAQUE;

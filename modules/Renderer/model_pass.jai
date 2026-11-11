@@ -480,7 +480,11 @@ add_model_node_to_draw_bucket :: (
     tint:                  Vector4,
     camera_world_position: Vector3,
 ) {
-    world_transform := parent_transform * node.local_transform;
+    world_transform := parent_transform * make_world_transform(
+        node.translation,
+        node.rotation,
+        node.scale,
+    );
 
     if node.mesh_count > 0 {
         inversed_ok, inversed_world_matrix := inverse(world_transform);

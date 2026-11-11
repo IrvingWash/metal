@@ -343,6 +343,14 @@ calculate_reference_up_vector :: (front: Vector3) -> Vector3 {
     return cross(right, normalized_front);
 }
 
+make_world_transform :: (translation: Vector3, rotation: Quaternion, scale: Vector3) -> Matrix4 {
+    _translation := make_translation_matrix4(translation);
+    _scale       := make_scale_matrix4(scale);
+    _rotation    := rotation_matrix(Matrix4, rotation);
+
+    return _translation * _rotation * _scale;
+}
+
 
 
 #scope_file

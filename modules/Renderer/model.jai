@@ -5,8 +5,9 @@ Model_Accessor :: struct {
 }
 
 Node :: struct {
-    // @Todo: maybe store model space transform too
-    local_transform: Matrix4 = Matrix4_Identity;
+    translation: Vector3;
+    rotation:    Quaternion = { 0, 0, 0, 1 };
+    scale:       Vector3 = { 1, 1, 1 };
 
     first_mesh_index: u32;
     mesh_count:       u32;

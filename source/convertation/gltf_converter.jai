@@ -110,7 +110,7 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
 
     name: string,
 ) -> Node_Dto {
-    assert(gltf_node._skin != Gltf.SENTINEL, "Got a skinned node. Unsupported");
+    assert(gltf_node._skin == Gltf.SENTINEL, "Got a skinned node. Unsupported");
 
     node_dto: Node_Dto;
 
@@ -139,23 +139,16 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
     { // Transform
         gltf_matrix: Matrix4;
         gltf_matrix.floats = gltf_node.column_major_matrix;
-        gltf_matrix = transpose(gltf_matrix);
 
         if gltf_matrix != Matrix4_Identity {
-            node_dto.local_transform = gltf_matrix;
+            gltf_matrix = transpose(gltf_matrix);
+            node_dto.translation = calculate_translation_from_transform(gltf_matrix);
+            node_dto.rotation    = calculate_rotation_from_transform(gltf_matrix);
+            node_dto.scale       = calculate_scale_from_transform(gltf_matrix);
         } else {
-            translation: Vector3;
-            scale:       Vector3;
-            rotation:    Quaternion;
-            translation.component = gltf_node.translation;
-            scale.component       = gltf_node.scale;
-            rotation.component    = gltf_node.rotation;
-
-            translation_matrix := make_translation_matrix4(translation);
-            scale_matrix       := make_scale_matrix4(scale);
-            _rotation_matrix   := rotation_matrix(Matrix4, rotation);
-
-            node_dto.local_transform = translation_matrix * _rotation_matrix * scale_matrix;
+            node_dto.translation.component = gltf_node.translation;
+            node_dto.scale.component       = gltf_node.scale;
+            node_dto.rotation.component    = gltf_node.rotation;
         }
     }
 
