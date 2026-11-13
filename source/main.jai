@@ -156,6 +156,10 @@ update :: (dt: float) {
 
     update_entity_manager(*game.entity_manager);
 
+    for *mech: game.entity_manager.storage._Mech {
+        simulate_mech(mech, dt, game.input_state);
+    }
+
     for entity: game.entity_manager.all {
         update_animation(entity, dt, game.asset_manager);
     }
@@ -169,7 +173,7 @@ update :: (dt: float) {
                 get_orbit_camera_input(),
                 game.entity_manager.storage._Mech[0].position,
                 { 0, 1, 0 },
-                5,
+                2,
             );
     }
 }

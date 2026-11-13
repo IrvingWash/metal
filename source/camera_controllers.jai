@@ -36,7 +36,7 @@ orbit_camera :: (
     distance:     float,
 ) {
     SENSITIVITY :: 0.01;
-    MAX_PITCH   :: #run deg_to_rad(80);
+    MAX_PITCH   :: #run deg_to_rad(30);
 
     yaw, pitch := calculate_yaw_and_pitch_from_direction(camera.front);
 
