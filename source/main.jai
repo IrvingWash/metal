@@ -13,45 +13,7 @@ Game :: struct {
 
     entity_manager: Entity_Manager;
 
-    directional_light: Renderer.Directional_Light_Params = {
-        color = { 0.1, 0.1, 0.1 },
-        direction = { 0.3, -1, 0 },
-    };
-    spot_lights := Renderer.Spot_Light_Params.[
-        {
-            position = { -4.5, 1.8, -3.5 },
-            direction = { 2.5, -1, 0 },
-            intensity = 45,
-            range = 35,
-            inner_cutoff_half_angle = #run deg_to_rad(10),
-            outer_cutoff_half_angle = #run deg_to_rad(30),
-        },
-        {
-            position = { -4.5, 1.8, 3.5 },
-            direction = { 2.5, -1, 0 },
-            intensity = 45,
-            range = 35,
-            inner_cutoff_half_angle = #run deg_to_rad(10),
-            outer_cutoff_half_angle = #run deg_to_rad(30),
-        },
-        {
-            position = { 0, 2.9, 0 },
-            direction = { 0, -1, -0.7 },
-            intensity = 30,
-            color = { 1, 0, 0 },
-            range = 18,
-            inner_cutoff_half_angle = #run deg_to_rad(30),
-            outer_cutoff_half_angle = #run deg_to_rad(55),
-        },
-        {
-            position = { 0, 5, 0 },
-            direction  = { 1, -0.2, 0 },
-            intensity = 15,
-            range = 35,
-            inner_cutoff_half_angle = #run deg_to_rad(14),
-            outer_cutoff_half_angle = #run deg_to_rad(18),
-        },
-    ];
+    directional_light: Renderer.Directional_Light_Params;
 
     #if DEVELOPER {
         is_in_editor_mode: bool = false;
@@ -73,10 +35,71 @@ main :: () {
     defer deinit();
 
     { // Loading the level
+        game.directional_light = {
+            color = { 0.1, 0.1, 0.1 },
+            direction = { 0.3, -1, 0 },
+        };
         game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
         game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
 
         spawn_entity(*game.entity_manager, Damaged_Helmet.{});
+
+        spawn_entity(
+            *game.entity_manager,
+            Sourceless_Spot_Light.{
+                position = { -4.5, 1.8, -3.5 },
+                params = {
+                    direction = { 2.5, -1, 0 },
+                    intensity = 45,
+                    range = 35,
+                    inner_cutoff_half_angle = #run deg_to_rad(10),
+                    outer_cutoff_half_angle = #run deg_to_rad(30),
+                },
+            },
+        );
+
+        spawn_entity(
+            *game.entity_manager,
+            Sourceless_Spot_Light.{
+                position = { -4.5, 1.8, 3.5 },
+                params = {
+                    direction = { 2.5, -1, 0 },
+                    intensity = 45,
+                    range = 35,
+                    inner_cutoff_half_angle = #run deg_to_rad(10),
+                    outer_cutoff_half_angle = #run deg_to_rad(30),
+                }
+            },
+        );
+
+        spawn_entity(
+            *game.entity_manager,
+            Sourceless_Spot_Light.{
+                position = { 0, 2.9, 0 },
+                params = {
+                    direction = { 0, -1, -0.7 },
+                    intensity = 30,
+                    color = { 1, 0, 0 },
+                    range = 18,
+                    inner_cutoff_half_angle = #run deg_to_rad(30),
+                    outer_cutoff_half_angle = #run deg_to_rad(55),
+                },
+            },
+        );
+
+        spawn_entity(
+            *game.entity_manager,
+            Sourceless_Spot_Light.{
+                position = { 0, 5, 0 },
+                params = {
+                    direction  = { 1, -0.2, 0 },
+                    intensity = 15,
+                    range = 35,
+                    inner_cutoff_half_angle = #run deg_to_rad(14),
+                    outer_cutoff_half_angle = #run deg_to_rad(18),
+                },
+            },
+        );
     }
 
     while !game.should_quit {
@@ -139,7 +162,8 @@ Renderer      :: #import "Renderer"()(
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity_manager.jai";
-#load "entities/helmet.jai";
+#load "entities/damaged_helmet.jai";
+#load "entities/sourceless_spot_light.jai";
 
 #if DEVELOPER {
     #load "editor.jai";
@@ -198,6 +222,10 @@ render :: () {
     }
 
     for entity: game.entity_manager.all {
+        if entity.flags & .INVISIBLE {
+            continue;
+        }
+
         model_asset := asset_manager_get_model(game.asset_manager, entity.model_asset_handle);
 
         Renderer.draw_model(
@@ -209,10 +237,12 @@ render :: () {
         );
     }
 
-    for spot_light: game.spot_lights {
+    for ssl: game.entity_manager.storage._Sourceless_Spot_Light {
+        ssl.params.position = ssl.position;
+
         Renderer.draw_spot_light(
             *game.renderer,
-            spot_light,
+            ssl.params,
         );
     }
 

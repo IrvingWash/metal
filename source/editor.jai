@@ -114,10 +114,6 @@ Editor :: struct {
     gizmo_mode:               Gizmo_Mode;
     gizmo_operation:          Gizmo_Operation;
     should_draw_model_bounds: bool;
-
-    is_spot_lights_header_open:  bool;
-    selected_spot_light_id:      s32;
-    should_draw_spot_light_cone: bool;
 }
 
 Gizmo_Mode :: enum {
@@ -140,7 +136,6 @@ draw_editor_window :: () {
     draw_camera_section();
     draw_entity_section();
     draw_directional_light_section();
-    draw_spot_light_section();
     draw_renderer_section();
 
     IM.end();
@@ -166,96 +161,6 @@ draw_directional_light_section :: () {
         "Direction##DirectionalLight",
         *editor.game.directional_light.direction.component,
         v_speed = 0.1,
-    );
-}
-
-draw_spot_light_section :: () {
-
-    IM.set_next_item_open(editor.is_spot_lights_header_open);
-    editor.is_spot_lights_header_open = IM.collapsing_header("Spot light");
-    if !editor.is_spot_lights_header_open {
-        return;
-    }
-
-    IM.combo(
-        "##SpotLight",
-        current_item = *editor.selected_spot_light_id,
-        getter = (user_data: *void, idx: s32) -> *u8 #c_call {
-            push_context {
-                return temp_c_string(tprint("%", idx));
-            }
-        },
-        user_data = null,
-        items_count = xx editor.game.spot_lights.count,
-    );
-
-    selected_spot_light := *editor.game.spot_lights[editor.selected_spot_light_id];
-
-
-    IM.checkbox(
-        "Draw cone",
-        *editor.should_draw_spot_light_cone,
-    );
-    if editor.should_draw_spot_light_cone {
-        draw_cone(
-            selected_spot_light.position,
-            selected_spot_light.direction,
-            selected_spot_light.range,
-            selected_spot_light.outer_cutoff_half_angle,
-        );
-    }
-
-    IM.drag_float3(
-        "Position##SpotLight",
-        *selected_spot_light.position.component,
-        v_speed = 0.1,
-        v_min = 0,
-        v_max = 0,
-    );
-
-    IM.drag_float3(
-        "Direction##SpotLight",
-        *selected_spot_light.direction.component,
-        v_speed = 0.1,
-    );
-
-    IM.drag_float(
-        "Intensity##SpotLight",
-        *selected_spot_light.intensity,
-        v_speed = 0.1,
-    );
-
-    IM.color_picker3(
-        "Color##SpotLight",
-        *selected_spot_light.color.component,
-        flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
-    );
-
-    IM.drag_float(
-        "Range##SpotLight",
-        *selected_spot_light.range,
-        v_speed = 0.1,
-    );
-
-    inner_cutoff := rad_to_deg(selected_spot_light.inner_cutoff_half_angle);
-    if IM.drag_float(
-        "Inner cutoff",
-        *inner_cutoff,
-    ) {
-        selected_spot_light.inner_cutoff_half_angle = deg_to_rad(inner_cutoff);
-    }
-
-    outer_cutoff := rad_to_deg(selected_spot_light.outer_cutoff_half_angle);
-    if IM.drag_float(
-        "Outer cutoff",
-        *outer_cutoff,
-    ) {
-        selected_spot_light.outer_cutoff_half_angle = deg_to_rad(outer_cutoff);
-    }
-
-    IM.checkbox(
-        "Shadowed##SpotLight",
-        *selected_spot_light.shadowed,
     );
 }
 
@@ -293,28 +198,6 @@ draw_gizmos :: () {
                     selected_entity.scale    = calculate_scale_from_transform(matrix);
                 case .ROTATE;
                     selected_entity.rotation = calculate_rotation_from_transform(matrix);
-            }
-        }
-    }
-
-     // Spot light
-    if editor.is_spot_lights_header_open {
-        selected_spot_light := *editor.game.spot_lights[editor.selected_spot_light_id];
-
-        column_major_matrix := transpose(make_translation_matrix4(selected_spot_light.position));
-
-        if IM.Zmo.manipulate(
-            view = transpose(editor.game.renderer.transforms.view).floats.data,
-            projection = transpose(editor.game.renderer.transforms.projection).floats.data,
-            operation = gizmo_operation_to_imguizmo(editor.gizmo_operation),
-            mode = gizmo_mode_to_imguizmo(editor.gizmo_mode),
-            matrix = column_major_matrix.floats.data,
-        ) {
-            matrix := transpose(column_major_matrix);
-
-            if editor.gizmo_operation == {
-                case .TRANSLATE;
-                    selected_spot_light.position = calculate_translation_from_transform(matrix);
             }
         }
     }
@@ -360,6 +243,12 @@ draw_renderer_section :: () {
 }
 
 draw_entity_section :: () {
+    for entity: editor.game.entity_manager.all {
+        if entity.flags & .INVISIBLE {
+            draw_sphere(entity.position, 0.5);
+        }
+    }
+
     IM.set_next_item_open(editor.is_entity_header_open);
     editor.is_entity_header_open = IM.collapsing_header("Entities");
     if !editor.is_entity_header_open {

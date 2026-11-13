@@ -6,6 +6,7 @@
 #import "Metaprogram_Plugins";
 #import "File";
 #import "Process";
+#import "Sort";
 Glsl_Compiler :: #import "Glsl_Compiler";
 
 #load "shaders_to_compile.jai";
@@ -184,11 +185,13 @@ handle_compiler_messages :: (
         try_to_fill_placeholders(message, config, w);
 
         if message.kind == {
-            case. COMPLETE;
+            case .COMPLETE;
                 break;
         }
     }
 }
+
+have_added_entity_type_names := false;
 
 try_to_fill_placeholders :: (
     message: *Message,
@@ -196,6 +199,22 @@ try_to_fill_placeholders :: (
     w:       Workspace,
 ) {
     if message.kind == {
+        case .PHASE;
+            phase_message := cast(*Message_Phase, message);
+            if phase_message.phase == .TYPECHECKED_ALL_WE_CAN {
+                if !have_added_entity_type_names {
+                    print("Hey!\n");
+                    add_build_string(
+                        tprint(
+                            "ENTITY_TYPE_NAMES: []string = .%;",
+                            make_entity_type_names(w),
+                        ),
+                        w,
+                    );
+
+                    have_added_entity_type_names = true;
+                }
+            }
         // Filling the placeholder without specifying the file leads to duplicate names
         case .FILE;
             file := cast(*Message_File, message);
@@ -266,6 +285,27 @@ create_config :: (arguments: []string) -> error: string, Config {
     }
 
     return "", config;
+}
+
+make_entity_type_names :: (w: Workspace) -> [..]string #compile_time {
+    type_table := get_type_table(w);
+
+    entity_type_names: [..]string;
+    for type_table {
+        if it.type != .STRUCT {
+            continue;
+        }
+
+        tis := cast(*Type_Info_Struct, it);
+
+        if is_subclass_of(it, "Entity") {
+            array_add(*entity_type_names, tis.name);
+        }
+    }
+
+    quick_sort(entity_type_names, compare_strings);
+
+    return entity_type_names;
 }
 
 help :: () {

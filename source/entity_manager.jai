@@ -20,6 +20,8 @@ Entity :: struct {
 
     tint: Vector4 = { 1, 1, 1, 1 };
 
+    flags: Entity_Flags;
+
     model_path:         string;
     model_asset_handle: Model_Asset_Handle;
 
@@ -29,6 +31,11 @@ Entity :: struct {
 Entity_Token :: struct {
     id: u64;
     locator: Bucket_Locator;
+}
+
+Entity_Flags :: enum_flags {
+    NONE;
+    INVISIBLE;
 }
 
 Entity_Storage :: struct {
@@ -72,13 +79,11 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T)
     locator: Bucket_Locator;
 
     #insert -> string {
-        entity_type_names := make_entity_type_names();
-
         builder: String_Builder;
 
         print_to_builder(*builder, "    #if T == {\n");
 
-        for entity_type_names {
+        for ENTITY_TYPE_NAMES {
             print_to_builder(
                 *builder,
                 "        case %1; locator, pointer = bucket_array_add(*manager.storage._%1, entity);\n",
@@ -86,7 +91,7 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T)
             );
         }
 
-        print_to_builder(*builder, "        case; #assert false \"Unknown entity type %\";", T);
+        print_to_builder(*builder, "        case; #assert false \"Unknown entity type %\";\n", T);
 
         print_to_builder(*builder, "    }\n");
 
@@ -108,6 +113,8 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T)
     manager.next_id += 1;
 }
 
+#placeholder ENTITY_TYPE_NAMES;
+
 
 
 #scope_file
@@ -125,12 +132,10 @@ INSERTION_STRING :: #string DONE
     %
 DONE
 
-    entity_type_names := make_entity_type_names();
-
     reserve_count_code_builder: String_Builder;
     add_to_all_code_builder:    String_Builder;
 
-    for entity_type_name: entity_type_names {
+    for entity_type_name: ENTITY_TYPE_NAMES {
         print_to_builder(
             *reserve_count_code_builder,
             "        + manager.storage._%.count\n",
@@ -152,11 +157,9 @@ DONE
 }
 
 generate_entity_storage_body :: () -> string #compile_time {
-    entity_type_names := make_entity_type_names();
-
     builder: String_Builder;
 
-    for entity_type_name: entity_type_names {
+    for entity_type_name: ENTITY_TYPE_NAMES {
         ITEM_PER_BUCKET_COUNT :: 20;
 
         print_to_builder(
@@ -170,30 +173,6 @@ generate_entity_storage_body :: () -> string #compile_time {
     return builder_to_string(*builder);
 }
 
-// @Todo: Move everything into the build program
-make_entity_type_names :: () -> []string #compile_time {
-    #import "Compiler";
-    #import "Sort";
-
-    w := get_current_workspace();
-
-    type_table := get_type_table(w);
-
-    entity_type_names: [..]string;
-    for type_table {
-        if it.type != .STRUCT {
-            continue;
-        }
-
-        tis := cast(*Type_Info_Struct, it);
-
-        if is_subclass_of(it, "Entity") {
-            array_add(*entity_type_names, tis.name);
-        }
-    }
-
-    return quick_sort(entity_type_names, compare_strings);
-}
-
 #import "Bucket_Array";
+#import "Compiler";
 Renderer :: #import "Renderer";
