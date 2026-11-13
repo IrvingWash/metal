@@ -192,7 +192,6 @@ void main() {
     }
 
     vec4 base_color_texel         = texture(textures[material.base_color_texture_index], vertex_input.uv);
-    vec4 normal_texel             = texture(textures[material.normal_texture_index], vertex_input.uv);
     vec4 metallic_roughness_texel = texture(textures[material.metallic_roughness_texture_index], vertex_input.uv);
     vec4 occlusion_texel          = texture(textures[material.occlusion_texture_index], vertex_input.uv);
     vec4 emissive_texel           = texture(textures[material.emissive_texture_index], vertex_input.uv);
@@ -220,6 +219,8 @@ void main() {
     if (material.normal_texture_index == FALLBACK_NORMAL_TEXTURE_ID) {
         N = normalize(vertex_input.world_space_normal);
     } else {
+        vec4 normal_texel = texture(textures[material.normal_texture_index], vertex_input.uv);
+
         N = get_normal_from_texel(
             vertex_input.world_space_normal,
             vertex_input.world_space_tangent,
