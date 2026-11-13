@@ -203,7 +203,6 @@ try_to_fill_placeholders :: (
             phase_message := cast(*Message_Phase, message);
             if phase_message.phase == .TYPECHECKED_ALL_WE_CAN {
                 if !have_added_entity_type_names {
-                    print("Hey!\n");
                     add_build_string(
                         tprint(
                             "ENTITY_TYPE_NAMES: []string = .%;",

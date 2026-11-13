@@ -1,5 +1,6 @@
 Camera_Controller_Kind :: enum {
     FLY;
+    ORBIT;
 }
 
 Fly_Camera_Input :: struct {
@@ -7,6 +8,10 @@ Fly_Camera_Input :: struct {
     zoom_delta:     float;
     move_direction: Move_Direction;
     sprint:         bool;
+}
+
+Orbit_Camera_Input :: struct {
+    orbit_delta: Vector2;
 }
 
 Move_Direction :: enum_flags {
@@ -21,6 +26,28 @@ Move_Direction :: enum_flags {
 fly_camera :: (camera: *Camera, dt: float, input: Fly_Camera_Input) {
     fly_look(camera, input);
     fly_move(camera, dt, input);
+}
+
+orbit_camera :: (
+    camera:       *Camera,
+    input:        Orbit_Camera_Input,
+    target:       Vector3,
+    pivot_offset: Vector3,
+    distance:     float,
+) {
+    SENSITIVITY :: 0.01;
+    MAX_PITCH   :: #run deg_to_rad(80);
+
+    yaw, pitch := calculate_yaw_and_pitch_from_direction(camera.front);
+
+    yaw   += input.orbit_delta.x * SENSITIVITY;
+    pitch -= input.orbit_delta.y * SENSITIVITY;
+    pitch  = clamp(pitch, -MAX_PITCH, MAX_PITCH);
+
+    front := calculate_direction_from_yaw_and_pitch(yaw, pitch);
+
+    camera.front    = front;
+    camera.position = target + pivot_offset - front * distance;
 }
 
 

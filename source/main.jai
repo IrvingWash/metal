@@ -9,7 +9,7 @@ Game :: struct {
 
     camera: Camera;
 
-    camera_controller_kind: Camera_Controller_Kind = .FLY;
+    camera_controller_kind: Camera_Controller_Kind = .ORBIT;
 
     entity_manager: Entity_Manager;
 
@@ -42,66 +42,9 @@ main :: () {
         game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
         game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
 
-        spawn_entity(*game.entity_manager, Damaged_Helmet.{ position.y = 3 });
-
         spawn_entity(*game.entity_manager, Floor.{});
 
-        spawn_entity(
-            *game.entity_manager,
-            Sourceless_Spot_Light.{
-                position = { -4.5, 1.8, -3.5 },
-                params = {
-                    direction = { 2.5, -1, 0 },
-                    intensity = 45,
-                    range = 35,
-                    inner_cutoff_half_angle = #run deg_to_rad(10),
-                    outer_cutoff_half_angle = #run deg_to_rad(30),
-                },
-            },
-        );
-
-        spawn_entity(
-            *game.entity_manager,
-            Sourceless_Spot_Light.{
-                position = { -4.5, 1.8, 3.5 },
-                params = {
-                    direction = { 2.5, -1, 0 },
-                    intensity = 45,
-                    range = 35,
-                    inner_cutoff_half_angle = #run deg_to_rad(10),
-                    outer_cutoff_half_angle = #run deg_to_rad(30),
-                }
-            },
-        );
-
-        spawn_entity(
-            *game.entity_manager,
-            Sourceless_Spot_Light.{
-                position = { 0, 2.9, 0 },
-                params = {
-                    direction = { 0, -1, -0.7 },
-                    intensity = 30,
-                    color = { 1, 0, 0 },
-                    range = 18,
-                    inner_cutoff_half_angle = #run deg_to_rad(30),
-                    outer_cutoff_half_angle = #run deg_to_rad(55),
-                },
-            },
-        );
-
-        spawn_entity(
-            *game.entity_manager,
-            Sourceless_Spot_Light.{
-                position = { 0, 5, 0 },
-                params = {
-                    direction  = { 1, -0.2, 0 },
-                    intensity = 15,
-                    range = 35,
-                    inner_cutoff_half_angle = #run deg_to_rad(14),
-                    outer_cutoff_half_angle = #run deg_to_rad(18),
-                },
-            },
-        );
+        spawn_entity(*game.entity_manager, Mech.{});
     }
 
     while !game.should_quit {
@@ -115,6 +58,14 @@ main :: () {
 
         reset_temporary_storage();
     }
+}
+
+get_orbit_camera_input :: () -> Orbit_Camera_Input {
+    move_direction: Move_Direction;
+
+    return {
+        orbit_delta = game.input_state.mouse.delta,
+    };
 }
 
 get_fly_camera_input :: () -> Fly_Camera_Input {
@@ -164,9 +115,8 @@ Renderer      :: #import "Renderer"()(
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity_manager.jai";
-#load "entities/damaged_helmet.jai";
-#load "entities/sourceless_spot_light.jai";
 #load "entities/floor.jai";
+#load "entities/mech.jai";
 
 #if DEVELOPER {
     #load "editor.jai";
@@ -213,6 +163,14 @@ update :: (dt: float) {
     if #complete game.camera_controller_kind == {
         case .FLY;
             fly_camera(*game.camera, dt, get_fly_camera_input());
+        case .ORBIT;
+            orbit_camera(
+                *game.camera,
+                get_orbit_camera_input(),
+                game.entity_manager.storage._Mech[0].position,
+                { 0, 1, 0 },
+                5,
+            );
     }
 }
 
@@ -237,15 +195,6 @@ render :: () {
             make_world_transform(entity),
             entity.tint,
             entity.animation_player.pose,
-        );
-    }
-
-    for *ssl: game.entity_manager.storage._Sourceless_Spot_Light {
-        ssl.params.position = ssl.position;
-
-        Renderer.draw_spot_light(
-            *game.renderer,
-            ssl.params,
         );
     }
 

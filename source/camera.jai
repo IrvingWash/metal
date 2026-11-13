@@ -16,6 +16,16 @@ Camera_Basis :: struct {
     up:    Vector3;
 }
 
+look_at :: (camera: *Camera, target: Vector3) {
+    to_target := target - camera.position;
+
+    if length_squared(to_target) < 0.00001 {
+        return;
+    }
+
+    camera.front = normalize(to_target);
+}
+
 calculate_camera_basis :: (camera: Camera) -> Camera_Basis {
     front := normalize(camera.front);
     right := normalize(cross(front, WORLD_UP));
