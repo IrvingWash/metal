@@ -8,9 +8,9 @@ Animation :: struct {
 Animation_Player :: struct {
     animation_index:     Option(int);
 
-    playback_time:       float;
-    should_loop:         bool;
-    pose:            [..]Renderer.Node_Transform;
+    playback_time: float;
+    should_loop:   bool;
+    pose:          [..]Renderer.Node_Transform;
 }
 
 Animation_Track :: struct {

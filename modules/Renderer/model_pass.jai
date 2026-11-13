@@ -486,7 +486,7 @@ add_model_node_to_draw_bucket :: (
         then model_draw_request.pose[node_index]
         else node.local_transform;
 
-    world_transform := parent_transform * make_world_transform(
+    world_transform := parent_transform * make_transformation_matrix(
         local_transform.translation,
         local_transform.rotation,
         local_transform.scale,

@@ -392,7 +392,7 @@ make_model_aabb :: (model: Renderer.Model_Accessor) -> AABB {
         model_min: *Vector3,
         model_max: *Vector3,
     ) {
-        transform := parent_transform * make_world_transform(
+        transform := parent_transform * make_transformation_matrix(
             node.local_transform.translation,
             node.local_transform.rotation,
             node.local_transform.scale,

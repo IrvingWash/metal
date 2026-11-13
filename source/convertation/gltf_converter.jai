@@ -589,10 +589,10 @@ convert_gltf_primitive_to_mesh_dto :: (
             identifier_for_errors,
         );
    } else {
-        log(
+        assert(
+            false,
             "GLTF Converter: the primive doesn't have tangents (%)",
             identifier_for_errors,
-            flags = .WARNING,
         );
    }
 
