@@ -4,5 +4,5 @@ Floor :: struct {
     name = "Floor";
     model_path = "../../Models/cube.glb";
 
-    scale = { 100, 1, 100 };
+    scale = { 100, 0.01, 100 };
 }
