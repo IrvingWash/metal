@@ -42,7 +42,9 @@ main :: () {
         game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
         game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
 
-        spawn_entity(*game.entity_manager, Damaged_Helmet.{});
+        spawn_entity(*game.entity_manager, Damaged_Helmet.{ position.y = 3 });
+
+        spawn_entity(*game.entity_manager, Floor.{});
 
         spawn_entity(
             *game.entity_manager,
@@ -164,6 +166,7 @@ Renderer      :: #import "Renderer"()(
 #load "entity_manager.jai";
 #load "entities/damaged_helmet.jai";
 #load "entities/sourceless_spot_light.jai";
+#load "entities/floor.jai";
 
 #if DEVELOPER {
     #load "editor.jai";
