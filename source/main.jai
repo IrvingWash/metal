@@ -7,9 +7,7 @@ Game :: struct {
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
 
-    camera: Camera = {
-        position = {}
-    };
+    camera: Camera;
 
     camera_controller_kind: Camera_Controller_Kind = .FLY;
 
@@ -102,6 +100,22 @@ main :: () {
         name       = "Sponza",
         model_path = "../../Models/Sponza/Sponza.gltf",
     );
+    add_entity(
+        name       = "AnimatedCube",
+        model_path = "../../Models/AnimatedCube/glTF/AnimatedCube.gltf",
+        position = { 0, 0, 0 },
+    );
+    // start entities
+    {
+        animated_cube := *game.entities[3];
+
+        play_animation(
+            animated_cube,
+            "animation_AnimatedCube",
+            *game.asset_manager,
+            true,
+        );
+    }
 
     while !game.should_quit {
         dt := calculate_delta_time();
@@ -159,6 +173,7 @@ Renderer      :: #import "Renderer"()(
 #import "More_Math";
 
 #load "asset_manager.jai";
+#load "animation.jai";
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity.jai";
@@ -203,6 +218,10 @@ update :: (dt: float) {
         case .FLY;
             fly_camera(*game.camera, dt, get_fly_camera_input());
     }
+
+    for *entity: game.entities {
+        update_animation(entity, dt, game.asset_manager);
+    }
 }
 
 render :: () {
@@ -214,11 +233,14 @@ render :: () {
     }
 
     for entity: game.entities {
+        model_asset := asset_manager_get_model(game.asset_manager, entity.model_asset_handle);
+
         Renderer.draw_model(
             *game.renderer,
-            asset_manager_get_model(game.asset_manager, entity.model_handle),
+            model_asset.model_accessor,
             make_world_transform(entity),
             entity.tint,
+            entity.animation_player.pose,
         );
     }
 
@@ -294,14 +316,14 @@ add_entity :: (
     tint:     Vector4 = { 1, 1, 1, 1 },
     model_path: string,
 ) {
-    model_handle := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
+    model_asset_handle := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
 
     entity: Entity = {
         name = name,
         position = position,
         rotation = rotation,
         scale = scale,
-        model_handle = model_handle,
+        model_asset_handle = model_asset_handle,
         tint = tint,
     };
 

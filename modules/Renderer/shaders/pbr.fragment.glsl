@@ -17,6 +17,8 @@ const uint MAX_DIRECTIONAL_LIGHT_COUNT = 1;
 const uint MAX_SPOT_LIGHT_COUNT = 16;
 const uint MAX_SHADOWED_SPOT_LIGHT_COUNT = 16;
 
+const uint FALLBACK_NORMAL_TEXTURE_ID = 1;
+
 float calculate_shadow(
     sampler2DShadow shadow_map,
     vec3 fragment_world_position,
@@ -214,12 +216,17 @@ void main() {
     // 0.04 - see https://learnopengl.com/PBR/Theory#:~:text=metals%2E-,The,notes%3A
     vec3 F0 = mix(vec3(0.04), albedo.rgb, metallic);
 
-    vec3 N = get_normal_from_texel(
-        vertex_input.world_space_normal,
-        vertex_input.world_space_tangent,
-        normal_texel.rgb,
-        material.normal_scale
-    );
+    vec3 N;
+    if (material.normal_texture_index == FALLBACK_NORMAL_TEXTURE_ID) {
+        N = normalize(vertex_input.world_space_normal);
+    } else {
+        N = get_normal_from_texel(
+            vertex_input.world_space_normal,
+            vertex_input.world_space_tangent,
+            normal_texel.rgb,
+            material.normal_scale
+        );
+    }
     if (!gl_FrontFacing) {
         N = -N;
     }

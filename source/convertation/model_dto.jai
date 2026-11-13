@@ -20,6 +20,7 @@ Model_Dto :: struct {
     meshes:    [..]Mesh_Dto;
     materials: [..]Material_Dto;
     images:    [..]Image_Dto;
+    animations: [..]Animation_Dto;
 }
 
 Node_Dto :: struct {
@@ -31,7 +32,9 @@ Node_Dto :: struct {
     first_mesh_index: Option(u32);
     mesh_count:       u32;
 
-    local_transform: Matrix4 = Matrix4_Identity;
+    local_translation: Vector3;
+    local_rotation:    Quaternion = { 0, 0, 0, 1 };
+    local_scale:       Vector3 = { 1, 1, 1 };
 }
 
 Mesh_Dto :: struct {
@@ -109,6 +112,31 @@ Image_Dto :: struct {
     channel_count: u8;
 };
 
+Animation_Dto :: struct {
+    name: string;
+    duration: float;
+    tracks: [..]Animation_Track_Dto;
+}
+
+Animation_Track_Dto :: struct {
+    node_index:      u32;
+    path:            Animation_Path_Dto;
+    interpolation:   Animation_Interpolation_Dto;
+    keyframe_times:  [..]float;
+    keyframe_values: [..]float;
+}
+
+Animation_Interpolation_Dto :: enum {
+    LINEAR;
+    STEP;
+}
+
+Animation_Path_Dto :: enum {
+    TRANSLATION;
+    ROTATION;
+    SCALE;
+}
+
 Alpha_Mode_Dto :: enum {
     OPAQUE;
     MASK;
@@ -151,6 +179,16 @@ destroy :: (model_dto: *Model_Dto) {
     log("Model_Dto: Destroying %", model_dto.name);
 
     free(model_dto.name);
+
+    for animation_dto: model_dto.animations {
+        free(animation_dto.name);
+        for track: animation_dto.tracks {
+            array_free(track.keyframe_times);
+            array_free(track.keyframe_values);
+        }
+        array_free(animation_dto.tracks);
+    }
+    array_free(model_dto.animations);
 
     for node: model_dto.nodes {
         free(node.name);

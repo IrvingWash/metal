@@ -2,11 +2,17 @@ Asset_Manager :: struct {
     root_path:    string;
     shaders_path: string;
 
-    model_accessor_handles_by_path: Table(string, Model_Handle);
-    model_accessors:                Bucket_Array(Renderer.Model_Accessor, 64);
+    model_asset_handles_by_path: Table(string, Model_Asset_Handle);
+
+    model_assets: Bucket_Array(Model_Asset, 64);
 }
 
-Model_Handle :: #type,distinct Bucket_Locator;
+Model_Asset_Handle :: #type,distinct Bucket_Locator;
+
+Model_Asset :: struct {
+    model_accessor: Renderer.Model_Accessor;
+    animations:     [..]Animation;
+}
 
 init_asset_manager :: () -> Asset_Manager {
     asset_manager: Asset_Manager;
@@ -22,15 +28,20 @@ init_asset_manager :: () -> Asset_Manager {
 }
 
 deinit_asset_manager :: (asset_manager: *Asset_Manager) {
-    for value, key: asset_manager.model_accessor_handles_by_path {
+    for value, key: asset_manager.model_asset_handles_by_path {
         free(key);
     }
-    deinit(*asset_manager.model_accessor_handles_by_path);
+    deinit(*asset_manager.model_asset_handles_by_path);
 
-    for *model_accessor: asset_manager.model_accessors {
-        Renderer.destroy_model_accessor(model_accessor);
+    for *model_asset: asset_manager.model_assets {
+        Renderer.destroy_model_accessor(*model_asset.model_accessor);
+
+        for *animation: model_asset.animations {
+            destroy_animation(animation);
+        }
+        array_free(model_asset.animations);
     }
-    bucket_array_reset(*asset_manager.model_accessors);
+    bucket_array_reset(*asset_manager.model_assets);
 
     free(asset_manager.root_path);
     free(asset_manager.shaders_path);
@@ -51,12 +62,12 @@ asset_manager_get_compiled_shader :: (asset_manager: Asset_Manager, name: string
     return "", content;
 }
 
-asset_manager_get_model_pointer :: (asset_manager: Asset_Manager, handle: Model_Handle) -> *Renderer.Model_Accessor {
-    return bucket_array_find_pointer(*asset_manager.model_accessors, cast(Bucket_Locator, handle));
+asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Asset_Handle) -> Model_Asset {
+    return bucket_array_find(*asset_manager.model_assets, cast(Bucket_Locator, handle));
 }
 
-asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Handle) -> Renderer.Model_Accessor {
-    return bucket_array_find(*asset_manager.model_accessors, cast(Bucket_Locator, handle));
+asset_manager_get_model_pointer :: (asset_manager: *Asset_Manager, handle: Model_Asset_Handle) -> *Model_Asset {
+    return bucket_array_find_pointer(*asset_manager.model_assets, cast(Bucket_Locator, handle));
 }
 
 // @Todo: In the future, this will just upload our own binaries.
@@ -65,11 +76,11 @@ asset_manager_upload_model :: (
     asset_manager: *Asset_Manager,
     path:          string,
     renderer:      *Renderer.Renderer,
-) -> Model_Handle {
+) -> Model_Asset_Handle {
     normalized_path := get_absolute_path(path,, temp);
 
     { // Check cache
-        found, handle := table_find(*asset_manager.model_accessor_handles_by_path, normalized_path);
+        found, handle := table_find(*asset_manager.model_asset_handles_by_path, normalized_path);
         if found {
             return handle;
         }
@@ -79,23 +90,19 @@ asset_manager_upload_model :: (
 
     log("Asset Manager: Uploading model at %", path);
 
-    model_accessor: Renderer.Model_Accessor;
+    model_asset: Model_Asset;
 
     maybe_model_dto: Option(Model_Dto);
-
     extension := path_extension(normalized_path);
     if array_find(GLTF_FILE_EXTENSIONS, extension) {
-        result := convert_gltf(normalized_path, DEBUG);
+        result := load_and_convert_gltf(normalized_path, DEBUG,, temp);
 
         set(*maybe_model_dto, result);
     }
-
     if maybe_model_dto.kind != .SOME {
         assert(false, "Failed to load model from %", path);
     }
-
     model_dto := maybe_model_dto.some;
-    defer destroy(*model_dto);
 
     for mesh_dto: model_dto.meshes {
         assert(
@@ -213,7 +220,7 @@ asset_manager_upload_model :: (
 
     for mesh_dto: model_dto.meshes {
         mesh_accessor: Renderer.Mesh_Accessor;
-        defer array_add(*model_accessor.meshes, mesh_accessor);
+        defer array_add(*model_asset.model_accessor.meshes, mesh_accessor);
 
         mesh_accessor.aabb = make_aabb(mesh_dto.min, mesh_dto.max);
 
@@ -259,7 +266,9 @@ asset_manager_upload_model :: (
 
     for node_dto: model_dto.nodes {
         renderer_node: Renderer.Node;
-        renderer_node.local_transform = node_dto.local_transform;
+        renderer_node.local_transform.translation = node_dto.local_translation;
+        renderer_node.local_transform.rotation = node_dto.local_rotation;
+        renderer_node.local_transform.scale = node_dto.local_scale;
         renderer_node.parent_index = node_dto.parent_index;
 
         if node_dto.first_mesh_index.kind == .SOME && node_dto.mesh_count > 0 {
@@ -275,18 +284,97 @@ asset_manager_upload_model :: (
         );
 
         array_add(
-            *model_accessor.nodes,
+            *model_asset.model_accessor.nodes,
             renderer_node,
         );
     }
 
-    model_accessor.aabb = make_model_aabb(model_accessor);
+    model_asset.model_accessor.aabb = make_model_aabb(model_asset.model_accessor);
 
-    handle := bucket_array_add(*asset_manager.model_accessors, model_accessor);
+    array_resize(
+        *model_asset.animations,
+        model_dto.animations.count,
+        initialize = false,
+    );
+    for animation_dto: model_dto.animations {
+        animation: Animation;
 
-    table_add(*asset_manager.model_accessor_handles_by_path, normalized_path, cast(Model_Handle, handle));
+        animation.name = copy_string(animation_dto.name);
+        animation.duration = animation_dto.duration;
 
-    return cast(Model_Handle, handle);
+        array_resize(
+            *animation.tracks,
+            animation_dto.tracks.count,
+            initialize = false,
+        );
+        for track_dto: animation_dto.tracks {
+            track: Animation_Track;
+            defer animation.tracks[it_index] = track;
+
+            track.node_index = track_dto.node_index;
+
+            if #complete track_dto.interpolation == {
+                case .LINEAR;
+                    track.interpolation = .LINEAR;
+                case .STEP;
+                    track.interpolation = .STEP;
+            }
+
+            array_resize(*track.keyframe_times, track_dto.keyframe_times.count);
+            memcpy(
+                track.keyframe_times.data,
+                track_dto.keyframe_times.data,
+                track.keyframe_times.count * size_of(float),
+            );
+
+            if #complete track_dto.path == {
+                case .TRANSLATION;
+                    track.keyframe_values.path = .TRANSLATION;
+                    array_resize(
+                        *track.keyframe_values.translation,
+                        track_dto.keyframe_values.count / Vector3.component.count,
+                        initialize = false,
+                    );
+                    memcpy(
+                        track.keyframe_values.translation.data,
+                        track_dto.keyframe_values.data,
+                        track_dto.keyframe_values.count * size_of(float),
+                    );
+                case .ROTATION;
+                    track.keyframe_values.path = .ROTATION;
+                    array_resize(
+                        *track.keyframe_values.rotation,
+                        track_dto.keyframe_values.count / Quaternion.component.count,
+                        initialize = false,
+                    );
+                    memcpy(
+                        track.keyframe_values.rotation.data,
+                        track_dto.keyframe_values.data,
+                        track_dto.keyframe_values.count * size_of(float),
+                    );
+                case .SCALE;
+                    track.keyframe_values.path = .SCALE;
+                    array_resize(
+                        *track.keyframe_values.scale,
+                        track_dto.keyframe_values.count / Vector3.component.count,
+                        initialize = false,
+                    );
+                    memcpy(
+                        track.keyframe_values.scale.data,
+                        track_dto.keyframe_values.data,
+                        track_dto.keyframe_values.count * size_of(float),
+                    );
+            }
+        }
+
+        model_asset.animations[it_index] = animation;
+    }
+
+    handle := bucket_array_add(*asset_manager.model_assets, model_asset);
+
+    table_add(*asset_manager.model_asset_handles_by_path, normalized_path, cast(Model_Asset_Handle, handle));
+
+    return cast(Model_Asset_Handle, handle);
 }
 
 
@@ -304,7 +392,11 @@ make_model_aabb :: (model: Renderer.Model_Accessor) -> AABB {
         model_min: *Vector3,
         model_max: *Vector3,
     ) {
-        transform := parent_transform * node.local_transform;
+        transform := parent_transform * make_transformation_matrix(
+            node.local_transform.translation,
+            node.local_transform.rotation,
+            node.local_transform.scale,
+        );
 
         if node.mesh_count > 0 {
             for mesh_index: node.first_mesh_index .. (node.first_mesh_index + node.mesh_count - 1) {

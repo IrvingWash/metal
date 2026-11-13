@@ -5,14 +5,7 @@ GLTF_FILE_EXTENSIONS :: string.[
     Gltf.GLB_FILE_EXTENSION,
 ];
 
-convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
-    assert(
-        context.allocator.proc != temporary_allocator_proc,
-        "Temp allocator is forbidden for this procedure, because it's auto_released here",
-    );
-
-    auto_release_temp();
-
+load_and_convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
     error: string = ---;
     gltf: Gltf.Gltf = ---;
     if ends_with(path, Gltf.GLTF_FILE_EXTENSION) {
@@ -36,7 +29,7 @@ convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
     first_mesh_indices: [..]u32;
     first_mesh_indices.allocator = temp;
 
-    assert (gltf.meshes.count > 0, "Gltf at % doesn't have meshes");
+    assert (gltf.meshes.count > 0, "Gltf at % doesn't have meshes", path);
 
     for gltf_mesh: gltf.meshes {
         array_add(*first_mesh_indices, cast(u32, model_dto.meshes.count));
@@ -96,6 +89,16 @@ convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
         }
     }
 
+    array_resize(*model_dto.animations, gltf.animations.count);
+    for gltf_animation: gltf.animations {
+        animation_dto := convert_gltf_animation_to_animation_dto(
+            gltf,
+            gltf_animation,
+        );
+
+        model_dto.animations[it_index] = animation_dto;
+    }
+
     return model_dto;
 }
 
@@ -103,13 +106,90 @@ convert_gltf :: (path: string, $validate: bool = false) -> Model_Dto {
 
 #scope_file
 
+convert_gltf_animation_to_animation_dto :: (
+    gltf: Gltf.Gltf,
+    gltf_animation: Gltf.Animation,
+) -> Animation_Dto {
+    animation_dto: Animation_Dto;
+
+    animation_dto.name = copy_string(gltf_animation.name);
+
+    array_reserve(*animation_dto.tracks, gltf_animation.channels.count);
+    for gltf_animation_channel: gltf_animation.channels {
+        if gltf_animation_channel.target._node == Gltf.SENTINEL {
+            continue;
+        }
+
+        animation_track_dto: Animation_Track_Dto = {
+            node_index = cast(u32, gltf_animation_channel.target._node),
+        };
+
+        if #complete gltf_animation_channel.target.path ==  {
+            case .translation;
+                animation_track_dto.path = .TRANSLATION;
+            case .rotation;
+                animation_track_dto.path = .ROTATION;
+            case .scale;
+                animation_track_dto.path = .SCALE;
+            case .weights;
+                assert(false, "Got a gltf with animation with weights. Unsupported");
+        }
+
+        gltf_animation_sampler := gltf_animation.samplers[gltf_animation_channel.sampler];
+
+        if #complete gltf_animation_sampler.interpolation == {
+            case .LINEAR;
+                animation_track_dto.interpolation = .LINEAR;
+            case .STEP;
+                animation_track_dto.interpolation = .STEP;
+            case .CUBICSPLINE;
+                assert(false, "Got a gltf with cubicspline animation interpolation");
+        }
+
+        { // Keyframe timestamps
+            gltf_accessor := gltf.accessors[gltf_animation_sampler.input];
+
+            gltf_input_bytes := get_gltf_accessor_data(gltf_accessor, gltf);
+
+            array_resize(*animation_track_dto.keyframe_times, gltf_accessor.count);
+            memcpy(
+                animation_track_dto.keyframe_times.data,
+                gltf_input_bytes,
+                gltf_accessor.count * size_of(float),
+            );
+
+            animation_dto.duration = max(animation_dto.duration, gltf_accessor.max[0]);
+        }
+
+        { // Keyframe values
+            gltf_accessor := gltf.accessors[gltf_animation_sampler.output];
+
+            gltf_output_bytes := get_gltf_accessor_data(gltf_accessor, gltf);
+
+            float_count := gltf_accessor.count * get_component_count_from_gltf_accessor_type(gltf_accessor.type);
+
+            array_resize(*animation_track_dto.keyframe_values, float_count);
+            memcpy(
+                animation_track_dto.keyframe_values.data,
+                gltf_output_bytes,
+                float_count * size_of(float),
+            );
+        }
+
+        array_add(*animation_dto.tracks, animation_track_dto);
+    }
+
+    return animation_dto;
+}
+
 convert_gltf_node_to_node_dto_skipping_parent_index :: (
     gltf:               Gltf.Gltf,
     gltf_node:          Gltf.Node,
     first_mesh_indices: []u32,
-
     name: string,
 ) -> Node_Dto {
+    assert(gltf_node._skin == Gltf.SENTINEL, "Got a skinned node. Unsupported");
+
     node_dto: Node_Dto;
 
     node_dto.name = name;
@@ -137,23 +217,16 @@ convert_gltf_node_to_node_dto_skipping_parent_index :: (
     { // Transform
         gltf_matrix: Matrix4;
         gltf_matrix.floats = gltf_node.column_major_matrix;
-        gltf_matrix = transpose(gltf_matrix);
 
         if gltf_matrix != Matrix4_Identity {
-            node_dto.local_transform = gltf_matrix;
+            gltf_matrix = transpose(gltf_matrix);
+            node_dto.local_translation = calculate_translation_from_transform(gltf_matrix);
+            node_dto.local_rotation    = calculate_rotation_from_transform(gltf_matrix);
+            node_dto.local_scale       = calculate_scale_from_transform(gltf_matrix);
         } else {
-            translation: Vector3;
-            scale:       Vector3;
-            rotation:    Quaternion;
-            translation.component = gltf_node.translation;
-            scale.component       = gltf_node.scale;
-            rotation.component    = gltf_node.rotation;
-
-            translation_matrix := make_translation_matrix4(translation);
-            scale_matrix       := make_scale_matrix4(scale);
-            _rotation_matrix   := rotation_matrix(Matrix4, rotation);
-
-            node_dto.local_transform = translation_matrix * _rotation_matrix * scale_matrix;
+            node_dto.local_translation.component = gltf_node.translation;
+            node_dto.local_scale.component       = gltf_node.scale;
+            node_dto.local_rotation.component    = gltf_node.rotation;
         }
     }
 
@@ -516,10 +589,10 @@ convert_gltf_primitive_to_mesh_dto :: (
             identifier_for_errors,
         );
    } else {
-        log(
+        assert(
+            false,
             "GLTF Converter: the primive doesn't have tangents (%)",
             identifier_for_errors,
-            flags = .WARNING,
         );
    }
 
@@ -592,22 +665,12 @@ parse_gltf_attribute :: (
         attribute_key_for_errors,
         identifier_for_errors,
     );
-
-    assert(
-        gltf_accessor.sparse._count == Gltf.SENTINEL,
-        "Sparse accessors are not supported (attribute: %) (%)",
-        attribute_key_for_errors,
-        identifier_for_errors,
-    );
     assert(
         gltf_accessor._buffer_view != Gltf.SENTINEL,
         "Got an accessor without a buffer view (attribute: %) (%)",
         attribute_key_for_errors,
         identifier_for_errors,
     );
-
-    gltf_buffer_view := gltf.buffer_views[gltf_accessor._buffer_view];
-    gltf_buffer := gltf.buffers[gltf_buffer_view.buffer];
 
     component_byte_size := get_size_from_gltf_component_type(gltf_accessor.component_type);
     component_count := get_component_count_from_gltf_accessor_type(gltf_accessor.type);
@@ -620,13 +683,13 @@ parse_gltf_attribute :: (
         identifier_for_errors,
     );
 
-    byte_offset := gltf_accessor.byte_offset + gltf_buffer_view.byte_offset;
+    gltf_buffer_view := gltf.buffer_views[gltf_accessor._buffer_view];
 
     step: int = ifx gltf_buffer_view._byte_stride != Gltf.SENTINEL
         then gltf_buffer_view._byte_stride
         else element_byte_size;
 
-    gltf_attribute_bytes := gltf_buffer.bytes.data + byte_offset;
+    gltf_attribute_bytes := get_gltf_accessor_data(gltf_accessor, gltf);
 
     for 0 .. gltf_accessor.count - 1 {
         target := cast(*Result_Type, cast(*u8, destination) + it * destination_stride);
@@ -639,24 +702,10 @@ parse_gltf_indices :: (
     gltf_indices_accessor: Gltf.Accessor,
     identifier_for_errors:     string,
 ) -> [..]u32 {
-    assert(
-        gltf_indices_accessor.sparse._count == Gltf.SENTINEL,
-        "Sparse accessors are not supported (%)",
-        identifier_for_errors,
-    );
-    assert(
-        gltf_indices_accessor._buffer_view != Gltf.SENTINEL,
-        "Got an accessor without a buffer view (%)",
-        identifier_for_errors,
-    );
-    gltf_indices_buffer_view := gltf.buffer_views[gltf_indices_accessor._buffer_view];
-    gltf_indices_buffer := gltf.buffers[gltf_indices_buffer_view.buffer];
-
     component_byte_size := get_size_from_gltf_component_type(gltf_indices_accessor.component_type);
     byte_count := gltf_indices_accessor.count * component_byte_size;
-    byte_offset := gltf_indices_accessor.byte_offset + gltf_indices_buffer_view.byte_offset;
 
-    gltf_indices_bytes := gltf_indices_buffer.bytes.data + byte_offset;
+    gltf_indices_bytes := get_gltf_accessor_data(gltf_indices_accessor, gltf);
 
     result: [..]u32;
     array_resize(*result, gltf_indices_accessor.count, initialize = false);
@@ -790,6 +839,23 @@ get_component_count_from_gltf_accessor_type :: (gltf_accessor_type: Gltf.Accesso
         case .MAT4;
             return 16;
     }
+}
+
+get_gltf_accessor_data :: (gltf_accessor: Gltf.Accessor, gltf: Gltf.Gltf) -> *u8 {
+    assert(
+        gltf_accessor._buffer_view != Gltf.SENTINEL,
+        "Got an accessor without buffer view",
+    );
+    assert(
+        gltf_accessor.sparse._count == Gltf.SENTINEL,
+        "Sparse accessors are not supported",
+    );
+    gltf_buffer_view := gltf.buffer_views[gltf_accessor._buffer_view];
+    gltf_buffer := gltf.buffers[gltf_buffer_view.buffer];
+
+    byte_offset := gltf_accessor.byte_offset + gltf_buffer_view.byte_offset;
+
+    return gltf_buffer.bytes.data + byte_offset;
 }
 
 #import "stb_image";

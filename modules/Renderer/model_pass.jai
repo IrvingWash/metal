@@ -146,6 +146,7 @@ add_model_to_model_pass :: (
     model_accessor:  Model_Accessor,
     world_transform: Matrix4,
     tint:            Vector4,
+    pose:            []Node_Transform,
 ) {
     array_add(
         *model_pass.model_draw_requests,
@@ -153,6 +154,7 @@ add_model_to_model_pass :: (
             model_accessor,
             world_transform,
             tint,
+            pose,
         },
     );
 }
@@ -166,9 +168,10 @@ prepare_model_pass :: (
     frustums_for_culling: []Frustum,
 ) {
     // Adding to buckets
-    for model_to_draw: model_pass.model_draw_requests {
+    for model_draw_request: model_pass.model_draw_requests {
         { // Frustum culling
-            transformed_aabb := transform_aabb(model_to_draw.accessor.aabb, model_to_draw.transform);
+            // @Todo: use the pose values
+            transformed_aabb := transform_aabb(model_draw_request.accessor.aabb, model_draw_request.transform);
             is_inside_one_of_the_frustums: bool;
             for frustum: frustums_for_culling {
                 if aabb_vs_frustum(transformed_aabb, frustum) {
@@ -181,19 +184,18 @@ prepare_model_pass :: (
             }
         }
 
-        for node: model_to_draw.accessor.nodes {
+        for node: model_draw_request.accessor.nodes {
             if node.parent_index.kind != .NONE {
                 continue;
             }
 
             add_model_node_to_draw_bucket(
                 node,
+                it_index,
+                model_draw_request,
                 model_pass.ordered_draw_buckets,
-                model_to_draw.accessor.nodes,
-                model_to_draw.accessor.meshes,
                 materials_info,
-                model_to_draw.transform,
-                model_to_draw.tint,
+                model_draw_request.transform,
                 view_point_for_sorting,
             );
         }
@@ -438,6 +440,7 @@ Model_Draw_Request :: struct {
     accessor: Model_Accessor;
     transform: Matrix4;
     tint: Vector4;
+    pose: []Node_Transform;
 }
 
 init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [5]Model_Draw_Bucket {
@@ -471,16 +474,23 @@ init_ordered_draw_buckets :: (pipeline_info: Pbr_Pipeline_Info) -> [5]Model_Draw
 }
 
 add_model_node_to_draw_bucket :: (
-    node:                  Node,
-    draw_buckets:          []Model_Draw_Bucket,
-    nodes:                 []Node,
-    all_meshes:            []Mesh_Accessor,
-    materials_info:        Materials_Info,
-    parent_transform:      Matrix4,
-    tint:                  Vector4,
-    camera_world_position: Vector3,
+    node:                   Node,
+    node_index:             int,
+    model_draw_request:     Model_Draw_Request,
+    draw_buckets:           []Model_Draw_Bucket,
+    materials_info:         Materials_Info,
+    parent_transform:       Matrix4,
+    view_point_for_sorting: Vector3,
 ) {
-    world_transform := parent_transform * node.local_transform;
+    local_transform := ifx model_draw_request.pose.count > 0
+        then model_draw_request.pose[node_index]
+        else node.local_transform;
+
+    world_transform := parent_transform * make_transformation_matrix(
+        local_transform.translation,
+        local_transform.rotation,
+        local_transform.scale,
+    );
 
     if node.mesh_count > 0 {
         inversed_ok, inversed_world_matrix := inverse(world_transform);
@@ -488,7 +498,7 @@ add_model_node_to_draw_bucket :: (
             inverse_transpose_world_transform := transpose(inversed_world_matrix);
 
             for mesh_index: node.first_mesh_index .. (node.first_mesh_index + node.mesh_count - 1) {
-                mesh := all_meshes[mesh_index];
+                mesh := model_draw_request.accessor.meshes[mesh_index];
                 material := materials_info.materials[mesh.material_index];
 
                 bucket := get_draw_bucket_by_material(draw_buckets, material);
@@ -503,13 +513,13 @@ add_model_node_to_draw_bucket :: (
                         world_transform                   = world_transform,
                         inverse_transpose_world_transform = make_matrix3(inverse_transpose_world_transform),
                         material_index                    = mesh.material_index,
-                        tint                              = tint,
+                        tint                              = model_draw_request.tint,
                     },
                 };
                 if bucket.alpha_mode == .BLEND {
                     center_in_world_space := (world_transform * make_vector4(mesh.aabb.center, 1)).xyz;
 
-                    entry.sorting_key_within_bucket = length_squared(center_in_world_space - camera_world_position);
+                    entry.sorting_key_within_bucket = length_squared(center_in_world_space - view_point_for_sorting);
                 }
 
                 array_add(*bucket.entries, entry);
@@ -518,17 +528,16 @@ add_model_node_to_draw_bucket :: (
     }
 
     for child_node_index: node.children_ids {
-        child_node := nodes[child_node_index];
+        child_node := model_draw_request.accessor.nodes[child_node_index];
 
         add_model_node_to_draw_bucket(
             child_node,
+            child_node_index,
+            model_draw_request,
             draw_buckets,
-            nodes,
-            all_meshes,
             materials_info,
             world_transform,
-            tint,
-            camera_world_position,
+            view_point_for_sorting,
         );
     }
 }

@@ -91,7 +91,7 @@ Animation :: struct {
     extras:     JSON_Value;
 
     Channel :: struct {
-        sampler:    int;
+        sampler:    u32;
         target:     Target;
         extensions: JSON_Value;
         extras:     JSON_Value;

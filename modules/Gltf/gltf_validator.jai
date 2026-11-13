@@ -88,6 +88,29 @@ validate_gltf :: (gltf: Gltf, gltf_identifier: string) -> error: string {
         }
     }
 
+    for animation: gltf.animations {
+        for sampler: animation.samplers {
+            accessor := gltf.accessors[sampler.input];
+
+            if accessor.component_type != .FLOAT {
+                add_error(
+                    *errors,
+                    gltf_identifier,
+                    "Animation sampler '%-%': inupt accessor is not FLOAT",
+                    animation.name, it_index,
+                );
+            }
+            if accessor.type != .SCALAR {
+                add_error(
+                    *errors,
+                    gltf_identifier,
+                    "Animation sampler '%-%': inupt accessor is not SCALAR",
+                    animation.name, it_index,
+                );
+            }
+        }
+    }
+
     return join(..errors, "\n", after_last = true,, temp);
 }
 

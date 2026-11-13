@@ -385,14 +385,14 @@ draw_entity_section :: () {
         *editor.should_draw_model_bounds,
     );
     if editor.should_draw_model_bounds {
-        model := asset_manager_get_model(
+        model_asset := asset_manager_get_model(
             editor.game.asset_manager,
-            selected_entity.model_handle,
+            selected_entity.model_asset_handle,
         );
 
         entity_transform := make_world_transform(selected_entity);
-        draw_model_aabb(model, entity_transform);
-        draw_model_obb(model, entity_transform, { 1, 0, 0, 1 });
+        draw_model_aabb(model_asset.model_accessor, entity_transform);
+        draw_model_obb(model_asset.model_accessor, entity_transform, { 1, 0, 0, 1 });
     }
 
     { // Gizmo operations
@@ -585,12 +585,12 @@ pick_entity :: () {
     hit_entities: [..]Hit_Entity;
     hit_entities.allocator = temp;
     for entity: editor.game.entities {
-        model := asset_manager_get_model(editor.game.asset_manager, entity.model_handle);
+        model_asset := asset_manager_get_model(editor.game.asset_manager, entity.model_asset_handle);
 
         ok, distance := ray_vs_aabb(
             ray_position,
             ray_direction,
-            model.aabb,
+            model_asset.model_accessor.aabb,
             make_world_transform(entity),
         );
 

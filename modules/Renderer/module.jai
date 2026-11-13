@@ -1,7 +1,7 @@
 #module_parameters()(Window_Type: Type, APPLICATION_NAME: string, DEBUG: bool = false);
 
 FALLBACK_COLOR_TEXTURE_ID              :: 0;
-FALLBACK_NORMAL_TEXTURE_ID             :: 1;
+FALLBACK_NORMAL_TEXTURE_ID             :: 1; @Gpu
 FALLBACK_METALLIC_ROUGHNESS_TEXTURE_ID :: FALLBACK_COLOR_TEXTURE_ID;
 FALLBACK_OCCLUSION_TEXTURE_ID          :: FALLBACK_COLOR_TEXTURE_ID;
 FALLBACK_EMISSIVE_TEXTURE_ID           :: FALLBACK_COLOR_TEXTURE_ID;
@@ -543,12 +543,14 @@ draw_model :: (
     model_accessor:  Model_Accessor,
     world_transform: Matrix4,
     tint:            Vector4 = { 1, 1, 1, 1 },
+    pose:            []Node_Transform = .[],
 ) {
     add_model_to_model_pass(
         *renderer.model_pass,
         model_accessor,
         world_transform,
         tint,
+        pose,
     );
 }
 
