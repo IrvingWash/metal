@@ -273,7 +273,7 @@ draw_gizmos :: () {
 
      // Entity
     if editor.is_entity_header_open {
-        selected_entity := *editor.game.entities[editor.selected_entity_id];
+        selected_entity := editor.game.entity_manager.all[editor.selected_entity_id];
 
         column_major_matrix := transpose(make_world_transform(selected_entity));
 
@@ -371,14 +371,14 @@ draw_entity_section :: () {
         current_item = *editor.selected_entity_id,
         getter = (user_data: *void, idx: s32) -> *u8 #c_call {
             push_context {
-                return temp_c_string(editor.game.entities[idx].name);
+                return temp_c_string(editor.game.entity_manager.all[idx].name);
             }
         },
         user_data = null,
-        items_count = xx editor.game.entities.count,
+        items_count = xx editor.game.entity_manager.all.count,
     );
 
-    selected_entity := *editor.game.entities[editor.selected_entity_id];
+    selected_entity := editor.game.entity_manager.all[editor.selected_entity_id];
 
     IM.checkbox(
         "Draw model bounds",
@@ -584,7 +584,7 @@ pick_entity :: () {
 
     hit_entities: [..]Hit_Entity;
     hit_entities.allocator = temp;
-    for entity: editor.game.entities {
+    for entity: editor.game.entity_manager.all {
         model_asset := asset_manager_get_model(editor.game.asset_manager, entity.model_asset_handle);
 
         ok, distance := ray_vs_aabb(

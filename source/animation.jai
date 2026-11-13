@@ -40,7 +40,7 @@ Animation_Interpolation :: enum {
 play_animation :: (
     entity: *Entity,
     animation_name: string,
-    asset_manager: *Asset_Manager,
+    asset_manager: Asset_Manager,
     should_loop: bool,
 ) {
     model_asset := asset_manager_get_model(asset_manager, entity.model_asset_handle);

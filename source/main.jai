@@ -11,7 +11,7 @@ Game :: struct {
 
     camera_controller_kind: Camera_Controller_Kind = .FLY;
 
-    entities: [..]Entity;
+    entity_manager: Entity_Manager;
 
     directional_light: Renderer.Directional_Light_Params = {
         color = { 0.1, 0.1, 0.1 },
@@ -72,49 +72,11 @@ main :: () {
     init();
     defer deinit();
 
-    display_ids := Windowing.get_display_ids(,, temp);
-    assert(display_ids.count > 0, "No displays(?!)");
-    error, display_info := Windowing.get_display_info(display_ids[0]);
-    assert(!error, error);
-    Renderer.set_render_resolution(
-        *game.renderer,
-        cast(u32, display_info.width * display_info.dpi),
-        cast(u32, display_info.height * display_info.dpi),
-    );
-    game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
-    game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
+    { // Loading the level
+        game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
+        game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
 
-    add_entity(
-        name       = "Damaged Helmet",
-        model_path = "../../Models/damaged_helmet/scene.glb",
-        position = { -1,  0.5, -3.4 },
-        scale    = { 0.4, 0.4, 0.4  },
-    );
-    add_entity(
-        name       = "SciFiHelmet",
-        model_path = "../../Models/SciFiHelmet/glTF/SciFiHelmet.gltf",
-        position = { -1,  0.5, 3.4 },
-        scale    = { 0.4, 0.4, 0.4  },
-    );
-    add_entity(
-        name       = "Sponza",
-        model_path = "../../Models/Sponza/Sponza.gltf",
-    );
-    add_entity(
-        name       = "AnimatedCube",
-        model_path = "../../Models/AnimatedCube/glTF/AnimatedCube.gltf",
-        position = { 0, 0, 0 },
-    );
-    // start entities
-    {
-        animated_cube := *game.entities[3];
-
-        play_animation(
-            animated_cube,
-            "animation_AnimatedCube",
-            *game.asset_manager,
-            true,
-        );
+        spawn_entity(*game.entity_manager, Damaged_Helmet.{});
     }
 
     while !game.should_quit {
@@ -176,7 +138,8 @@ Renderer      :: #import "Renderer"()(
 #load "animation.jai";
 #load "camera.jai";
 #load "camera_controllers.jai";
-#load "entity.jai";
+#load "entity_manager.jai";
+#load "entities/helmet.jai";
 
 #if DEVELOPER {
     #load "editor.jai";
@@ -214,13 +177,15 @@ update :: (dt: float) {
         }
     }
 
+    update_entity_manager(*game.entity_manager);
+
+    for entity: game.entity_manager.all {
+        update_animation(entity, dt, game.asset_manager);
+    }
+
     if #complete game.camera_controller_kind == {
         case .FLY;
             fly_camera(*game.camera, dt, get_fly_camera_input());
-    }
-
-    for *entity: game.entities {
-        update_animation(entity, dt, game.asset_manager);
     }
 }
 
@@ -232,7 +197,7 @@ render :: () {
         draw_editor(game.is_in_editor_mode);
     }
 
-    for entity: game.entities {
+    for entity: game.entity_manager.all {
         model_asset := asset_manager_get_model(game.asset_manager, entity.model_asset_handle);
 
         Renderer.draw_model(
@@ -284,6 +249,18 @@ init :: () {
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
 
+    display_ids := Windowing.get_display_ids(,, temp);
+    assert(display_ids.count > 0, "No displays(?!)");
+    error =, display_info := Windowing.get_display_info(display_ids[0]);
+    assert(!error, error);
+    Renderer.set_render_resolution(
+        *game.renderer,
+        cast(u32, display_info.width * display_info.dpi),
+        cast(u32, display_info.height * display_info.dpi),
+    );
+
+    game.entity_manager = init_entity_manager(*game.asset_manager, *game.renderer);
+
     #if DEVELOPER {
         init_editor(*game);
         init_debug_drawing(*game.renderer);
@@ -291,12 +268,12 @@ init :: () {
 }
 
 deinit :: () {
-    array_free(game.entities);
-
     #if DEVELOPER {
         deinit_debug_drawing();
         deinit_editor();
     }
+
+    destroy_entity_manager(*game.entity_manager);
 
     Renderer.deinit(*game.renderer);
 
@@ -307,29 +284,6 @@ deinit :: () {
     Windowing.destroy_window(game.window);
     Windowing.deinit();
 }
-
-add_entity :: (
-    name: string,
-    position: Vector3 = {},
-    rotation: Quaternion = {},
-    scale:    Vector3 = { 1, 1, 1 },
-    tint:     Vector4 = { 1, 1, 1, 1 },
-    model_path: string,
-) {
-    model_asset_handle := asset_manager_upload_model(*game.asset_manager, model_path, *game.renderer);
-
-    entity: Entity = {
-        name = name,
-        position = position,
-        rotation = rotation,
-        scale = scale,
-        model_asset_handle = model_asset_handle,
-        tint = tint,
-    };
-
-    array_add(*game.entities, entity);
-}
-
 
 calculate_delta_time :: () -> float {
     now := seconds_since_init();
