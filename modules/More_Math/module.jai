@@ -351,6 +351,10 @@ make_transformation_matrix :: (translation: Vector3, rotation: Quaternion, scale
     return _translation * _rotation * _scale;
 }
 
+wrap_angle :: (angle: float) -> float {
+    return angle - TAU * floor((angle + PI) / TAU);
+}
+
 
 
 #scope_file
