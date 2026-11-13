@@ -1,8 +1,8 @@
-Floor :: struct {
+Cube :: struct {
     #as using base: Entity;
 
-    name = "Floor";
+    name = "Cube";
     model_path = "../../Models/cube.glb";
 
-    scale = { 100, 0.01, 100 };
+    scale = { 1, 1, 1 };
 }

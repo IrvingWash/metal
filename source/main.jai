@@ -36,15 +36,33 @@ main :: () {
 
     { // Loading the level
         game.directional_light = {
-            color = { 0.1, 0.1, 0.1 },
-            direction = { 0.3, -1, 0 },
+            color = { 1, 249.0 / 255.0, 213.0 / 255.0 },
+            direction = { 0.3, -1, 1 },
         };
-        game.renderer.scene_info.scene_data.ambient_color = { 0.03, 0.03, 0.03 };
-        game.renderer.normalized_clear_color = { 0.1, 0.1, 0.1, 1 };
+        game.renderer.scene_info.scene_data.ambient_color = { 0.1, 0.1, 0.1 };
+        game.renderer.normalized_clear_color = { 0, 212.0 / 255.0, 1, 1 };
+        game.renderer.shadow_distance = 10;
 
-        spawn_entity(*game.entity_manager, Floor.{});
+        spawn_entity(*game.entity_manager, Cube.{
+            name = "Floor",
+            scale = { 100, 0.01, 100 },
+            tint = { 99.0 / 255.0, 1, 127.0 / 255.0, 1 },
+        });
 
         spawn_entity(*game.entity_manager, Mech.{});
+
+        for 0 .. 20 {
+            x := random_get_within_range(-50, 50);
+            z := random_get_within_range(-50, 50);
+
+            spawn_entity(
+                *game.entity_manager,
+                Cube.{
+                    position = { x, 0.5, z },
+                    name = "Wall",
+                },
+            );
+        }
     }
 
     while !game.should_quit {
@@ -101,6 +119,8 @@ get_fly_camera_input :: () -> Fly_Camera_Input {
     TEMP_ALLOCATOR_OVERWRITE_MEMORY = DEBUG,
 );
 
+#import "Random";
+
 Windowing     :: #import "Windowing";
 Input         :: #import "Input";
 Renderer      :: #import "Renderer"()(
@@ -115,7 +135,7 @@ Renderer      :: #import "Renderer"()(
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity_manager.jai";
-#load "entities/floor.jai";
+#load "entities/cube.jai";
 #load "entities/mech.jai";
 
 #if DEVELOPER {
