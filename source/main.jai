@@ -237,7 +237,7 @@ render :: () {
         );
     }
 
-    for ssl: game.entity_manager.storage._Sourceless_Spot_Light {
+    for *ssl: game.entity_manager.storage._Sourceless_Spot_Light {
         ssl.params.position = ssl.position;
 
         Renderer.draw_spot_light(

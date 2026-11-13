@@ -159,14 +159,16 @@ DONE
 generate_entity_storage_body :: () -> string #compile_time {
     builder: String_Builder;
 
-    for entity_type_name: ENTITY_TYPE_NAMES {
-        ITEM_PER_BUCKET_COUNT :: 20;
+    ITEM_PER_BUCKET_COUNT     :: 20;
+    ALWAYS_ITERATE_BY_POINTER :: false;
 
+    for entity_type_name: ENTITY_TYPE_NAMES {
         print_to_builder(
             *builder,
-            "    _%1: Bucket_Array(%1, %2, true);\n",
+            "    _%1: Bucket_Array(%1, %2, %3);\n",
             entity_type_name,
             ITEM_PER_BUCKET_COUNT,
+            ALWAYS_ITERATE_BY_POINTER,
         );
     }
 
