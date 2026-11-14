@@ -1148,6 +1148,10 @@ create_vulkan_surface :: (
 
 get_error :: () -> *u8 #foreign libsdl3 "SDL_GetError";
 
+set_window_fullscreen :: (window: *Window, fullscreen: bool) -> bool #foreign libsdl3 "SDL_SetWindowFullscreen";
+
+
+
 #scope_file
 
 SDL_Vulkan_CreateSurface :: (
