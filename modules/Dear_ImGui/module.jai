@@ -22,6 +22,8 @@ Key_Chord :: #type s32;
 
 Draw_Callback :: #type (parent_list: *Draw_List, cmd: *Draw_Cmd) #c_call;
 
+Input_Text_Callback :: #type (data: *Input_Text_Callback_Data) -> s32 #c_call;
+
 Context :: struct {} // @Todo
 
 IO :: struct {
@@ -203,6 +205,31 @@ Key_Data :: struct {
     down_duration:      float; // Duration the key has been down (<0.0f: not pressed, 0.0f: just pressed, >0.0f: time held)
     down_duration_prev: float; // Last frame duration the key has been down
     analog_value:       float; // 0.0f..1.0f for gamepad values
+}
+
+Input_Text_Callback_Data :: struct {
+    ctx:        *Context; // Parent UI context
+    event_flag: Input_Text_Flags; // One ImGuiInputTextFlags_Callback*    // Read-only
+    flags:      Input_Text_Flags; // What user passed to InputText()      // Read-only
+    user_data:  *void; // What user passed to InputText()      // Read-only
+    ID_:        ID; // Widget ID                            // Read-only
+
+    event_key:       Key; // Key pressed (Up/Down/TAB)            // Read-only    // [Completion,History]
+    event_char:      Wchar; // Character input                      // Read-write   // [CharFilter] Replace character with another one, or set to zero to drop. return 1 is equivalent to setting EventChar=0;
+    event_activated: bool; // Input field just got activated       // Read-only    // [Always]
+    buf_dirty:       bool; // Set if you modify Buf/BufTextLen!    // Write        // [Completion,History,Always]
+    buf:            *u8; // Text buffer                          // Read-write   // [Resize] Can replace pointer / [Completion,History,Always] Only write to pointed data, don't replace the actual pointer!
+    buf_text_len:     s32; // Text length (in bytes)               // Read-write   // [Resize,Completion,History,Always] Exclude zero-terminator storage. In C land: == strlen(some_text), in C++ land: string.length()
+    buf_size:        s32; // Buffer size (in bytes) = capacity+1  // Read-only    // [Resize,Completion,History,Always] Include zero-terminator storage. In C land: == ARRAYSIZE(my_char_array), in C++ land: string.capacity()+1
+    cursor_pos:      s32; //                                      // Read-write   // [Completion,History,Always,CharFilter]
+    selection_start: s32; //                                      // Read-write   // [Completion,History,Always,CharFilter] == to SelectionEnd when no selection
+    selection_end:   s32; //                                      // Read-write   // [Completion,History,Always,CharFilter]
+
+    // Helper functions for text manipulation.
+    // Use those function to benefit from the CallbackResize behaviors. Calling those function reset the selection.
+    constructor :: (this: *Input_Text_Callback_Data) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackDataC1Ev";
+    delete_chars :: (this: *Input_Text_Callback_Data, pos: s32, bytes_count: s32) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackData11DeleteCharsEii";
+    insert_chars :: (this: *Input_Text_Callback_Data, pos: s32, text: *u8, text_end: *u8 = null) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackData11InsertCharsEiPKcS1_";
 }
 
 Viewport_Flags :: enum_flags u32 {
@@ -545,6 +572,40 @@ Slider_Flags :: enum_flags u32 {
     INVALID_MASK       :: 0x7000000f;
 }
 
+Input_Text_Flags :: enum_flags u32 {
+    NONE              :: 0x0;
+    CHARS_DECIMAL     :: 0x1;
+    CHARS_HEXADECIMAL :: 0x2;
+    CHARS_SCIENTIFIC  :: 0x4;
+    CHARS_UPPERCASE   :: 0x8;
+    CHARS_NO_BLANK    :: 0x10;
+
+    ALLOW_TAB_INPUT         :: 0x20;
+    ENTER_RETURNS_TRUE      :: 0x40;
+    ESCAPE_CLEARS_ALL       :: 0x80;
+    CTRL_ENTER_FOR_NEW_LINE :: 0x100;
+
+    READ_ONLY             :: 0x200;
+    PASSWORD              :: 0x400;
+    ALWAYS_OVERWRITE      :: 0x800;
+    AUTO_SELECT_ALL       :: 0x1000;
+    PARSE_EMPTY_REF_VAL   :: 0x2000;
+    DISPLAY_EMPTY_REF_VAL :: 0x4000;
+    NO_HORIZONTAL_SCROLL  :: 0x8000;
+    NO_UNDO_REDO          :: 0x10000;
+
+    ELIDE_LEFT :: 0x20000;
+
+    CALLBACK_COMPLETION  :: 0x40000;
+    CALLBACK_HISTORY     :: 0x80000;
+    CALLBACK_ALWAYS      :: 0x100000;
+    CALLBACK_CHAR_FILTER :: 0x200000;
+    CALLBACK_RESIZE      :: 0x400000;
+    CALLBACK_EDIT        :: 0x800000;
+
+    WORD_WRAP :: 0x1000000;
+}
+
 create_context :: (shared_font_atlas: *Font_Atlas = null) -> *Context #foreign libimgui "_ZN5ImGui13CreateContextEP11ImFontAtlas";
 
 get_io :: () -> *IO #foreign libimgui "_ZN5ImGui5GetIOEv";
@@ -598,6 +659,15 @@ text :: (fmt: string, __args: ..Any) {
     formatted_text := builder_to_string(*formatted_text_builder);
     text_c_format("%s", formatted_text.data);
 } @PrintLike
+
+input_text :: (
+    label: *u8,
+    buf: *u8,
+    buf_size: u64,
+    flags: Input_Text_Flags = .NONE,
+    callback: Input_Text_Callback = null,
+    user_data: *void = null,
+) -> bool #foreign libimgui "_ZN5ImGui9InputTextEPKcPcmiPFiP26ImGuiInputTextCallbackDataEPv";
 
 text_c_format :: (fmt: *u8, __args: ..Any) -> void #foreign libimgui "_ZN5ImGui4TextEPKcz";
 

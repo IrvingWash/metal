@@ -113,7 +113,7 @@ Editor :: struct {
     selected_entity_id:       s32;
     gizmo_mode:               Gizmo_Mode;
     gizmo_operation:          Gizmo_Operation;
-    should_draw_model_bounds: bool;
+    should_draw_model_bounds: bool = true;
 }
 
 Gizmo_Mode :: enum {
@@ -255,19 +255,11 @@ draw_entity_section :: () {
         return;
     }
 
-    IM.combo(
-        "##Entity",
-        current_item = *editor.selected_entity_id,
-        getter = (user_data: *void, idx: s32) -> *u8 #c_call {
-            push_context {
-                return temp_c_string(editor.game.entity_manager.all[idx].name);
-            }
-        },
-        user_data = null,
-        items_count = xx editor.game.entity_manager.all.count,
-    );
-
     selected_entity := editor.game.entity_manager.all[editor.selected_entity_id];
+
+    entity_subtype := cast(*Type_Info_Struct, selected_entity.type);
+
+    IM.text(entity_subtype.name);
 
     IM.checkbox(
         "Draw model bounds",
@@ -312,50 +304,10 @@ draw_entity_section :: () {
         );
     }
 
-    IM.drag_float3(
-        "Position##Entity",
-        *selected_entity.position.component,
-        v_speed = 0.1,
-        v_min = 0,
-        v_max = 0,
-    );
 
-    IM.drag_float3(
-        "Scale##Entity",
-        *selected_entity.scale.component,
-        v_speed = 0.1,
-        v_min = 0,
-        v_max = 0,
-    );
+    base := cast(*u8, selected_entity);
 
-    euler := quaternion_to_euler(selected_entity.rotation);
-    euler_degrees: Vector3 = {
-        x = rad_to_deg(euler.x),
-        y = rad_to_deg(euler.y),
-        z = rad_to_deg(euler.z),
-    };
-
-    if IM.drag_float3(
-        "Rotation##Entity",
-        *euler_degrees.component,
-        v_speed = 0.5,
-        v_min = 0,
-        v_max = 0,
-    ) {
-        euler_radians := Vector3.{
-            x = deg_to_rad(euler_degrees.x),
-            y = deg_to_rad(euler_degrees.y),
-            z = deg_to_rad(euler_degrees.z),
-        };
-
-        selected_entity.rotation = euler_to_quaternion(euler_radians);
-    }
-
-    IM.color_picker4(
-        "Tint##Entity",
-        *selected_entity.tint.component,
-        flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
-    );
+    draw_struct(entity_subtype, base);
 }
 
 draw_camera_section :: () {
@@ -541,6 +493,78 @@ gizmo_mode_to_imguizmo :: (mode: Gizmo_Mode) -> IM.Zmo.Mode {
             return .WORLD;
         case .LOCAL;
             return .LOCAL;
+    }
+}
+
+draw_struct :: (tis: *Type_Info_Struct, base: *u8) {
+    for member: tis.members {
+        if array_find(member.notes, "Editor(ignore)")
+            continue;
+
+        if member.type.type == {
+            case .STRING;
+                string_pointer := cast(*string, base + member.offset_in_bytes);
+
+                IM.input_text(
+                    temp_c_string(member.name),
+                    string_pointer.data,
+                    cast(u64, string_pointer.count),
+                    flags = .READ_ONLY,
+                );
+            case .FLOAT;
+                IM.drag_float(
+                    temp_c_string(member.name),
+                    cast(*float, base + member.offset_in_bytes),
+                );
+            case .STRUCT;
+                if member.type == {
+                    case type_info(Vector3);
+                        IM.drag_float3(
+                            temp_c_string(member.name),
+                            cast(*[3]float, base + member.offset_in_bytes),
+                            v_speed = 0.1,
+                        );
+                    case type_info(Vector4);
+                        if array_find(member.notes, "Editor(color)") {
+                            IM.color_picker4(
+                                temp_c_string(member.name),
+                                cast(*[4]float, base + member.offset_in_bytes),
+                                flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
+                            );
+                        } else {
+                            IM.drag_float4(
+                                temp_c_string(member.name),
+                                cast(*[4]float, base + member.offset_in_bytes),
+                                v_speed = 0.1,
+                            );
+                        }
+                    case type_info(Quaternion);
+                        euler := quaternion_to_euler(cast(*Quaternion, (base + member.offset_in_bytes)).*);
+                        euler_degrees: Vector3 = {
+                            x = rad_to_deg(euler.x),
+                            y = rad_to_deg(euler.y),
+                            z = rad_to_deg(euler.z),
+                        };
+
+                        if IM.drag_float3(
+                            temp_c_string(member.name),
+                            *euler_degrees.component,
+                            v_speed = 0.5,
+                            v_min = 0,
+                            v_max = 0,
+                        ) {
+                            euler_radians := Vector3.{
+                                x = deg_to_rad(euler_degrees.x),
+                                y = deg_to_rad(euler_degrees.y),
+                                z = deg_to_rad(euler_degrees.z),
+                            };
+
+                            cast(*Quaternion, base + member.offset_in_bytes).* = euler_to_quaternion(euler_radians);
+                        }
+                    case;
+                        draw_struct(cast(*Type_Info_Struct, member.type), base);
+                }
+        }
     }
 }
 

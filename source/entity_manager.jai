@@ -9,7 +9,7 @@ Entity_Manager :: struct {
 }
 
 Entity :: struct {
-    token: Entity_Token;
+    token: Entity_Token; @Editor(ignore)
 
     name: string;
     type: Type;
@@ -18,14 +18,14 @@ Entity :: struct {
     rotation: Quaternion;
     scale:    Vector3 = { 1, 1, 1 };
 
-    tint: Vector4 = { 1, 1, 1, 1 };
+    tint: Vector4 = { 1, 1, 1, 1 }; @Editor(color)
 
     flags: Entity_Flags;
 
     model_path:         string;
     model_asset_handle: Model_Asset_Handle;
 
-    animation_player:   Animation_Player;
+    animation_player:   Animation_Player; @Editor(ignore)
 }
 
 Entity_Token :: struct {

@@ -16,8 +16,8 @@ Mech :: struct {
 
 
     walk_speed: float = 10;
-    turn_speed := #run deg_to_rad(360);
-    yaw: float = #run deg_to_rad(180);
+    turn_speed: float = #run deg_to_rad(360);
+    yaw:        float = #run deg_to_rad(180);
 }
 
 simulate_mech :: (mech: *Mech, camera: Camera, dt: float, input_state: Input.Input_State) {
