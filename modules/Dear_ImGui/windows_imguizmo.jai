@@ -1,4 +1,4 @@
-zmo :: struct {
+Zmo :: struct {
     // call inside your own window and before Manipulate() in order to draw gizmo to that window.
     // Or pass a specific ImDrawList to draw to (e.g. ImGui::GetForegroundDrawList()).
     set_drawlist :: (drawlist: *Draw_List = null) -> void #foreign libimgui "?SetDrawlist@ImGuizmo@@YAXPEAUImDrawList@@@Z";
@@ -10,7 +10,7 @@ zmo :: struct {
     // globals are not shared between them.
     // More details at https://stackoverflow.com/questions/19373061/what-happens-to-global-and-static-variables-in-a-shared-library-when-it-is-dynam
     // expose method to set imgui context
-    set_im_gui_context :: (ctx: *ImGuiContext) -> void #foreign libimgui "?SetImGuiContext@ImGuizmo@@YAXPEAUImGuiContext@@@Z";
+    set_im_gui_context :: (ctx: *Context) -> void #foreign libimgui "?SetImGuiContext@ImGuizmo@@YAXPEAUImGuiContext@@@Z";
 
     // return true if mouse cursor is over any gizmo control (axis, plan or screen component)
     is_over :: () -> bool #foreign libimgui "?IsOver@ImGuizmo@@YA_NXZ";
@@ -87,9 +87,9 @@ zmo :: struct {
         grid_size: float,
         major_step: float,
         subdivision: u32,
-        major_col: ImU32,
-        minor_col: ImU32,
-        center_col: ImU32,
+        major_col: U32,
+        minor_col: U32,
+        center_col: U32,
     ) -> void #foreign libimgui "?DrawGridCustomColor@ImGuizmo@@YAXPEBM00MMIIII@Z";
 
     // call it when you want a gizmo
@@ -153,8 +153,8 @@ zmo :: struct {
     view_manipulate :: (
         view: *float,
         projection: *float,
-        operation: OPERATION,
-        mode: MODE,
+        operation: Operation,
+        mode: Mode,
         matrix: *float,
         length: float,
         position: Vector2,
@@ -179,17 +179,11 @@ zmo :: struct {
     //   whereas "str_id" denote a string that is only used as an ID and not normally displayed.
     push_id :: (str_id: *u8) -> void #foreign libimgui "?PushID@ImGuizmo@@YAXPEBD@Z";
     push_id :: (str_id_begin: *u8, str_id_end: *u8) -> void #foreign libimgui "?PushID@ImGuizmo@@YAXPEBD0@Z";
-    push_id :: (str_id_begin: *u8, str_id_end: *u8) #no_context {
-        push_id(str_id_begin, str_id_end);
-    }
     push_id :: (ptr_id: *void) -> void #foreign libimgui "?PushID@ImGuizmo@@YAXPEBX@Z";
     push_id :: (int_id: s32) -> void #foreign libimgui "?PushID@ImGuizmo@@YAXH@Z";
     pop_id :: () -> void #foreign libimgui "?PopID@ImGuizmo@@YAXXZ";
     get_id :: (str_id: *u8) -> ID #foreign libimgui "?GetID@ImGuizmo@@YAIPEBD@Z";
     get_id :: (str_id_begin: *u8, str_id_end: *u8) -> ID #foreign libimgui "?GetID@ImGuizmo@@YAIPEBD0@Z";
-    get_id :: (str_id_begin: *u8, str_id_end: *u8) -> ID #no_context {
-        return get_id(str_id_begin, str_id_end);
-    }
     get_id :: (ptr_id: *void) -> ID #foreign libimgui "?GetID@ImGuizmo@@YAIPEBX@Z";
 
     // return true if the cursor is over the operation's gizmo

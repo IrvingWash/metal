@@ -98,22 +98,22 @@ IO :: struct {
     backend_language_user_data: *void; // = NULL // User data for non      C++ programming language backend
 
     // Input Functions
-    add_key_event :: (this: *IO, key: Key, down: bool) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO11AddKeyEventE8ImGuiKeyb";
-    add_key_analog_event :: (this: *IO, key: Key, down: bool, v: float) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO17AddKeyAnalogEventE8ImGuiKeybf";
-    add_mouse_pos_event :: (this: *IO, x: float, y: float) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO16AddMousePosEventEff";
-    add_mouse_button_event :: (this: *IO, button: s32, down: bool) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO19AddMouseButtonEventEib";
-    add_mouse_wheel_event :: (this: *IO, wheel_x: float, wheel_y: float) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO18AddMouseWheelEventEff";
-    add_mouse_source_event :: (this: *IO, source: Mouse_Source) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO19AddMouseSourceEventE16ImGuiMouseSource";
-    add_focus_event :: (this: *IO, focused: bool) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO13AddFocusEventEb";
-    add_input_character :: (this: *IO, c: u32) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO17AddInputCharacterEj";
-    add_input_character_u_t_f16 :: (this: *IO, c: Wchar16) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO22AddInputCharacterUTF16Et";
-    add_input_characters_u_t_f8 :: (this: *IO, str: *u8) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO22AddInputCharactersUTF8EPKc";
+    add_key_event :: (this: *IO, key: Key, down: bool) -> void #cpp_method #foreign libimgui "?AddKeyEvent@ImGuiIO@@QEAAXW4ImGuiKey@@_N@Z";
+    add_key_analog_event :: (this: *IO, key: Key, down: bool, v: float) -> void #cpp_method #foreign libimgui "?AddKeyAnalogEvent@ImGuiIO@@QEAAXW4ImGuiKey@@_NM@Z";
+    add_mouse_pos_event :: (this: *IO, x: float, y: float) -> void #cpp_method #foreign libimgui "?AddMousePosEvent@ImGuiIO@@QEAAXMM@Z";
+    add_mouse_button_event :: (this: *IO, button: s32, down: bool) -> void #cpp_method #foreign libimgui "?AddMouseButtonEvent@ImGuiIO@@QEAAXH_N@Z";
+    add_mouse_wheel_event :: (this: *IO, wheel_x: float, wheel_y: float) -> void #cpp_method #foreign libimgui "?AddMouseWheelEvent@ImGuiIO@@QEAAXMM@Z";
+    add_mouse_source_event :: (this: *IO, source: Mouse_Source) -> void #cpp_method #foreign libimgui "?AddMouseSourceEvent@ImGuiIO@@QEAAXW4ImGuiMouseSource@@@Z";
+    add_focus_event :: (this: *IO, focused: bool) -> void #cpp_method #foreign libimgui "?AddFocusEvent@ImGuiIO@@QEAAX_N@Z";
+    add_input_character :: (this: *IO, c: u32) -> void #cpp_method #foreign libimgui "?AddInputCharacter@ImGuiIO@@QEAAXI@Z";
+    add_input_character_u_t_f16 :: (this: *IO, c: Wchar16) -> void #cpp_method #foreign libimgui "?AddInputCharacterUTF16@ImGuiIO@@QEAAXG@Z";
+    add_input_characters_u_t_f8 :: (this: *IO, str: *u8) -> void #cpp_method #foreign libimgui "?AddInputCharactersUTF8@ImGuiIO@@QEAAXPEBD@Z";
 
-    set_key_event_native_data :: (this: *IO, key: Key, native_keycode: s32, native_scancode: s32, native_legacy_index: s32 = -1) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO21SetKeyEventNativeDataE8ImGuiKeyiii";
-    set_app_accepting_events :: (this: *IO, accepting_events: bool) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO21SetAppAcceptingEventsEb";
-    clear_events_queue :: (this: *IO) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO16ClearEventsQueueEv";
-    clear_input_keys :: (this: *IO) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO14ClearInputKeysEv";
-    clear_input_mouse :: (this: *IO) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIO15ClearInputMouseEv";
+    set_key_event_native_data :: (this: *IO, key: Key, native_keycode: s32, native_scancode: s32, native_legacy_index: s32 = -1) -> void #cpp_method #foreign libimgui "?SetKeyEventNativeData@ImGuiIO@@QEAAXW4ImGuiKey@@HHH@Z";
+    set_app_accepting_events :: (this: *IO, accepting_events: bool) -> void #cpp_method #foreign libimgui "?SetAppAcceptingEvents@ImGuiIO@@QEAAX_N@Z";
+    clear_events_queue :: (this: *IO) -> void #cpp_method #foreign libimgui "?ClearEventsQueue@ImGuiIO@@QEAAXXZ";
+    clear_input_keys :: (this: *IO) -> void #cpp_method #foreign libimgui "?ClearInputKeys@ImGuiIO@@QEAAXXZ";
+    clear_input_mouse :: (this: *IO) -> void #cpp_method #foreign libimgui "?ClearInputMouse@ImGuiIO@@QEAAXXZ";
 
     want_capture_mouse:      bool; // Set when Dear ImGui will use mouse inputs, in this case do not dispatch them to your main game/application (either way, always pass on mouse inputs to imgui). (e.g. unclicked mouse is hovering over an imgui window, widget is active, mouse was clicked over an imgui window, etc.).
     want_capture_keyboard:   bool; // Set when Dear ImGui will use keyboard inputs, in this case do not dispatch them to your main game/application (either way, always pass keyboard inputs to imgui). (e.g. InputText active, or an imgui window is focused and navigation is enabled, etc.).
@@ -168,7 +168,7 @@ IO :: struct {
 
     font_global_scale: float; // Moved io.FontGlobalScale to style.FontScaleMain in 1.92.0 (June 2025)
 
-    constructor :: (this: *IO) -> void #cpp_method #foreign libimgui "_ZN7ImGuiIOC1Ev";
+    constructor :: (this: *IO) -> void #cpp_method #foreign libimgui "??0ImGuiIO@@QEAA@XZ";
 }
 
 Font_Atlas :: struct {} // @Todo
@@ -227,9 +227,9 @@ Input_Text_Callback_Data :: struct {
 
     // Helper functions for text manipulation.
     // Use those function to benefit from the CallbackResize behaviors. Calling those function reset the selection.
-    constructor :: (this: *Input_Text_Callback_Data) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackDataC1Ev";
-    delete_chars :: (this: *Input_Text_Callback_Data, pos: s32, bytes_count: s32) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackData11DeleteCharsEii";
-    insert_chars :: (this: *Input_Text_Callback_Data, pos: s32, text: *u8, text_end: *u8 = null) -> void #cpp_method #foreign libimgui "_ZN26ImGuiInputTextCallbackData11InsertCharsEiPKcS1_";
+    constructor :: (this: *Input_Text_Callback_Data) -> void #cpp_method #foreign libimgui "??0ImGuiInputTextCallbackData@@QEAA@XZ";
+    delete_chars :: (this: *Input_Text_Callback_Data, pos: s32, bytes_count: s32) -> void #cpp_method #foreign libimgui "?DeleteChars@ImGuiInputTextCallbackData@@QEAAXHH@Z";
+    insert_chars :: (this: *Input_Text_Callback_Data, pos: s32, text: *u8, text_end: *u8 = null) -> void #cpp_method #foreign libimgui "?InsertChars@ImGuiInputTextCallbackData@@QEAAXHPEBD0@Z";
 }
 
 Viewport_Flags :: enum_flags u32 {
@@ -606,17 +606,17 @@ Input_Text_Flags :: enum_flags u32 {
     WORD_WRAP :: 0x1000000;
 }
 
-create_context :: (shared_font_atlas: *Font_Atlas = null) -> *Context #foreign libimgui "_ZN5ImGui13CreateContextEP11ImFontAtlas";
+create_context :: (shared_font_atlas: *Font_Atlas = null) -> *Context #foreign libimgui "?CreateContext@ImGui@@YAPEAUImGuiContext@@PEAUImFontAtlas@@@Z";
 
-get_io :: () -> *IO #foreign libimgui "_ZN5ImGui5GetIOEv";
+get_io :: () -> *IO #foreign libimgui "?GetIO@ImGui@@YAAEAUImGuiIO@@XZ";
 
-new_frame :: () -> void #foreign libimgui "_ZN5ImGui8NewFrameEv";
+new_frame :: () -> void #foreign libimgui "?NewFrame@ImGui@@YAXXZ";
 
-render :: () -> void #foreign libimgui "_ZN5ImGui6RenderEv";
+render :: () -> void #foreign libimgui "?Render@ImGui@@YAXXZ";
 
-destroy_context :: (ctx: *Context = null) -> void #foreign libimgui "_ZN5ImGui14DestroyContextEP12ImGuiContext";
+destroy_context :: (ctx: *Context = null) -> void #foreign libimgui "?DestroyContext@ImGui@@YAXPEAUImGuiContext@@@Z";
 
-get_main_viewport :: () -> *Viewport #foreign libimgui "_ZN5ImGui15GetMainViewportEv";
+get_main_viewport :: () -> *Viewport #foreign libimgui "?GetMainViewport@ImGui@@YAPEAUImGuiViewport@@XZ";
 
 set_next_window_pos :: (
     position:  Vector2,
@@ -630,7 +630,7 @@ set_next_window_pos :: (
     position:  *Vector2,
     condition: Condition = .NONE,
     pivot:     *Vector2,
-) -> void #foreign libimgui "_ZN5ImGui16SetNextWindowPosERK6ImVec2iS2_";
+) -> void #foreign libimgui "?SetNextWindowPos@ImGui@@YAXAEBUImVec2@@H0@Z";
 
 set_next_window_size :: (size: Vector2, condition: Condition = .NONE) #no_context {
     set_next_window_size(*size, condition);
@@ -639,17 +639,17 @@ set_next_window_size :: (size: Vector2, condition: Condition = .NONE) #no_contex
 set_next_window_size :: (
     size: *Vector2,
     condition: Condition = .NONE,
-) -> void #foreign libimgui "_ZN5ImGui17SetNextWindowSizeERK6ImVec2i";
+) -> void #foreign libimgui "?SetNextWindowSize@ImGui@@YAXAEBUImVec2@@H@Z";
 
-set_next_window_bg_alpha :: (alpha: float) -> void #foreign libimgui "_ZN5ImGui20SetNextWindowBgAlphaEf";
+set_next_window_bg_alpha :: (alpha: float) -> void #foreign libimgui "?SetNextWindowBgAlpha@ImGui@@YAXM@Z";
 
 begin :: (
     name: *u8,
     p_open: *bool = null,
     flags: Window_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui5BeginEPKcPbi";
+) -> bool #foreign libimgui "?Begin@ImGui@@YA_NPEBDPEA_NH@Z";
 
-end :: () -> void #foreign libimgui "_ZN5ImGui3EndEv";
+end :: () -> void #foreign libimgui "?End@ImGui@@YAXXZ";
 
 text :: (fmt: string, __args: ..Any) {
     push_allocator(temp);
@@ -667,22 +667,22 @@ input_text :: (
     flags: Input_Text_Flags = .NONE,
     callback: Input_Text_Callback = null,
     user_data: *void = null,
-) -> bool #foreign libimgui "_ZN5ImGui9InputTextEPKcPcmiPFiP26ImGuiInputTextCallbackDataEPv";
+) -> bool #foreign libimgui "?InputText@ImGui@@YA_NPEBDPEAD_KHP6AHPEAUImGuiInputTextCallbackData@@@ZPEAX@Z";
 
-text_c_format :: (fmt: *u8, __args: ..Any) -> void #foreign libimgui "_ZN5ImGui4TextEPKcz";
+text_c_format :: (fmt: *u8, __args: ..Any) -> void #foreign libimgui "?Text@ImGui@@YAXPEBDZZ";
 
-get_draw_data :: () -> *Draw_Data #foreign libimgui "_ZN5ImGui11GetDrawDataEv";
+get_draw_data :: () -> *Draw_Data #foreign libimgui "?GetDrawData@ImGui@@YAPEAUImDrawData@@XZ";
 
 collapsing_header :: (
     label: *u8,
     flags: Tree_Node_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui16CollapsingHeaderEPKci";
+) -> bool #foreign libimgui "?CollapsingHeader@ImGui@@YA_NPEBDH@Z";
 
 collapsing_header :: (
     label: *u8,
     p_visible: *bool,
     flags: Tree_Node_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui16CollapsingHeaderEPKcPbi";
+) -> bool #foreign libimgui "?CollapsingHeader@ImGui@@YA_NPEBDPEA_NH@Z";
 
 drag_float :: (
     label: *u8,
@@ -692,7 +692,7 @@ drag_float :: (
     v_max: float = 0.0,
     format: *u8 = "%.3f",
     flags: Slider_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui9DragFloatEPKcPffffS1_i";
+) -> bool #foreign libimgui "?DragFloat@ImGui@@YA_NPEBDPEAMMMM0H@Z";
 
 drag_float3 :: (
     label: *u8,
@@ -702,7 +702,7 @@ drag_float3 :: (
     v_max: float = 0.0,
     format: *u8 = "%.3f",
     flags: Slider_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui10DragFloat3EPKcPffffS1_i";
+) -> bool #foreign libimgui "?DragFloat3@ImGui@@YA_NPEBDQEAMMMM0H@Z";
 
 drag_float4 :: (
     label: *u8,
@@ -712,7 +712,7 @@ drag_float4 :: (
     v_max: float = 0.0,
     format: *u8 = "%.3f",
     flags: Slider_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui10DragFloat4EPKcPffffS1_i";
+) -> bool #foreign libimgui "?DragFloat4@ImGui@@YA_NPEBDQEAMMMM0H@Z";
 
 combo :: (
     label: *u8,
@@ -720,14 +720,14 @@ combo :: (
     items: **u8,
     items_count: s32,
     popup_max_height_in_items: s32 = -1,
-) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiPKS1_ii";
+) -> bool #foreign libimgui "?Combo@ImGui@@YA_NPEBDPEAHQEBQEBDHH@Z";
 
 combo :: (
     label: *u8,
     current_item: *s32,
     items_separated_by_zeros: *u8,
     popup_max_height_in_items: s32 = -1,
-) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiS1_i";
+) -> bool #foreign libimgui "?Combo@ImGui@@YA_NPEBDPEAH0H@Z";
 
 combo :: (
     label: *u8,
@@ -736,53 +736,53 @@ combo :: (
     user_data: *void,
     items_count: s32,
     popup_max_height_in_items: s32 = -1,
-) -> bool #foreign libimgui "_ZN5ImGui5ComboEPKcPiPFS1_PviES3_ii";
+) -> bool #foreign libimgui "?Combo@ImGui@@YA_NPEBDPEAHP6APEBDPEAXH@Z2HH@Z";
 
-separator_text :: (label: *u8) -> void #foreign libimgui "_ZN5ImGui13SeparatorTextEPKc";
+separator_text :: (label: *u8) -> void #foreign libimgui "?SeparatorText@ImGui@@YAXPEBD@Z";
 
 color_edit3 :: (
     label: *u8,
     col: *[3] float,
     flags: Color_Edit_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui10ColorEdit3EPKcPfi";
+) -> bool #foreign libimgui "?ColorEdit3@ImGui@@YA_NPEBDQEAMH@Z";
 
 color_picker3 :: (
     label: *u8,
     col: *[3] float,
     flags: Color_Edit_Flags = .NONE,
-) -> bool #foreign libimgui "_ZN5ImGui12ColorPicker3EPKcPfi";
+) -> bool #foreign libimgui "?ColorPicker3@ImGui@@YA_NPEBDQEAMH@Z";
 
 color_picker4 :: (
     label: *u8,
     col: *[4] float,
     flags: Color_Edit_Flags = .NONE,
     ref_col: *float = null,
-) -> bool #foreign libimgui "_ZN5ImGui12ColorPicker4EPKcPfiPKf";
+) -> bool #foreign libimgui "?ColorPicker4@ImGui@@YA_NPEBDQEAMHPEBM@Z";
 
-button :: (label: *u8, size: *Vector2) -> bool #foreign libimgui "_ZN5ImGui6ButtonEPKcRK6ImVec2";
+button :: (label: *u8, size: *Vector2) -> bool #foreign libimgui "?Button@ImGui@@YA_NPEBDAEBUImVec2@@@Z";
 
 button :: inline (label: *u8, size: Vector2 = {}) -> bool {
     return button(label, *size);
 }
 
-checkbox :: (label: *u8, v: *bool) -> bool #foreign libimgui "_ZN5ImGui8CheckboxEPKcPb";
+checkbox :: (label: *u8, v: *bool) -> bool #foreign libimgui "?Checkbox@ImGui@@YA_NPEBDPEA_N@Z";
 
-set_next_item_open :: (is_open: bool, cond: Condition = .NONE) -> void #foreign libimgui "_ZN5ImGui15SetNextItemOpenEbi";
+set_next_item_open :: (is_open: bool, cond: Condition = .NONE) -> void #foreign libimgui "?SetNextItemOpen@ImGui@@YAX_NH@Z";
 
-is_item_toggled_selection :: () -> bool #foreign libimgui "_ZN5ImGui22IsItemToggledSelectionEv";
+is_item_toggled_selection :: () -> bool #foreign libimgui "?IsItemToggledSelection@ImGui@@YA_NXZ";
 
 same_line :: (
     offset_from_start_x: float = 0.0,
     spacing: float = -1.0,
-) -> void #foreign libimgui "_ZN5ImGui8SameLineEff";
+) -> void #foreign libimgui "?SameLine@ImGui@@YAXMM@Z";
 
-push_item_width :: (item_width: float) -> void #foreign libimgui "_ZN5ImGui13PushItemWidthEf";
+push_item_width :: (item_width: float) -> void #foreign libimgui "?PushItemWidth@ImGui@@YAXM@Z";
 
-pop_item_width :: () -> void #foreign libimgui "_ZN5ImGui12PopItemWidthEv";
+pop_item_width :: () -> void #foreign libimgui "?PopItemWidth@ImGui@@YAXXZ";
 
-get_background_draw_list :: () -> *Draw_List #foreign libimgui "_ZN5ImGui21GetBackgroundDrawListEv";
+get_background_draw_list :: () -> *Draw_List #foreign libimgui "?GetBackgroundDrawList@ImGui@@YAPEAUImDrawList@@XZ";
 
-show_demo_window :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui14ShowDemoWindowEPb";
+show_demo_window :: (p_open: *bool = null) -> void #foreign libimgui "?ShowDemoWindow@ImGui@@YAXPEA_N@Z";
 
 
 
