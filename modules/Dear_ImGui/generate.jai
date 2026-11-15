@@ -35,7 +35,7 @@ SDL_INCLUDE_PATH    :: #run path_join(#filepath, "..", "vendored", "SDL", "inclu
 }
 
 generate_bindings :: () -> error: string {
-    output_file_name := tprint("%.jai", OS);
+    output_file_name := tprint("GENERATED_%.jai", OS);
 
     options: Generate_Bindings_Options;
     array_add(

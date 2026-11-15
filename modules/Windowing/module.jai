@@ -97,6 +97,16 @@ set_window_relative_cursor_mode :: (window: *Window, enabled: bool) -> error: st
     return "";
 }
 
+set_fullscreen :: (window: *Window, fullscreen: bool) -> error: string {
+    ok := SDL.set_window_fullscreen(window, fullscreen);
+    if !ok {
+        error := SDL.get_error();
+        return to_string(error);
+    }
+
+    return "";
+}
+
 // =============================================================================
 // Vulkan-specific
 // =============================================================================
