@@ -7,7 +7,7 @@ Mech :: struct {
 
     scale = { 0.05, 0.05, 0.05 };
 
-    strafe_speed: float = 3;
+    speed: float = 15;
 
     grid_row:    s8 = 1;
     grid_column: s8 = 1;
@@ -15,14 +15,6 @@ Mech :: struct {
 
 simulate_mech :: (mech: *Mech, dt: float) {
     orient_along_camera(mech);
-
-    model_accessor := asset_manager_get_model(game.asset_manager, mech.model_asset_handle).model_accessor;
-
-    transformed_aabb := transform_aabb(model_accessor.aabb, make_world_transform(mech));
-
-    center_offset := transformed_aabb.center - mech.position;
-
-    grid := make_grid(transformed_aabb.center);
 
     key_state := game.input_state.keys;
     using,only(Scan_Code) Input;
@@ -34,7 +26,17 @@ simulate_mech :: (mech: *Mech, dt: float) {
     mech.grid_column = cast(s8, 1 + right - left);
     mech.grid_row    = cast(s8, 1 + down - up);
 
-    mech.position = grid[mech.grid_row][mech.grid_column] - center_offset;
+    model_accessor := asset_manager_get_model(game.asset_manager, mech.model_asset_handle).model_accessor;
+
+    transformed_aabb := transform_aabb(model_accessor.aabb, make_world_transform(mech));
+
+    grid := make_grid(transformed_aabb.center);
+    center_offset := transformed_aabb.center - mech.position;
+
+    target := grid[mech.grid_row][mech.grid_column] - center_offset;
+    blend := 1 - exp(-mech.speed * dt);
+
+    mech.position = lerp(mech.position, target, blend);
 }
 
 
