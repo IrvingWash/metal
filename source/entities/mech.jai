@@ -9,18 +9,12 @@ Mech :: struct {
 
     strafe_speed: float = 3;
 
-    grid_row: s8 = 1;
+    grid_row:    s8 = 1;
     grid_column: s8 = 1;
 }
 
 simulate_mech :: (mech: *Mech, dt: float) {
-    // Orient so mech looks along camera z
-    yaw := atan2(game.camera.front.x, game.camera.front.z);
-    pitch := asin(clamp(-game.camera.front.y, -1, 1));
-    yaw_orientation, pitch_orientation: Quaternion;
-    set_from_axis_and_angle(*yaw_orientation, { 0, 1, 0 }, yaw);
-    set_from_axis_and_angle(*pitch_orientation, { 1, 0, 0 }, pitch);
-    mech.rotation = yaw_orientation * pitch_orientation;
+    orient_along_camera(mech);
 
     model_accessor := asset_manager_get_model(game.asset_manager, mech.model_asset_handle).model_accessor;
 
@@ -30,16 +24,15 @@ simulate_mech :: (mech: *Mech, dt: float) {
 
     grid := make_grid(transformed_aabb.center);
 
-    if game.input_state.keys[Input.Scan_Code.D] & .PRESSED
-        mech.grid_column += 1;
-    if game.input_state.keys[Input.Scan_Code.A] & .PRESSED
-        mech.grid_column -= 1;
-    if game.input_state.keys[Input.Scan_Code.W] & .PRESSED
-        mech.grid_row -= 1;
-    if game.input_state.keys[Input.Scan_Code.S] & .PRESSED
-        mech.grid_row += 1;
-    mech.grid_row    = clamp(mech.grid_row, 0, 2);
-    mech.grid_column = clamp(mech.grid_column, 0, 2);
+    key_state := game.input_state.keys;
+    using,only(Scan_Code) Input;
+    right := ifx key_state[Scan_Code.D] & .DOWN then 1 else 0;
+    left  := ifx key_state[Scan_Code.A] & .DOWN then 1 else 0;
+    up    := ifx key_state[Scan_Code.W] & .DOWN then 1 else 0;
+    down  := ifx key_state[Scan_Code.S] & .DOWN then 1 else 0;
+
+    mech.grid_column = cast(s8, 1 + right - left);
+    mech.grid_row    = cast(s8, 1 + down - up);
 
     mech.position = grid[mech.grid_row][mech.grid_column] - center_offset;
 }
@@ -48,6 +41,16 @@ simulate_mech :: (mech: *Mech, dt: float) {
 
 #scope_file
 
+orient_along_camera :: (mech: *Mech) {
+    yaw := atan2(game.camera.front.x, game.camera.front.z);
+    pitch := asin(clamp(-game.camera.front.y, -1, 1));
+    yaw_orientation, pitch_orientation: Quaternion;
+    set_from_axis_and_angle(*yaw_orientation, { 0, 1, 0 }, yaw);
+    set_from_axis_and_angle(*pitch_orientation, { 1, 0, 0 }, pitch);
+    mech.rotation = yaw_orientation * pitch_orientation;
+}
+
+// @Todo: cache
 make_grid :: (center: Vector3) -> [3][3]Vector3 {
     grid: [3][3]Vector3;
 
@@ -89,19 +92,19 @@ make_grid :: (center: Vector3) -> [3][3]Vector3 {
 
 #if DEVELOPER {
     draw_grid :: (view_center: Vector3, camera_basis: Camera_Basis, size: float) {
-        half      := size / 2;
+        half_size := size / 2;
         cell_size := size / 3;
 
         for i: 0..3 {
-            offset := -half + cell_size * i;
+            offset := -half_size + cell_size * i;
 
             draw_line(
-                view_center + camera_basis.right * offset - camera_basis.up * half,
-                view_center + camera_basis.right * offset + camera_basis.up * half,
+                view_center + camera_basis.right * offset - camera_basis.up * half_size,
+                view_center + camera_basis.right * offset + camera_basis.up * half_size,
             );
             draw_line(
-                view_center + camera_basis.up * offset - camera_basis.right * half,
-                view_center + camera_basis.up * offset + camera_basis.right * half,
+                view_center + camera_basis.up * offset - camera_basis.right * half_size,
+                view_center + camera_basis.up * offset + camera_basis.right * half_size,
             );
         }
     }
