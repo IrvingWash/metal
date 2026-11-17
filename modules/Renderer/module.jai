@@ -39,7 +39,7 @@ Renderer :: struct {
     shadow_pass:    Shadow_Pass;
     tonemap_pass:   Tonemap_Pass;
 
-    normalized_clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
+    clear_color: Vector4 = { 0.01, 0.01, 0.01, 1 };
     frame_index: u64;
 
     overlay_callback_info: Overlay_Callback_Info;
@@ -806,7 +806,7 @@ finish_drawing :: (renderer: *Renderer) -> error: string {
             image_layout               = .COLOR_ATTACHMENT_OPTIMAL,
             load_op                    = .CLEAR,
             store_op                   = .STORE,
-            clear_value.color._float32 = renderer.normalized_clear_color.component,
+            clear_value.color._float32 = renderer.clear_color.component,
         };
 
         depth_rendering_attachment_info := VK.Rendering_Attachment_Info.{
@@ -1134,22 +1134,6 @@ set_render_resolution :: (renderer: *Renderer, width: u32, height: u32) {
 
     renderer.color_hdr_target.should_recreate  = true;
     renderer.color_hdr_target.requested_extent = { width, height };
-}
-
-get_clear_color :: (renderer: Renderer) -> Vector4 {
-    return renderer.normalized_clear_color;
-}
-
-set_clear_color :: (renderer: *Renderer, color: Vector4) {
-    renderer.normalized_clear_color = color;
-}
-
-get_ambient_color :: (renderer: Renderer) -> Vector3 {
-    return renderer.scene_info.scene_data.ambient_color;
-}
-
-set_ambient_color :: (renderer: *Renderer, color: Vector3) {
-    renderer.scene_info.scene_data.ambient_color = color;
 }
 
 upload_textures :: (renderer: *Renderer, textures: []Texture_Accessor) -> error: string, texture_ids: [..]u32 {

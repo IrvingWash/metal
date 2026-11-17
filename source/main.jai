@@ -126,7 +126,7 @@ load_level_1 :: () {
         color = { 1, 1, 1 },
         direction = { 0, -1, -1 },
     };
-    game.renderer.normalized_clear_color = { 0, 0, 6.0 / 255, 1 };
+    game.renderer.clear_color = { 0, 0, 0, 1 };
     game.renderer.shadow_distance = 10;
 
     mech := spawn_entity(*game.entity_manager, Mech.{});

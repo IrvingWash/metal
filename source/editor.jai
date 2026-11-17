@@ -216,29 +216,22 @@ draw_renderer_section :: () {
 
     IM.separator_text("Ambient color##Renderer");
     { // Ambient
-        ambient := Renderer.get_ambient_color(editor.game.renderer);
-
         IM.push_item_width(200);
-        if IM.color_picker3(
+        IM.color_picker3(
             "##AmbientColor##Renderer",
-            *ambient.component,
+            *game.renderer.scene_info.scene_data.ambient_color.component,
             flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
-        ) {
-            Renderer.set_ambient_color(*editor.game.renderer, ambient);
-        }
+        );
     }
 
     IM.separator_text("Clear color##Renderer");
     { // Clear color
-        color := Renderer.get_clear_color(editor.game.renderer);
         IM.push_item_width(200);
-        if IM.color_picker4(
+        IM.color_picker4(
             "##ClearColor##Renderer",
-            *color.component,
+            *game.renderer.clear_color.component,
             flags = .NO_SIDE_PREVIEW | .DISPLAY_RGB,
-        ) {
-            Renderer.set_clear_color(*editor.game.renderer, color);
-        }
+        );
     }
 }
 
