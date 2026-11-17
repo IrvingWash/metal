@@ -115,6 +115,7 @@ Renderer      :: #import "Renderer"()(
 #load "entity.jai";
 #load "entities/cube.jai";
 #load "entities/mech.jai";
+#load "entities/sourceless_spot_light.jai";
 
 #if DEVELOPER {
     #load "editor.jai";
@@ -130,6 +131,31 @@ load_level_1 :: () {
     game.renderer.shadow_distance = 10;
 
     game.camera.position.z = 2.5;
+
+    spawn_entity(
+        *game.entity_manager,
+        Cube.{
+            name = "Floor",
+            scale = { 100, 0.01, 100 },
+            position = { 0, -2, 0 },
+        },
+    );
+
+    spawn_entity(
+        *game.entity_manager,
+        Cube.{
+            name = "Building",
+            scale = { 1, 1, 1 },
+            position = { 3, -2, 0 },
+        },
+    );
+
+    spawn_entity(
+        *game.entity_manager,
+        Sourceless_Spot_Light.{
+            name = "Light",
+        },
+    );
 
     spawn_entity(*game.entity_manager, Mech.{});
 }
@@ -196,6 +222,12 @@ render :: () {
             entity.tint,
             entity.animation_player.pose,
         );
+    }
+
+    for *ssl: game.entity_manager.storage._Sourceless_Spot_Light {
+        ssl.params.position = ssl.position;
+
+        Renderer.draw_spot_light(*game.renderer, ssl.params);
     }
 
     error = Renderer.draw_directional_light(
