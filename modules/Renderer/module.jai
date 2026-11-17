@@ -527,8 +527,7 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     );
     renderer.transforms.projection = make_projection_matrix(
         renderer.camera.fov_vertical,
-        cast(float, renderer.color_hdr_target.image_info.extent.width)
-                / cast(float, renderer.color_hdr_target.image_info.extent.height),
+        get_render_aspect_ratio(renderer),
         renderer.camera.z_near,
         renderer.camera.z_far,
         depth_range_01 = true,
@@ -536,6 +535,11 @@ start_drawing :: (renderer: *Renderer, camera: $T/interface Camera) -> error: st
     renderer.transforms.view_projection = renderer.transforms.projection * renderer.transforms.view;
 
     return "";
+}
+
+get_render_aspect_ratio :: (renderer: Renderer) -> float {
+    return cast(float, renderer.color_hdr_target.image_info.extent.width)
+        / cast(float, renderer.color_hdr_target.image_info.extent.height);
 }
 
 draw_model :: (
@@ -565,8 +569,7 @@ draw_directional_light :: (renderer: *Renderer, params: Directional_Light_Params
         params,
         renderer.camera,
         renderer.shadow_distance,
-        aspect_ratio = cast(float, renderer.color_hdr_target.image_info.extent.width)
-            / cast(float, renderer.color_hdr_target.image_info.extent.height),
+        aspect_ratio = get_render_aspect_ratio(renderer),
         view_transform = renderer.transforms.view,
     );
 

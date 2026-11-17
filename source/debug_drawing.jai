@@ -1,12 +1,24 @@
 Debug_Drawing :: struct {
     renderer: *Renderer.Renderer;
+
+    queue: [..]Renderer.Line_Primitive;
 }
 
 init_debug_drawing :: (renderer: *Renderer.Renderer) {
     debug_drawing.renderer = renderer;
 }
 
-deinit_debug_drawing :: () {};
+deinit_debug_drawing :: () {
+    array_free(debug_drawing.queue);
+};
+
+submit_debug_drawing :: () {
+    for line: debug_drawing.queue {
+        Renderer.draw_line(debug_drawing.renderer, line);
+    }
+
+    array_reset_keeping_memory(*debug_drawing.queue);
+}
 
 draw_cone :: (
     position:         Vector3,
@@ -62,7 +74,10 @@ draw_model_aabb :: (
 }
 
 draw_line :: (a: Vector3, b: Vector3, color: Vector4 = DEFAULT_LINE_COLOR) {
-    Renderer.draw_line(debug_drawing.renderer, { a, b, color });
+    array_add(
+        *debug_drawing.queue,
+        { a, b, color }
+    );
 }
 
 draw_circle :: (

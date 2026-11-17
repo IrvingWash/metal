@@ -129,9 +129,9 @@ load_level_1 :: () {
     game.renderer.clear_color = { 0, 0, 0, 1 };
     game.renderer.shadow_distance = 10;
 
-    mech := spawn_entity(*game.entity_manager, Mech.{});
-    mech_model := asset_manager_get_model(game.asset_manager, mech.model_asset_handle);
-    look_at(*game.camera, (make_world_transform(mech) * make_vector4(mech_model.model_accessor.aabb.center, 1)).xyz);
+    game.camera.position.z = 2.5;
+
+    spawn_entity(*game.entity_manager, Mech.{});
 }
 
 process_input :: () {
@@ -203,6 +203,10 @@ render :: () {
         game.directional_light,
     );
     assert(!error, error);
+
+    #if DEBUG {
+        submit_debug_drawing();
+    }
 
     error = Renderer.finish_drawing(*game.renderer);
     assert(!error, error);

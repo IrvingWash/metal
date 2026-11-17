@@ -299,7 +299,7 @@ is_aabb_intersecting_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
 
 is_aabb_fully_inside_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
     for plane: frustum.planes {
-        d := plane_dot(plane, aabb.center) + plane.d;
+        d := plane_dot(plane, aabb.center);
 
         reach := abs(plane.a) * aabb.extents.x
             + abs(plane.b) * aabb.extents.y
