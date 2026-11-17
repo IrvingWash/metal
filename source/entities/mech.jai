@@ -6,6 +6,7 @@ Mech :: struct {
     model_path = "../../Models/rex-12_mech.glb";
 
     scale = { 0.05, 0.05, 0.05 };
+
     rotation = #run -> Quaternion {
         quaternion: Quaternion;
 

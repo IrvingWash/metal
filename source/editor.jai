@@ -497,24 +497,22 @@ gizmo_mode_to_imguizmo :: (mode: Gizmo_Mode) -> IM.Zmo.Mode {
 }
 
 draw_struct :: (tis: *Type_Info_Struct, base: *u8) {
+    IM.push_id(temp_c_string(tis.name));
+    defer IM.pop_id();
     for member: tis.members {
         if array_find(member.notes, "Editor(ignore)")
             continue;
 
         if member.type.type == {
-            case .STRING;
-                string_pointer := cast(*string, base + member.offset_in_bytes);
-
-                IM.input_text(
-                    temp_c_string(member.name),
-                    string_pointer.data,
-                    cast(u64, string_pointer.count),
-                    flags = .READ_ONLY,
-                );
             case .FLOAT;
                 IM.drag_float(
                     temp_c_string(member.name),
                     cast(*float, base + member.offset_in_bytes),
+                );
+            case .BOOL;
+                IM.checkbox(
+                    temp_c_string(member.name),
+                    cast(*bool, base + member.offset_in_bytes),
                 );
             case .STRUCT;
                 if member.type == {
@@ -562,7 +560,7 @@ draw_struct :: (tis: *Type_Info_Struct, base: *u8) {
                             cast(*Quaternion, base + member.offset_in_bytes).* = euler_to_quaternion(euler_radians);
                         }
                     case;
-                        draw_struct(cast(*Type_Info_Struct, member.type), base);
+                        draw_struct(cast(*Type_Info_Struct, member.type), base + member.offset_in_bytes);
                 }
         }
     }

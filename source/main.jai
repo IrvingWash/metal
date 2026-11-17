@@ -1,6 +1,10 @@
 #placeholder DEBUG;
 #placeholder DEVELOPER;
 
+#if DEBUG {
+    #import "Print_Vars";
+}
+
 Game :: struct {
     window:        *Windowing.Window;
     input_state:   Input.Input_State;
@@ -36,33 +40,24 @@ main :: () {
 
     { // Loading the level
         game.directional_light = {
-            color = { 1, 249.0 / 255.0, 213.0 / 255.0 },
+            color = { 0, 1.0 / 255, 22.0 / 255 },
             direction = { 0.3, -1, 1 },
         };
-        game.renderer.scene_info.scene_data.ambient_color = { 0.1, 0.1, 0.1 };
-        game.renderer.normalized_clear_color = { 0, 212.0 / 255.0, 1, 1 };
+        game.renderer.scene_info.scene_data.ambient_color = { 2.0 / 255, 2.0 / 255, 15.0 / 255 };
+        game.renderer.normalized_clear_color = { 0, 0, 6.0 / 255, 1 };
         game.renderer.shadow_distance = 10;
-
-        spawn_entity(*game.entity_manager, Cube.{
-            name = "Floor",
-            scale = { 100, 0.01, 100 },
-            tint = { 99.0 / 255.0, 1, 127.0 / 255.0, 1 },
-        });
 
         spawn_entity(*game.entity_manager, Mech.{});
 
-        for 0 .. 20 {
-            x := random_get_within_range(-50, 50);
-            z := random_get_within_range(-50, 50);
+        spawn_entity(
+            *game.entity_manager,
+            City.{},
+        );
 
-            spawn_entity(
-                *game.entity_manager,
-                Cube.{
-                    position = { x, 0.5, z },
-                    name = "Wall",
-                },
-            );
-        }
+        spawn_entity(
+            *game.entity_manager,
+            Spot_Light.{},
+        );
     }
 
     while !game.should_quit {
@@ -135,8 +130,11 @@ Renderer      :: #import "Renderer"()(
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "entity_manager.jai";
+#load "entity.jai";
 #load "entities/cube.jai";
 #load "entities/mech.jai";
+#load "entities/city.jai";
+#load "entities/spot_light.jai";
 
 #if DEVELOPER {
     #load "editor.jai";
@@ -219,6 +217,15 @@ render :: () {
             make_world_transform(entity),
             entity.tint,
             entity.animation_player.pose,
+        );
+    }
+
+    for *spot_light: game.entity_manager.storage._Spot_Light {
+        spot_light.params.position = spot_light.position;
+
+        Renderer.draw_spot_light(
+            *game.renderer,
+            spot_light.params,
         );
     }
 

@@ -782,6 +782,12 @@ pop_item_width :: () -> void #foreign libimgui "_ZN5ImGui12PopItemWidthEv";
 
 get_background_draw_list :: () -> *Draw_List #foreign libimgui "_ZN5ImGui21GetBackgroundDrawListEv";
 
+pop_id :: () -> void #foreign libimgui "_ZN5ImGui5PopIDEv";
+
+push_id :: (ptr_id: *void) -> void #foreign libimgui "_ZN5ImGui6PushIDEPKv";
+
+push_id :: (str_id: *u8) -> void #foreign libimgui "_ZN5ImGui6PushIDEPKc";
+
 show_demo_window :: (p_open: *bool = null) -> void #foreign libimgui "_ZN5ImGui14ShowDemoWindowEPb";
 
 

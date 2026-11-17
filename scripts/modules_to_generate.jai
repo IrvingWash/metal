@@ -15,4 +15,8 @@ MODULES_TO_GENERATE :: Module_To_Generate.[
         name = "Dear_ImGui",
         relative_path = "Dear_ImGui/generate.jai",
     },
+    {
+        name = "Mini_Audio",
+        relative_path = "Dear_ImGui/generate.jai",
+    },
 ];

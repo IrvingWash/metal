@@ -35,6 +35,11 @@ DEPENDENCIES :: Dependency.[
         git_url = "https://github.com/CedricGuillemet/ImGuizmo.git",
         pin = "1.10",
     },
+    {
+        name = "miniaudio",
+        git_url = "https://github.com/mackron/miniaudio",
+        pin = "0.11.26",
+    },
 ];
 
 shaderc_on_complete :: () -> ok: bool {
