@@ -5,6 +5,7 @@ Mech :: struct {
 
     model_path = "../../Models/rex-12_mech.glb";
 
+    position = { 0, 0, -2.5 };
     scale = { 0.05, 0.05, 0.05 };
 
     rotation = #run -> Quaternion {
@@ -15,12 +16,59 @@ Mech :: struct {
         return quaternion;
     };
 
-
-    walk_speed: float = 10;
-    turn_speed: float = #run deg_to_rad(360);
-    yaw:        float = #run deg_to_rad(180);
+    strafe_speed: float = 3;
 }
 
+simulate_mech :: (mech: *Mech, dt: float) {
+    direction: Vector3;
+
+    if game.input_state.keys[Input.Scan_Code.D] & .DOWN
+        direction.x += 1;
+    if game.input_state.keys[Input.Scan_Code.A] & .DOWN
+        direction.x -= 1;
+    if game.input_state.keys[Input.Scan_Code.W] & .DOWN
+        direction.y += 1;
+    if game.input_state.keys[Input.Scan_Code.S] & .DOWN
+        direction.y -= 1;
+
+    if direction == Vector3.{ 0, 0, 0 } {
+        return;
+    }
+
+    direction /= length(direction);
+
+    move := direction * mech.strafe_speed * dt;
+
+    frustum := make_frustum_from_matrix(
+        game.renderer.transforms.view_projection,
+        should_normalize = false,
+        depth_range_01 = true,
+    );
+
+    // X
+    previous := mech.position;
+    mech.position.x += move.x;
+    transformed_aabb := transform_aabb(
+        asset_manager_get_model(game.asset_manager, mech.model_asset_handle).model_accessor.aabb,
+        make_world_transform(mech),
+    );
+    if !is_aabb_fully_inside_frustum(transformed_aabb, frustum) {
+        mech.position.x -= move.x;
+    }
+    // Y
+    previous = mech.position;
+    mech.position.y += move.y;
+    transformed_aabb = transform_aabb(
+        asset_manager_get_model(game.asset_manager, mech.model_asset_handle).model_accessor.aabb,
+        make_world_transform(mech),
+    );
+    if !is_aabb_fully_inside_frustum(transformed_aabb, frustum) {
+        mech.position.y -= move.y;
+    }
+}
+
+// 3rd person controlls
+/*
 simulate_mech :: (mech: *Mech, camera: Camera, dt: float, input_state: Input.Input_State) {
     using,only(Scan_Code) Input;
 
@@ -55,6 +103,7 @@ simulate_mech :: (mech: *Mech, camera: Camera, dt: float, input_state: Input.Inp
 
     set_from_axis_and_angle(*mech.rotation, { 0, 1, 0 }, mech.yaw);
 }
+*/
 
 
 

@@ -28,6 +28,8 @@ Game :: struct {
     last_frame_time: float64;
 }
 
+game: Game;
+
 main :: () {
     #if DEBUG {
         defer report_memory_leaks();
@@ -40,24 +42,13 @@ main :: () {
 
     { // Loading the level
         game.directional_light = {
-            color = { 0, 1.0 / 255, 22.0 / 255 },
-            direction = { 0.3, -1, 1 },
+            color = { 1, 1, 1 },
+            direction = { 0, -1, -1 },
         };
-        game.renderer.scene_info.scene_data.ambient_color = { 2.0 / 255, 2.0 / 255, 15.0 / 255 };
         game.renderer.normalized_clear_color = { 0, 0, 6.0 / 255, 1 };
         game.renderer.shadow_distance = 10;
 
         spawn_entity(*game.entity_manager, Mech.{});
-
-        spawn_entity(
-            *game.entity_manager,
-            City.{},
-        );
-
-        spawn_entity(
-            *game.entity_manager,
-            Spot_Light.{},
-        );
     }
 
     while !game.should_quit {
@@ -133,15 +124,11 @@ Renderer      :: #import "Renderer"()(
 #load "entity.jai";
 #load "entities/cube.jai";
 #load "entities/mech.jai";
-#load "entities/city.jai";
-#load "entities/spot_light.jai";
 
 #if DEVELOPER {
     #load "editor.jai";
     #load "debug_drawing.jai";
 }
-
-game: Game;
 
 process_input :: () {
     Input.update(*game.input_state);
@@ -175,24 +162,11 @@ update :: (dt: float) {
     update_entity_manager(*game.entity_manager);
 
     for *mech: game.entity_manager.storage._Mech {
-        simulate_mech(mech, game.camera, dt, game.input_state);
+        simulate_mech(mech, dt);
     }
 
     for entity: game.entity_manager.all {
         update_animation(entity, dt, game.asset_manager);
-    }
-
-    if #complete game.camera_controller_kind == {
-        case .FLY;
-            fly_camera(*game.camera, dt, get_fly_camera_input());
-        case .ORBIT;
-            orbit_camera(
-                *game.camera,
-                get_orbit_camera_input(),
-                game.entity_manager.storage._Mech[0].position,
-                { 0, 1, 0 },
-                2,
-            );
     }
 }
 
@@ -217,15 +191,6 @@ render :: () {
             make_world_transform(entity),
             entity.tint,
             entity.animation_player.pose,
-        );
-    }
-
-    for *spot_light: game.entity_manager.storage._Spot_Light {
-        spot_light.params.position = spot_light.position;
-
-        Renderer.draw_spot_light(
-            *game.renderer,
-            spot_light.params,
         );
     }
 

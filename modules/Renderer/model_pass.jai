@@ -174,7 +174,7 @@ prepare_model_pass :: (
             transformed_aabb := transform_aabb(model_draw_request.accessor.aabb, model_draw_request.transform);
             is_inside_one_of_the_frustums: bool;
             for frustum: frustums_for_culling {
-                if aabb_vs_frustum(transformed_aabb, frustum) {
+                if is_aabb_intersecting_frustum(transformed_aabb, frustum) {
                     is_inside_one_of_the_frustums = true;
                     break;
                 }

@@ -280,7 +280,7 @@ make_frustum_from_matrix :: (matrix: Matrix4, $should_normalize: bool, $depth_ra
     return frustum;
 }
 
-aabb_vs_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
+is_aabb_intersecting_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
     // https://outerra.blogspot.com/2012/11/view-frustum-culling-of-sphere-mapped.html
 
     for plane: frustum.planes {
@@ -290,6 +290,22 @@ aabb_vs_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
         r := dot(abs(normal), aabb.extents);
 
         if d + r < 0 {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+is_aabb_fully_inside_frustum :: (aabb: AABB, frustum: Frustum) -> bool {
+    for plane: frustum.planes {
+        d := plane_dot(plane, aabb.center) + plane.d;
+
+        reach := abs(plane.a) * aabb.extents.x
+            + abs(plane.b) * aabb.extents.y
+            + abs(plane.c) * aabb.extents.z;
+
+        if d < reach {
             return false;
         }
     }

@@ -1,5 +1,5 @@
 Camera :: struct {
-    position: Vector3 = { 0, 0, 5 };
+    position: Vector3 = { 0, 0, 0 };
 
     front: Vector3 = { 0, 0, -1 };
 
