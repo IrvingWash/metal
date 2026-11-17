@@ -18,7 +18,13 @@ simulate_mech :: (mech: *Mech, dt: float) {
     yaw := atan2(game.camera.front.x, game.camera.front.z);
     set_from_axis_and_angle(*mech.rotation, { 0, 1, 0 }, yaw);
 
-    grid := make_grid(mech);
+    model_accessor := asset_manager_get_model(game.asset_manager, mech.model_asset_handle).model_accessor;
+
+    transformed_aabb := transform_aabb(model_accessor.aabb, make_world_transform(mech));
+
+    center_offset := transformed_aabb.center - mech.position;
+
+    grid := make_grid(transformed_aabb.center);
 
     if game.input_state.keys[Input.Scan_Code.D] & .PRESSED
         mech.grid_column += 1;
@@ -31,19 +37,19 @@ simulate_mech :: (mech: *Mech, dt: float) {
     mech.grid_row    = clamp(mech.grid_row, 0, 2);
     mech.grid_column = clamp(mech.grid_column, 0, 2);
 
-    mech.position = grid[mech.grid_row][mech.grid_column];
+    mech.position = grid[mech.grid_row][mech.grid_column] - center_offset;
 }
 
 
 
 #scope_file
 
-make_grid :: (mech: Mech) -> [3][3]Vector3 {
+make_grid :: (center: Vector3) -> [3][3]Vector3 {
     grid: [3][3]Vector3;
 
     camera_basis := calculate_camera_basis(game.camera);
 
-    depth := dot(mech.position - game.camera.position, camera_basis.front);
+    depth := dot(center - game.camera.position, camera_basis.front);
     tan_half_vertical := tan(game.camera.fov_vertical / 2);
     visible_height := 2 * depth * tan_half_vertical;
     visible_width := visible_height * Renderer.get_render_aspect_ratio(game.renderer);
