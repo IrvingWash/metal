@@ -40,16 +40,7 @@ main :: () {
     init();
     defer deinit();
 
-    { // Loading the level
-        game.directional_light = {
-            color = { 1, 1, 1 },
-            direction = { 0, -1, -1 },
-        };
-        game.renderer.normalized_clear_color = { 0, 0, 6.0 / 255, 1 };
-        game.renderer.shadow_distance = 10;
-
-        spawn_entity(*game.entity_manager, Mech.{});
-    }
+    load_level_1();
 
     while !game.should_quit {
         dt := calculate_delta_time();
@@ -128,6 +119,19 @@ Renderer      :: #import "Renderer"()(
 #if DEVELOPER {
     #load "editor.jai";
     #load "debug_drawing.jai";
+}
+
+load_level_1 :: () {
+    game.directional_light = {
+        color = { 1, 1, 1 },
+        direction = { 0, -1, -1 },
+    };
+    game.renderer.normalized_clear_color = { 0, 0, 6.0 / 255, 1 };
+    game.renderer.shadow_distance = 10;
+
+    mech := spawn_entity(*game.entity_manager, Mech.{});
+    mech_model := asset_manager_get_model(game.asset_manager, mech.model_asset_handle);
+    look_at(*game.camera, (make_world_transform(mech) * make_vector4(mech_model.model_accessor.aabb.center, 1)).xyz);
 }
 
 process_input :: () {

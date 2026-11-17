@@ -32,7 +32,7 @@ update_entity_manager :: (manager: *Entity_Manager) {
     make_all(manager);
 }
 
-spawn_entity :: (manager: *Entity_Manager, entity: $T)
+spawn_entity :: (manager: *Entity_Manager, entity: $T) -> *T
 #modify {
     return is_subclass_of(cast(*Type_Info, T), "Entity");
 }
@@ -73,6 +73,8 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T)
     }
 
     manager.next_id += 1;
+
+    return pointer;
 }
 
 #placeholder ENTITY_TYPE_NAMES;
