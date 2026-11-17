@@ -16,7 +16,11 @@ Mech :: struct {
 simulate_mech :: (mech: *Mech, dt: float) {
     // Orient so mech looks along camera z
     yaw := atan2(game.camera.front.x, game.camera.front.z);
-    set_from_axis_and_angle(*mech.rotation, { 0, 1, 0 }, yaw);
+    pitch := asin(clamp(-game.camera.front.y, -1, 1));
+    yaw_orientation, pitch_orientation: Quaternion;
+    set_from_axis_and_angle(*yaw_orientation, { 0, 1, 0 }, yaw);
+    set_from_axis_and_angle(*pitch_orientation, { 1, 0, 0 }, pitch);
+    mech.rotation = yaw_orientation * pitch_orientation;
 
     model_accessor := asset_manager_get_model(game.asset_manager, mech.model_asset_handle).model_accessor;
 
