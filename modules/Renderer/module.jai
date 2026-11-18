@@ -359,10 +359,12 @@ init :: (
 deinit :: (renderer: *Renderer) {
     VK.device_wait_idle(renderer.device);
 
-    #if HAVE_MORE_DEBUG {
-        stats: *u8;
-        VMA.build_stats_string(renderer.allocator, *stats, false);
-        log("%", to_string(stats));
+    #if DEBUG {
+        #if HAVE_MORE_DEBUG {
+            stats: *u8;
+            VMA.build_stats_string(renderer.allocator, *stats, false);
+            log("%", to_string(stats));
+        }
     }
 
     destroy_tonemap_pass(*renderer.tonemap_pass, renderer.device);
