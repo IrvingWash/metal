@@ -20,6 +20,8 @@ Game :: struct {
 
     directional_light: Renderer.Directional_Light_Params;
 
+    grid: Grid;
+
     #if DEVELOPER {
         is_in_editor_mode: bool = false;
     }
@@ -114,6 +116,7 @@ Audio_Player :: #import "Audio_Player";
 #load "animation.jai";
 #load "camera.jai";
 #load "camera_controllers.jai";
+#load "grid.jai";
 #load "entity_manager.jai";
 #load "entity.jai";
 #load "entities/cube.jai";
@@ -132,8 +135,6 @@ load_level_1 :: () {
     };
     game.renderer.clear_color = { 0, 0, 0, 1 };
     game.renderer.shadow_distance = 10;
-
-    game.camera.position.z = 2.5;
 
     spawn_entity(
         *game.entity_manager,
@@ -191,6 +192,8 @@ update :: (dt: float) {
             return;
         }
     }
+
+    update_grid(*game.grid);
 
     update_entity_manager(*game.entity_manager);
 
