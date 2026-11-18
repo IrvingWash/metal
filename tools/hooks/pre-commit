@@ -15,7 +15,7 @@ fi
 # Build
 # ==============================================================================
 echo "Checking build..."
-if ! jai -quiet ./build.jai - --debug; then
+if ! jai -quiet ./build.jai - --debug --developer; then
     echo "❌ Commit blocked: Build failed."
     exit 1
 fi

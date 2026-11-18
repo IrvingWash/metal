@@ -86,6 +86,15 @@ set_volume :: (player: *Audio_Player, audio_accessor: Audio_Accessor, volume: fl
     ma_sound_set_volume(sound, volume);
 }
 
+get_current_position_in_seconds :: (player: Audio_Player, audio_accessor: Audio_Accessor) -> float {
+    result: float;
+    sound := bucket_array_find_pointer(*player.sounds, audio_accessor.sound_locator);
+
+    ma_sound_get_cursor_in_seconds(sound, *result);
+
+    return result;
+}
+
 
 
 #scope_file

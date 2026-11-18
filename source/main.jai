@@ -135,12 +135,6 @@ load_level_1 :: () {
 
     game.camera.position.z = 2.5;
 
-    planet_carrion_handle := asset_manager_upload_audio(
-        *game.asset_manager,
-        "../../planet-carrion.flac",
-        *game.audio_player,
-    );
-
     spawn_entity(
         *game.entity_manager,
         Cube.{
@@ -167,10 +161,6 @@ load_level_1 :: () {
     );
 
     spawn_entity(*game.entity_manager, Mech.{});
-
-    planet_carrion_audio_asset := asset_manager_get_audio(game.asset_manager, planet_carrion_handle);
-    Audio_Player.play_audio(*game.audio_player, planet_carrion_audio_asset.audio_accessor);
-    Audio_Player.set_volume(*game.audio_player, planet_carrion_audio_asset.audio_accessor, 0.1);
 }
 
 process_input :: () {
