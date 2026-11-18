@@ -22,6 +22,8 @@ Game :: struct {
 
     grid: Grid;
 
+    conductor: Conductor;
+
     #if DEVELOPER {
         is_in_editor_mode: bool = false;
     }
@@ -44,6 +46,8 @@ main :: () {
     defer deinit();
 
     load_level_1();
+
+    start_conductor(*game.conductor);
 
     while !game.should_quit {
         dt := calculate_delta_time();
@@ -117,6 +121,7 @@ Audio_Player :: #import "Audio_Player";
 #load "camera.jai";
 #load "camera_controllers.jai";
 #load "grid.jai";
+#load "conductor.jai";
 #load "entity_manager.jai";
 #load "entity.jai";
 #load "entities/cube.jai";
@@ -124,8 +129,8 @@ Audio_Player :: #import "Audio_Player";
 #load "entities/sourceless_spot_light.jai";
 
 #if DEVELOPER {
-    #load "editor.jai";
-    #load "debug_drawing.jai";
+    #load "developer/editor.jai";
+    #load "developer/debug_drawing.jai";
 }
 
 load_level_1 :: () {
@@ -135,6 +140,13 @@ load_level_1 :: () {
     };
     game.renderer.clear_color = { 0, 0, 0, 1 };
     game.renderer.shadow_distance = 10;
+
+    track_handle := asset_manager_upload_audio(
+        *game.asset_manager,
+        "../../planet-carrion.flac",
+        *game.audio_player,
+    );
+    game.conductor.track = asset_manager_get_audio(game.asset_manager, track_handle);
 
     spawn_entity(
         *game.entity_manager,
@@ -196,6 +208,8 @@ update :: (dt: float) {
     update_grid(*game.grid);
 
     update_entity_manager(*game.entity_manager);
+
+    update_conductor(*game.conductor);
 
     for *mech: game.entity_manager.storage._Mech {
         simulate_mech(mech, dt);

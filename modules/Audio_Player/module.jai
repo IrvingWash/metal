@@ -75,7 +75,7 @@ stop_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor) {
 }
 
 pause_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor) {
-    sound := *player.sounds[audio_accessor.sound_locator];
+    sound := bucket_array_find_pointer(*player.sounds, audio_accessor.sound_locator);
 
     ma_sound_stop(sound);
 }
