@@ -80,7 +80,7 @@ pause_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor) {
     ma_sound_stop(sound);
 }
 
-set_volume :: (player: *Audio_Player, audio_accessor: Audio_Accessor, volume: float) {
+set_volume_for_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor, volume: float) {
     sound := bucket_array_find_pointer(*player.sounds, audio_accessor.sound_locator);
 
     ma_sound_set_volume(sound, volume);
