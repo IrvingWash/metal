@@ -228,6 +228,14 @@ flush_allocation :: (
 ) -> Result #foreign libvma "vmaFlushAllocation";
 
 
+build_stats_string :: (
+    allocator: Allocator,
+    pp_stats_string: **u8,
+    detailed_map: bool
+) -> void #foreign libvma "vmaBuildStatsString";
+
+
+
 #scope_file
 
 Allocator_T  :: struct {}
