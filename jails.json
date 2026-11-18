@@ -14,7 +14,10 @@
         "modules/Shaderc/module.jai",
         "modules/Shaderc/generate.jai",
         "modules/Renderer/module.jai",
-        "modules/Type_Utils/module.jai"
+        "modules/Type_Utils/module.jai",
+        "modules/Mini_Audio/generate.jai",
+        "modules/Mini_Audio/module.jai",
+        "modules/Audio_Player/module.jai"
     ],
     "build_root": "build.jai",
     "intermediate_path": ".build",

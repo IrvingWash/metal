@@ -3,8 +3,10 @@ Asset_Manager :: struct {
     shaders_path: string;
 
     model_asset_handles_by_path: Table(string, Model_Asset_Handle);
-
     model_assets: Bucket_Array(Model_Asset, 64);
+
+    audio_asset_handles_by_path: Table(string, Audio_Asset_Handle);
+    audio_assets: Bucket_Array(Audio_Asset, 32);
 }
 
 Model_Asset_Handle :: #type,distinct Bucket_Locator;
@@ -12,6 +14,12 @@ Model_Asset_Handle :: #type,distinct Bucket_Locator;
 Model_Asset :: struct {
     model_accessor: Renderer.Model_Accessor;
     animations:     [..]Animation;
+}
+
+Audio_Asset_Handle :: #type,distinct Bucket_Locator;
+
+Audio_Asset :: struct {
+    audio_accessor: Audio_Player.Audio_Accessor;
 }
 
 init_asset_manager :: () -> Asset_Manager {
@@ -28,6 +36,13 @@ init_asset_manager :: () -> Asset_Manager {
 }
 
 deinit_asset_manager :: (asset_manager: *Asset_Manager) {
+    bucket_array_reset(*asset_manager.audio_assets);
+
+    for value, key: asset_manager.audio_asset_handles_by_path {
+        free(key);
+    }
+    deinit(*asset_manager.audio_asset_handles_by_path);
+
     for value, key: asset_manager.model_asset_handles_by_path {
         free(key);
     }
@@ -68,6 +83,35 @@ asset_manager_get_model :: (asset_manager: Asset_Manager, handle: Model_Asset_Ha
 
 asset_manager_get_model_pointer :: (asset_manager: *Asset_Manager, handle: Model_Asset_Handle) -> *Model_Asset {
     return bucket_array_find_pointer(*asset_manager.model_assets, cast(Bucket_Locator, handle));
+}
+
+asset_manager_upload_audio :: (
+    asset_manager: *Asset_Manager,
+    path: string,
+    audio_player: *Audio_Player.Audio_Player,
+) -> Audio_Asset_Handle {
+    normalized_path := get_absolute_path(path);
+
+    found, handle := table_find(*asset_manager.audio_asset_handles_by_path, normalized_path);
+    if found {
+        return handle;
+    }
+
+    error, audio_accessor := Audio_Player.upload_audio(audio_player, normalized_path);
+    assert(!error, error);
+    locator := bucket_array_add(
+        *asset_manager.audio_assets,
+        Audio_Asset.{ audio_accessor = audio_accessor },
+    );
+    table_set(*asset_manager.audio_asset_handles_by_path, copy_string(normalized_path), handle);
+
+    return cast(Audio_Asset_Handle, locator);
+}
+
+asset_manager_get_audio :: (asset_manager: Asset_Manager, handle: Audio_Asset_Handle) -> Audio_Asset {
+    audio_asset := bucket_array_find(*asset_manager.audio_assets, cast(Bucket_Locator, handle));
+
+    return audio_asset;
 }
 
 // @Todo: In the future, this will just upload our own binaries.
@@ -602,6 +646,7 @@ get_or_upload_texture :: (
 #import "Hash_Table";
 
 Renderer :: #import "Renderer";
+Audio_Player :: #import "Audio_Player";
 
 #load "convertation/model_dto.jai";
 #load "convertation/gltf_converter.jai";

@@ -10,6 +10,7 @@ Game :: struct {
     input_state:   Input.Input_State;
     asset_manager: Asset_Manager;
     renderer:      Renderer.Renderer;
+    audio_player:  Audio_Player.Audio_Player;
 
     camera: Camera;
 
@@ -105,6 +106,8 @@ Renderer      :: #import "Renderer"()(
     APPLICATION_NAME = "metal",
     DEBUG            = DEBUG,
 );
+Audio_Player :: #import "Audio_Player";
+
 #import "More_Math";
 
 #load "asset_manager.jai";
@@ -132,6 +135,12 @@ load_level_1 :: () {
 
     game.camera.position.z = 2.5;
 
+    planet_carrion_handle := asset_manager_upload_audio(
+        *game.asset_manager,
+        "../../planet-carrion.flac",
+        *game.audio_player,
+    );
+
     spawn_entity(
         *game.entity_manager,
         Cube.{
@@ -158,6 +167,10 @@ load_level_1 :: () {
     );
 
     spawn_entity(*game.entity_manager, Mech.{});
+
+    planet_carrion_audio_asset := asset_manager_get_audio(game.asset_manager, planet_carrion_handle);
+    Audio_Player.play_audio(*game.audio_player, planet_carrion_audio_asset.audio_accessor);
+    Audio_Player.set_volume(*game.audio_player, planet_carrion_audio_asset.audio_accessor, 0.1);
 }
 
 process_input :: () {
@@ -267,6 +280,9 @@ init :: () {
     );
     assert(error == "", "Failed to initialize Renderer: %", error);
 
+    error, game.audio_player = Audio_Player.init();
+    assert(!error, "Failed to initialize Audio_Player: %", error);
+
     display_ids := Windowing.get_display_ids(,, temp);
     assert(display_ids.count > 0, "No displays(?!)");
     error =, display_info := Windowing.get_display_info(display_ids[0]);
@@ -292,6 +308,8 @@ deinit :: () {
     }
 
     destroy_entity_manager(*game.entity_manager);
+
+    Audio_Player.deinit(*game.audio_player);
 
     Renderer.deinit(*game.renderer);
 

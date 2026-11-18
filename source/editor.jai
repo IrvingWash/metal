@@ -497,6 +497,10 @@ draw_struct :: (tis: *Type_Info_Struct, base: *u8) {
             continue;
 
         if member.type.type == {
+            case .STRING;
+                IM.text(
+                    cast(*string, base + member.offset_in_bytes).*
+                );
             case .FLOAT;
                 IM.drag_float(
                     temp_c_string(member.name),

@@ -3,7 +3,7 @@
 Shadow_Pass :: struct {
     descriptor_pool:       VK.Descriptor_Pool;
     descriptor_set_layout: VK.Descriptor_Set_Layout;
-    descriptor_set:       VK.Descriptor_Set;
+    descriptor_set:        VK.Descriptor_Set;
 
     sampler: VK.Sampler;
 
@@ -347,7 +347,7 @@ MAX_SPOT_LIGHT_SHADOW_MAP_COUNT        :: MAX_SHADOWED_SPOT_LIGHT_COUNT;
 DEFAULT_SHADOW_DEPTH_IMAGE_FORMAT :: VK.Format.D32_SFLOAT;
 DEFAULT_DIRECTIONAL_LIGHT_SHADOW_DEPTH_IMAGE_WIDTH  :: 2048;
 DEFAULT_DIRECTIONAL_LIGHT_SHADOW_DEPTH_IMAGE_HEIGHT :: 2048;
-DEFAULT_SPOT_LIGHT_SHADOW_DEPTH_IMAGE_WIDTH :: 512;
+DEFAULT_SPOT_LIGHT_SHADOW_DEPTH_IMAGE_WIDTH  :: 512;
 DEFAULT_SPOT_LIGHT_SHADOW_DEPTH_IMAGE_HEIGHT :: 512;
 
 create_shadow_maps :: (
