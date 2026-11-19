@@ -1,5 +1,8 @@
 # metal
 
+WARNING:
+I'm currently porting this project to C++: [metal](https://github.com/IrvingWash/mechtal)
+
 This project contains all the rendering/math and OS layer code that I've written for a game I'm working on.
 This is a Vulkan 3D renderer with:
 - PBR support (normal, metallic, roughnes, ao maps, material system, etc)
