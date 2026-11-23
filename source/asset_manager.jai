@@ -37,9 +37,6 @@ init_asset_manager :: () -> Asset_Manager {
 }
 
 deinit_asset_manager :: (asset_manager: *Asset_Manager) {
-    for *audio_asset: asset_manager.audio_assets {
-        Audio_Player.destroy_audio(*audio_asset.audio_accessor);
-    }
     bucket_array_reset(*asset_manager.audio_assets);
 
     for value, key: asset_manager.audio_asset_handles_by_path {
