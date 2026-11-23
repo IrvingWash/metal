@@ -24,6 +24,8 @@ init_entity_manager :: (asset_manager: *Asset_Manager, renderer: *Renderer.Rende
 
 destroy_entity_manager :: (manager: *Entity_Manager) {
     array_free(manager.all);
+
+    destroy_entity_storage(*manager.storage);
 }
 
 update_entity_manager :: (manager: *Entity_Manager) {
@@ -83,10 +85,28 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T) -> *T
 
 #scope_file
 
+destroy_entity_storage :: (storage: *Entity_Storage) {
+    #insert -> string {
+        return generate_destroy_entity_storage_body();
+    }
+}
+
+// This is stupid, but I didn't figure out yet how to avoid this.
+// I need a way to iterate over all entities. But here we walk all entities each frame and collect their pointers...
 make_all :: (manager: *Entity_Manager) {
     #insert -> string {
         return generate_make_all_body();
     }
+}
+
+generate_destroy_entity_storage_body :: () -> string #compile_time {
+    builder: String_Builder;
+
+    for entity_type_name: ENTITY_TYPE_NAMES {
+        print_to_builder(*builder, "    bucket_array_reset(*storage._%);\n", entity_type_name);
+    }
+
+    return builder_to_string(*builder);
 }
 
 generate_make_all_body :: () -> string #compile_time {

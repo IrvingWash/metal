@@ -23,9 +23,9 @@ Renderer :: struct {
     timeline_semaphore_info: Timeline_Semaphore_Info;
     transient_command_pool:  VK.Command_Pool;
 
-    swapchain_info:      Swapchain_Info;
-    depth_image_info:    Image_Info;
-    color_hdr_target:    Color_Hdr_Target;
+    swapchain_info:   Swapchain_Info;
+    depth_image_info: Image_Info;
+    color_hdr_target: Color_Hdr_Target;
     color_ldr_target: Image_Info;
 
     frame_resources_list: [FRAMES_IN_FLIGHT_COUNT]Frame_Resources;

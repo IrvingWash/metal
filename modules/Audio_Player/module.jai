@@ -1,11 +1,9 @@
 Audio_Player :: struct {
     engine: *ma_engine;
-
-    sounds: Bucket_Array(ma_sound, 32);
 }
 
 Audio_Accessor :: struct {
-    sound_locator: Bucket_Locator;
+    sound: *ma_sound;
 }
 
 init :: () -> error: string, Audio_Player {
@@ -24,11 +22,6 @@ init :: () -> error: string, Audio_Player {
 }
 
 deinit :: (player: *Audio_Player) {
-    for *sound: player.sounds {
-        ma_sound_uninit(sound);
-    }
-    bucket_array_reset(*player.sounds);
-
     ma_engine_uninit(player.engine);
     free(player.engine);
 
@@ -37,8 +30,7 @@ deinit :: (player: *Audio_Player) {
 
 upload_audio :: (player: *Audio_Player, path: string) -> error: string, Audio_Accessor {
     audio_accessor: Audio_Accessor;
-
-    locator, sound := bucket_array_add(*player.sounds, .{});
+    audio_accessor.sound = New(ma_sound);
 
     result := ma_sound_init_from_file(
         player.engine,
@@ -46,51 +38,42 @@ upload_audio :: (player: *Audio_Player, path: string) -> error: string, Audio_Ac
         cast(u32, ma_sound_flags.DECODE),
         null,
         null,
-        sound,
+        audio_accessor.sound,
     );
     if result != .SUCCESS {
-        bucket_array_remove(*player.sounds, locator);
-
         return
             tprint("Failed to initialize sound at %: %", path, result),
             {};
     }
 
-    audio_accessor.sound_locator = locator;
-
     return "", audio_accessor;
 }
 
-play_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor) {
-    sound := bucket_array_find_pointer(*player.sounds, audio_accessor.sound_locator);
+destroy_audio :: (audio_asset: *Audio_Accessor) {
+    ma_sound_uninit(audio_asset.sound);
+    free(audio_asset.sound);
+}
 
-    ma_sound_start(sound);
+play_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor) {
+    ma_sound_start(audio_accessor.sound);
 }
 
 stop_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor) {
-    sound := *player.sounds[audio_accessor.sound_locator];
-
-    ma_sound_stop(sound);
-    ma_sound_seek_to_pcm_frame(sound, 0);
+    ma_sound_stop(audio_accessor.sound);
+    ma_sound_seek_to_pcm_frame(audio_accessor.sound, 0);
 }
 
 pause_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor) {
-    sound := bucket_array_find_pointer(*player.sounds, audio_accessor.sound_locator);
-
-    ma_sound_stop(sound);
+    ma_sound_stop(audio_accessor.sound);
 }
 
 set_volume_for_audio :: (player: *Audio_Player, audio_accessor: Audio_Accessor, volume: float) {
-    sound := bucket_array_find_pointer(*player.sounds, audio_accessor.sound_locator);
-
-    ma_sound_set_volume(sound, volume);
+    ma_sound_set_volume(audio_accessor.sound, volume);
 }
 
 get_current_position_in_seconds :: (player: Audio_Player, audio_accessor: Audio_Accessor) -> float {
     result: float;
-    sound := bucket_array_find_pointer(*player.sounds, audio_accessor.sound_locator);
-
-    ma_sound_get_cursor_in_seconds(sound, *result);
+    ma_sound_get_cursor_in_seconds(audio_accessor.sound, *result);
 
     return result;
 }
@@ -101,4 +84,3 @@ get_current_position_in_seconds :: (player: Audio_Player, audio_accessor: Audio_
 
 #import "Basic";
 #import "Mini_Audio";
-#import "Bucket_Array";

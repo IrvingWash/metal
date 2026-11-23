@@ -37,7 +37,7 @@ game: Game;
 
 main :: () {
     #if DEBUG {
-        defer report_memory_leaks();
+        defer report_memory_leaks({ scan_global_memory_to_remove_leaks = false });
     }
 
     setup_formatting();
@@ -314,15 +314,17 @@ deinit :: () {
         deinit_editor();
     }
 
-    destroy_entity_manager(*game.entity_manager);
+    #if DEBUG {
+        destroy_entity_manager(*game.entity_manager);
 
-    Audio_Player.deinit(*game.audio_player);
+        Audio_Player.deinit(*game.audio_player);
 
-    Renderer.deinit(*game.renderer);
+        Renderer.deinit(*game.renderer);
 
-    deinit_asset_manager(*game.asset_manager);
+        deinit_asset_manager(*game.asset_manager);
 
-    Input.deinit(*game.input_state);
+        Input.deinit(*game.input_state);
+    }
 
     Windowing.destroy_window(game.window);
     Windowing.deinit();
