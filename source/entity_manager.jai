@@ -1,3 +1,5 @@
+#placeholder ENTITY_TYPE_NAMES;
+
 Entity_Manager :: struct {
     all:     [..]*Entity;
     storage: Entity_Storage;
@@ -23,15 +25,12 @@ init_entity_manager :: (asset_manager: *Asset_Manager, renderer: *Renderer.Rende
 }
 
 destroy_entity_manager :: (manager: *Entity_Manager) {
+    for entity: manager.all {
+        destroy_entity(entity);
+    }
     array_free(manager.all);
 
     destroy_entity_storage(*manager.storage);
-}
-
-update_entity_manager :: (manager: *Entity_Manager) {
-    array_reset_keeping_memory(*manager.all);
-
-    make_all(manager);
 }
 
 spawn_entity :: (manager: *Entity_Manager, entity: $T) -> *T
@@ -50,17 +49,30 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T) -> *T
         for ENTITY_TYPE_NAMES {
             print_to_builder(
                 *builder,
-                "        case %1; locator, pointer = bucket_array_add(*manager.storage._%1, entity);\n",
+                #string DONE
+        case %1;
+            pointer, locator = find_and_occupy_empty_slot(*manager.storage._%1, false);
+            pointer.* = entity;
+                DONE,
                 it,
             );
         }
 
-        print_to_builder(*builder, "        case; #assert false \"Unknown entity type %\";\n", T);
+        print_to_builder(
+            *builder,
+            #string DONE
+        case;
+            #assert false "Unknown entity type %";
+            DONE,
+            T,
+        );
 
         print_to_builder(*builder, "    }\n");
 
         return builder_to_string(*builder);
     }
+
+    array_add(*manager.all, pointer);
 
     pointer.type = T;
     pointer.token.locator = locator;
@@ -79,7 +91,65 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T) -> *T
     return pointer;
 }
 
-#placeholder ENTITY_TYPE_NAMES;
+remove_entity :: (manager: *Entity_Manager, entity: *$T)
+#modify {
+    return is_subclass_of(cast(*Type_Info, T), "Entity");
+}
+{
+    entity.flags |= .PENDING_REMOVAL;
+}
+
+update_entity_manager :: (manager: *Entity_Manager) {
+    for entity: manager.all {
+        if entity.flags & .PENDING_REMOVAL {
+            token := entity.token;
+            type  := entity.type;
+            destroy_entity(entity);
+
+            #insert -> string {
+                builder: String_Builder;
+
+                print_to_builder(
+                    *builder,
+                    #string DONE
+                    if type == {
+                    DONE,
+                );
+
+                for entity_type_name: ENTITY_TYPE_NAMES {
+                    print_to_builder(
+                        *builder,
+                        #string DONE
+                        case %1;
+                            bucket_array_remove(*manager.storage._%1, token.locator);
+                        DONE,
+                        entity_type_name,
+                    );
+                }
+
+                print_to_builder(
+                    *builder,
+                    #string DONE
+                    case;
+                        assert(false, "Unknown entity type %", type);
+                    DONE,
+                    "%",
+                );
+
+                print_to_builder(
+                    *builder,
+                    #string DONE
+                    }
+                    DONE
+                );
+
+                return builder_to_string(*builder);
+            }
+
+            remove entity;
+        }
+    }
+}
 
 
 
@@ -91,14 +161,6 @@ destroy_entity_storage :: (storage: *Entity_Storage) {
     }
 }
 
-// This is stupid, but I didn't figure out yet how to avoid this.
-// I need a way to iterate over all entities. But here we walk all entities each frame and collect their pointers...
-make_all :: (manager: *Entity_Manager) {
-    #insert -> string {
-        return generate_make_all_body();
-    }
-}
-
 generate_destroy_entity_storage_body :: () -> string #compile_time {
     builder: String_Builder;
 
@@ -107,37 +169,6 @@ generate_destroy_entity_storage_body :: () -> string #compile_time {
     }
 
     return builder_to_string(*builder);
-}
-
-generate_make_all_body :: () -> string #compile_time {
-INSERTION_STRING :: #string DONE
-    array_reserve(*manager.all, %);
-
-    %
-DONE
-
-    reserve_count_code_builder: String_Builder;
-    add_to_all_code_builder:    String_Builder;
-
-    for entity_type_name: ENTITY_TYPE_NAMES {
-        print_to_builder(
-            *reserve_count_code_builder,
-            "        + manager.storage._%.count\n",
-            entity_type_name,
-        );
-
-        print_to_builder(
-            *add_to_all_code_builder,
-            "    for *manager.storage._% array_add(*manager.all, it);\n",
-            entity_type_name,
-        );
-    }
-
-    return tprint(
-        INSERTION_STRING,
-        builder_to_string(*reserve_count_code_builder),
-        builder_to_string(*add_to_all_code_builder),
-    );
 }
 
 generate_entity_storage_body :: () -> string #compile_time {

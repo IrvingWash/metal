@@ -8,14 +8,24 @@ start_conductor :: (conductor: *Conductor) {
     Audio_Player.set_volume_for_audio(*game.audio_player, conductor.track.audio_accessor, 0.1);
 }
 
-spawned: bool;
+spawned:   bool;
+despawned: bool;
 
 SPAWN_TIMESTAMP     :: 17.135;
 INTERSECT_TIMESTAMP :: 22.135;
+DESPAWN_TIMESTAMP   :: 25.135;
 SPAWN_DISTANCE_FACTOR :: 10.0;
 
 update_conductor :: (conductor: *Conductor) {
     song_time := Audio_Player.get_current_position_in_seconds(game.audio_player, conductor.track.audio_accessor);
+
+    if song_time >= DESPAWN_TIMESTAMP && !despawned {
+        for *entity: game.entity_manager.storage._Cube {
+            remove_entity(*game.entity_manager, entity);
+        }
+
+        despawned = true;
+    }
 
     if song_time >= SPAWN_TIMESTAMP && !spawned {
         cube_index := 0;

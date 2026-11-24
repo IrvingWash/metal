@@ -14,8 +14,6 @@ Game :: struct {
 
     camera: Camera;
 
-    camera_controller_kind: Camera_Controller_Kind = .ORBIT;
-
     entity_manager: Entity_Manager;
 
     directional_light: Renderer.Directional_Light_Params;
@@ -205,9 +203,9 @@ update :: (dt: float) {
         }
     }
 
-    update_grid(*game.grid);
-
     update_entity_manager(*game.entity_manager);
+
+    update_grid(*game.grid);
 
     update_conductor(*game.conductor);
 

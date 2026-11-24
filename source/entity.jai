@@ -26,6 +26,11 @@ Entity_Token :: struct {
 Entity_Flags :: enum_flags {
     NONE;
     INVISIBLE;
+    PENDING_REMOVAL;
+}
+
+operator == :: (a: Entity_Token, b: Entity_Token) -> bool {
+    return a.id == b.id && a.locator == b.locator;
 }
 
 make_world_transform :: (entity: Entity) -> Matrix4 {
@@ -34,4 +39,8 @@ make_world_transform :: (entity: Entity) -> Matrix4 {
     rotation    := rotation_matrix(Matrix4, entity.rotation);
 
     return translation * rotation * scale;
+}
+
+destroy_entity :: (entity: *Entity) {
+    entity.* = {};
 }

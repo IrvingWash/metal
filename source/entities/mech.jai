@@ -51,6 +51,4 @@ orient_along_camera :: (mech: *Mech) {
     mech.rotation = yaw_orientation * pitch_orientation;
 }
 
-// @Todo: cache
-
 Input :: #import "Input";
