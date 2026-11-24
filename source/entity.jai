@@ -33,6 +33,10 @@ operator == :: (a: Entity_Token, b: Entity_Token) -> bool {
     return a.id == b.id && a.locator == b.locator;
 }
 
+operator == :: (a: Bucket_Locator, b: Bucket_Locator) -> bool {
+    return a.bucket_index == b.bucket_index && a.slot_index == b.slot_index;
+}
+
 make_world_transform :: (entity: Entity) -> Matrix4 {
     translation := make_translation_matrix4(entity.position);
     scale       := make_scale_matrix4(entity.scale);

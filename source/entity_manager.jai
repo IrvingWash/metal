@@ -33,6 +33,20 @@ destroy_entity_manager :: (manager: *Entity_Manager) {
     destroy_entity_storage(*manager.storage);
 }
 
+get_entity :: (manager: *Entity_Manager, token: Entity_Token, $R: Type = Entity) -> *R
+#modify {
+    return R == Entity || is_subclass_of(cast(*Type_Info, R), "Entity");
+}
+{
+    for entity: manager.all {
+        if entity.token == token {
+            return cast(*R, entity);
+        }
+    }
+
+    return null;
+}
+
 spawn_entity :: (manager: *Entity_Manager, entity: $T) -> *T
 #modify {
     return is_subclass_of(cast(*Type_Info, T), "Entity");
@@ -93,7 +107,7 @@ spawn_entity :: (manager: *Entity_Manager, entity: $T) -> *T
 
 remove_entity :: (manager: *Entity_Manager, entity: *$T)
 #modify {
-    return is_subclass_of(cast(*Type_Info, T), "Entity");
+    return T == Entity || is_subclass_of(cast(*Type_Info, T), "Entity");
 }
 {
     entity.flags |= .PENDING_REMOVAL;
