@@ -125,6 +125,7 @@ Audio_Player :: #import "Audio_Player";
 #load "entities/cube.jai";
 #load "entities/mech.jai";
 #load "entities/sourceless_spot_light.jai";
+#load "entities/enemy_cube.jai";
 
 #if DEVELOPER {
     #load "developer/editor.jai";
@@ -141,7 +142,7 @@ load_level_1 :: () {
 
     track_handle := asset_manager_upload_audio(
         *game.asset_manager,
-        "../../planet-carrion.flac",
+        "../../castevet_the_curve.wav",
         *game.audio_player,
     );
     game.conductor.track = asset_manager_get_audio(game.asset_manager, track_handle);

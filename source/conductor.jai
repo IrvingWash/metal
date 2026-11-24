@@ -1,6 +1,6 @@
 Conductor :: struct {
     track: Audio_Asset;
-    cubes: [8]*Cube;
+    enemy_cube: *Enemy_Cube;
 }
 
 start_conductor :: (conductor: *Conductor) {
@@ -11,58 +11,36 @@ start_conductor :: (conductor: *Conductor) {
 spawned:   bool;
 despawned: bool;
 
-SPAWN_TIMESTAMP     :: 17.135;
-INTERSECT_TIMESTAMP :: 22.135;
-DESPAWN_TIMESTAMP   :: 25.135;
-SPAWN_DISTANCE_FACTOR :: 10.0;
+SPAWN_TIMESTAMP :: 4.965;
+LAUNCH_TIMESTAMP :: 5.586;
+INTERSECT_TIMESTAMP :: 5.793;
+SPAWN_DISTANCE_FACTOR :: 5;
 
 update_conductor :: (conductor: *Conductor) {
     song_time := Audio_Player.get_current_position_in_seconds(game.audio_player, conductor.track.audio_accessor);
 
-    if song_time >= DESPAWN_TIMESTAMP && !despawned {
-        for *entity: game.entity_manager.storage._Cube {
-            remove_entity(*game.entity_manager, entity);
-        }
-
-        despawned = true;
-    }
-
     if song_time >= SPAWN_TIMESTAMP && !spawned {
-        cube_index := 0;
-        for row: 0..2 {
-            for column: 0..2 {
-                if cube_index == 8
-                    break;
-                conductor.cubes[cube_index] = spawn_entity(
-                    *game.entity_manager,
-                    Cube.{
-                        tint = { 1, 0, 0, 1 },
-                        position = game.grid.cell_centers[row][column],
-                    },
-                );
-
-                cube_index += 1;
-            }
-        }
+        conductor.enemy_cube = spawn_entity(
+            *game.entity_manager,
+            Enemy_Cube.{
+                position = game.grid.cell_centers[1][1],
+            },
+        );
         spawned = true;
     }
 
+    if song_time >= LAUNCH_TIMESTAMP {
+        conductor.enemy_cube.tint = { 1, 0, 0, 1 };
+    }
+
     if spawned {
-        cube_index := 0;
-        for row: 0..2 {
-            for column: 0..2 {
-                if cube_index == 8
-                    break;
+        set_from_axis_and_angle(*conductor.enemy_cube.rotation, { 0, 0, 1 }, song_time * 100);
 
-                target := game.grid.cell_centers[row][column];
-                start  := game.camera.position + (target - game.camera.position) * SPAWN_DISTANCE_FACTOR;
+        target := game.grid.cell_centers[1][1];
+        start  := game.camera.position + (target - game.camera.position) * SPAWN_DISTANCE_FACTOR;
 
-                progress := clamp((song_time - SPAWN_TIMESTAMP) / (INTERSECT_TIMESTAMP - SPAWN_TIMESTAMP), 0, 1);
-                conductor.cubes[cube_index].position = lerp(start, target, cast(float, progress));
-
-                cube_index += 1;
-            }
-        }
+        progress := clamp((song_time - LAUNCH_TIMESTAMP) / (INTERSECT_TIMESTAMP - LAUNCH_TIMESTAMP), 0, 1);
+        conductor.enemy_cube.position = lerp(start, target, cast(float, progress));
     }
 }
 
